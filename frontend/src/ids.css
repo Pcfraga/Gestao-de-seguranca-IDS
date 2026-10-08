@@ -528,3 +528,7 @@ th { color: #445449; font-size: 11px; }
 @media (max-width: 760px) { .branding-form { grid-template-columns: minmax(0, 1fr); } .branding-preview-head { flex-direction: column; align-items: flex-start; } .branding-preview-title { text-align: left; } }
 
 .branding-file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+
+.branding-preview-contractor { background: #fff; border: 1px solid #8fa598; border-top: 2px solid #173e2e; color: #173e2e; border-radius: 0; }
+.branding-preview-contractor span { color: #244d37; }
+.branding-preview-contractor strong { font-size: 1.05rem; }
