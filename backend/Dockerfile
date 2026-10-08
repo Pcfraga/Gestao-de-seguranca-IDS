@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY IDS.sln ./
 COPY backend/src/IDS.Domain/IDS.Domain.csproj backend/src/IDS.Domain/
@@ -9,8 +9,9 @@ RUN dotnet restore backend/src/IDS.Api/IDS.Api.csproj
 COPY backend/src/ backend/src/
 RUN dotnet publish backend/src/IDS.Api/IDS.Api.csproj --configuration Release --output /app/publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish .
+USER $APP_UID
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "IDS.Api.dll"]
