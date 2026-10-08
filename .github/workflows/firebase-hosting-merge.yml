@@ -12,6 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cd frontend && npm ci && npm run build
+        env:
+          IDS_API_PROXY_TARGET: https://ids-api-prod.onrender.com
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
