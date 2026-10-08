@@ -31,10 +31,21 @@ public sealed class HealthController(IdsDbContext dbContext, ILogger<HealthContr
             return Ok(new { status = "ready", database = "available", schema = "current" });
         }
         catch (Exception exception)
-        {
-            logger.LogWarning(exception, "O health check não conseguiu conectar ao PostgreSQL.");
-        }
+{
+    logger.LogWarning(exception, "O health check não conseguiu conectar ao PostgreSQL.");
 
-        return StatusCode(StatusCodes.Status503ServiceUnavailable, new { status = "not_ready", database = "unavailable" });
+    return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+    {
+        status = "not_ready",
+        database = "unavailable",
+        error = exception.Message
+    });
+}
+
+return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+{
+    status = "not_ready",
+    database = "unavailable"
+});
     }
 }
