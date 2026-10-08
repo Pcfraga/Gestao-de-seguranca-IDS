@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   AlertTriangle,
   Activity,
@@ -42,7 +42,7 @@ import { LoginScreen } from './components/LoginScreen'
 import { EvaluationForm } from './components/EvaluationForm'
 import { ApiError, apiRequest, clearAccessToken, getAccessToken, type ChecklistCatalog, type DashboardSummary, type DataConsolidation, type EvaluationResult, type EvaluationSummary, type IpfAnnualHistory, type IpfMonthlySuggestion } from './lib/api'
 import { evaluationPdf, ipfReportPdf, openPrintWindow, writePrintWindow } from './lib/pdf'
-import { loadBranding, readLogoFile, saveBranding, type ReportBranding } from './lib/branding'
+import { defaultPrimaryColor, fetchBranding, loadBranding, readLogoFile, saveBranding, type ReportBranding } from './lib/branding'
 import './ids.css'
 
 type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'settings'
@@ -93,6 +93,8 @@ function App() {
   const [search, setSearch] = useState('')
   const [isAuthenticated, setIsAuthenticated] = useState(Boolean(getAccessToken()))
   const [displayName, setDisplayName] = useState('Usuário')
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [profileReady, setProfileReady] = useState(false)
   const [showEvaluationForm, setShowEvaluationForm] = useState(false)
   const [editingEvaluationId, setEditingEvaluationId] = useState<string | null>(null)
   const [evaluationRefresh, setEvaluationRefresh] = useState(0)
@@ -104,12 +106,32 @@ function App() {
     return () => window.removeEventListener('ids:unauthorized', handleUnauthorized)
   }, [])
 
+  useEffect(() => {
+    if (!isAuthenticated) return
+    let active = true
+    Promise.all([
+      apiRequest<{ displayName: string; roles: string[] }>('/api/auth/me'),
+      fetchBranding(),
+    ]).then(([me]) => {
+      if (!active) return
+      setDisplayName(me.displayName || 'Usuário')
+      setIsAdmin(me.roles.includes('ADMINISTRADOR'))
+      setProfileReady(true)
+    }).catch(() => { if (active) setProfileReady(true) })
+    return () => { active = false }
+  }, [isAuthenticated])
+
   if (!isAuthenticated) {
-    return <LoginScreen onAuthenticated={(name) => { setDisplayName(name); setIsAuthenticated(true) }} />
+    return <LoginScreen onAuthenticated={(name) => { setDisplayName(name); setProfileReady(false); setIsAuthenticated(true) }} />
+  }
+
+  if (!profileReady) {
+    return <div className="app-loading" role="status">Carregando…</div>
   }
 
   function signOut() {
     clearAccessToken()
+    setIsAdmin(false)
     setIsAuthenticated(false)
     setActiveSection('overview')
   }
@@ -137,11 +159,12 @@ function App() {
               {id === 'evaluations' && <span className="nav-indicator" aria-label="Sem avaliações" />}
             </button>
           ))}
+          {isAdmin && <>
           <span className="nav-caption nav-caption-lower">ADMINISTRAÇÃO</span>
           <button className={`nav-link ${activeSection === 'settings' ? 'active' : ''}`} onClick={() => setActiveSection('settings')} type="button">
             <Settings2 size={18} strokeWidth={1.8} /><span>Configurações</span>
           </button>
-        </nav>
+          </>}        </nav>
 
         <div className="sidebar-footer">
           <div className="security-note"><span className="status-dot" /> Ambiente preparado</div>
@@ -192,7 +215,7 @@ function App() {
           {activeSection === 'data' && <DataView month={selectedMonth} />}
           {activeSection === 'indicators' && <Indicators month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
           {activeSection === 'reports' && <Reports month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
-          {activeSection === 'settings' && <SettingsView />}
+          {activeSection === 'settings' && isAdmin && <SettingsView />}
 
           <footer className="page-footer"><span>IDS <span className="footer-divider">·</span> Gestão de segurança</span><span>Regras de cálculo centralizadas na API</span></footer>
           </>}
@@ -1075,19 +1098,22 @@ function SettingsView() {
     }
   }
 
-  function save() {
+  async function save() {
     try {
-      saveBranding({ ...branding, companyName: branding.companyName.trim(), tagline: branding.tagline.trim() })
+      const saved = await saveBranding({ ...branding, companyName: branding.companyName.trim(), tagline: branding.tagline.trim() })
+      setBranding(saved)
       setError('')
-      setMessage('Identidade dos relatórios salva. Os próximos PDFs já usam estas informações.')
-    } catch {
-      setError('Não foi possível salvar. Tente um logo menor.')
+      setMessage('Identidade dos relatórios salva para todos os usuários. Os próximos PDFs já usam estas informações.')
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Não foi possível salvar.')
     }
   }
 
+  const palette = ['#173e2e', '#1f4e79', '#7a1f2b', '#4a3a7a', '#8a5a00', '#2f3a45']
+
   return <div className="settings-grid">
     <section className="panel branding-card">
-      <div className="panel-heading"><div><h2>Identidade dos relatórios (PDF)</h2><p>Logo e nome da empresa que realiza a avaliação. Aparecem no cabeçalho de todos os PDFs.</p></div></div>
+      <div className="panel-heading"><div><h2>Identidade dos relatórios (PDF)</h2><p>Logo, nome e cores da empresa que realiza a avaliação. Valem para todos os usuários.</p></div></div>
       <div className="branding-form">
         <label>Nome da empresa
           <input maxLength={80} onChange={(event) => { setBranding({ ...branding, companyName: event.target.value }); setMessage('') }} placeholder="Ex.: Segurança & Cia Ltda." value={branding.companyName} />
@@ -1095,6 +1121,13 @@ function SettingsView() {
         <label>Slogan ou descrição <span className="report-optional">(opcional)</span>
           <input maxLength={100} onChange={(event) => { setBranding({ ...branding, tagline: event.target.value }); setMessage('') }} placeholder="Ex.: Consultoria em segurança do trabalho" value={branding.tagline} />
         </label>
+        <div className="palette-row" role="group" aria-label="Paleta de cores do PDF">
+          <span>Cor do PDF</span>
+          {palette.map(color => (
+            <button aria-label={`Cor ${color}`} aria-pressed={branding.primaryColor.toLowerCase() === color} className="palette-swatch" key={color} onClick={() => { setBranding({ ...branding, primaryColor: color }); setMessage('') }} style={{ background: color }} type="button" />
+          ))}
+          <input aria-label="Cor personalizada" className="palette-custom" onChange={(event) => { setBranding({ ...branding, primaryColor: event.target.value }); setMessage('') }} type="color" value={branding.primaryColor || defaultPrimaryColor} />
+        </div>
         <div className="branding-logo-row">
           <button className="outline-button branding-upload" type="button" onClick={() => logoInput.current?.click()}>Escolher logo</button>
           <input accept="image/png,image/jpeg,image/svg+xml,image/*" className="branding-file-input" onChange={(event) => { void chooseLogo(event.target.files?.[0]); event.target.value = '' }} ref={logoInput} tabIndex={-1} type="file" />
@@ -1102,24 +1135,91 @@ function SettingsView() {
           <small>PNG, JPG ou SVG. A imagem é reduzida automaticamente.</small>
         </div>
       </div>
-      <div className="branding-preview" aria-label="Prévia do cabeçalho">
+      <div className="branding-preview" aria-label="Prévia do cabeçalho" style={{ borderColor: branding.primaryColor }}>
         <div className="branding-preview-head">
           <div className="branding-preview-issuer">
             {branding.logoDataUrl && <img alt="" src={branding.logoDataUrl} />}
-            <div><strong>{branding.companyName || 'IDS'}</strong><span>{branding.companyName ? branding.tagline : 'Gestão de segurança operacional'}</span></div>
+            <div><strong style={{ color: branding.primaryColor }}>{branding.companyName || 'IDS'}</strong><span>{branding.companyName ? branding.tagline : 'Gestão de segurança operacional'}</span></div>
           </div>
-          <div className="branding-preview-title"><strong>Avaliação de segurança</strong><span>Registro individual</span></div>
+          <div className="branding-preview-title"><strong style={{ color: branding.primaryColor }}>Avaliação de segurança</strong><span>Registro individual</span></div>
         </div>
-        <div className="branding-preview-contractor"><span>CONTRATADA</span><strong>Nome da contratada avaliada</strong></div>
+        <div className="branding-preview-contractor" style={{ borderTopColor: branding.primaryColor, color: branding.primaryColor }}><span>CONTRATADA</span><strong>Nome da contratada avaliada</strong></div>
       </div>
       {error && <div className="form-error" role="alert">{error}</div>}
       {message && <div className="report-save-confirmation" role="status"><Check size={16} />{message}</div>}
-      <div><button className="primary-button" onClick={save} type="button">Salvar identidade</button></div>
-      <small className="branding-note">As informações ficam salvas neste navegador. Em outro computador, configure novamente.</small>
+      <div><button className="primary-button" onClick={() => void save()} type="button">Salvar identidade</button></div>
     </section>
-    <EmptySection icon={UsersRound} title="Usuários e perfis" detail="A gestão de acesso será disponibilizada com a autenticação da API." />
+    <UsersAdmin />
     <EmptySection icon={Settings2} title="Cadastros operacionais" detail="Locais, empresas e catálogo de itens serão configurados conforme a planilha validada." />
   </div>
+}
+
+interface ManagedUser { id: string; email: string; displayName: string; role: string; blocked: boolean }
+
+function UsersAdmin() {
+  const [users, setUsers] = useState<ManagedUser[]>([])
+  const [form, setForm] = useState({ displayName: '', email: '', password: '', role: 'AVALIADOR' })
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [refresh, setRefresh] = useState(0)
+
+  useEffect(() => {
+    let active = true
+    apiRequest<ManagedUser[]>('/api/auth/users').then(list => { if (active) setUsers(list) }).catch(() => { if (active) setError('Não foi possível carregar os usuários.') })
+    return () => { active = false }
+  }, [refresh])
+
+  async function run(action: () => Promise<unknown>, success: string) {
+    setError('')
+    setMessage('')
+    try {
+      await action()
+      setMessage(success)
+      setRefresh(value => value + 1)
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Operação não concluída.')
+    }
+  }
+
+  async function create(event: FormEvent) {
+    event.preventDefault()
+    await run(async () => {
+      await apiRequest('/api/auth/users', { method: 'POST', body: JSON.stringify(form) })
+      setForm({ displayName: '', email: '', password: '', role: 'AVALIADOR' })
+    }, 'Usuário criado.')
+  }
+
+  function resetPassword(user: ManagedUser) {
+    const password = window.prompt(`Nova senha para ${user.displayName} (mínimo 8 caracteres):`)
+    if (password) void run(() => apiRequest(`/api/auth/users/${user.id}/password`, { method: 'PUT', body: JSON.stringify({ password }) }), 'Senha redefinida.')
+  }
+
+  return <section className="panel users-card">
+    <div className="panel-heading"><div><h2>Usuários e perfis</h2><p>Administradores veem todas as avaliações. Usuários comuns veem e editam somente as próprias.</p></div></div>
+    <form className="users-form" onSubmit={(event) => void create(event)}>
+      <label>Nome<input onChange={(event) => setForm({ ...form, displayName: event.target.value })} required value={form.displayName} /></label>
+      <label>E-mail<input onChange={(event) => setForm({ ...form, email: event.target.value })} required type="email" value={form.email} /></label>
+      <label>Senha inicial<input autoComplete="new-password" minLength={8} onChange={(event) => setForm({ ...form, password: event.target.value })} required type="password" value={form.password} /></label>
+      <label>Perfil
+        <select onChange={(event) => setForm({ ...form, role: event.target.value })} value={form.role}>
+          <option value="AVALIADOR">Usuário comum</option>
+          <option value="ADMINISTRADOR">Administrador</option>
+        </select>
+      </label>
+      <button className="primary-button" type="submit">Criar usuário</button>
+    </form>
+    {error && <div className="form-error" role="alert">{error}</div>}
+    {message && <div className="report-save-confirmation" role="status"><Check size={16} />{message}</div>}
+    <div className="users-list">
+      {users.map(user => <div className="users-row" key={user.id}>
+        <div><strong>{user.displayName}</strong><small>{user.email} · {user.role === 'ADMINISTRADOR' ? 'Administrador' : user.role === 'AVALIADOR' ? 'Usuário comum' : user.role}{user.blocked ? ' · Bloqueado' : ''}</small></div>
+        <div className="users-actions">
+          <button className="text-button" type="button" onClick={() => resetPassword(user)}>Redefinir senha</button>
+          <button className="text-button" type="button" onClick={() => void run(() => apiRequest(`/api/auth/users/${user.id}/active`, { method: 'PUT', body: JSON.stringify({ active: user.blocked }) }), user.blocked ? 'Usuário liberado.' : 'Usuário bloqueado.')}>{user.blocked ? 'Liberar' : 'Bloquear'}</button>
+        </div>
+      </div>)}
+    </div>
+  </section>
 }
 
 function EmptySection({ icon: Icon, title, detail }: { icon: typeof Gauge; title: string; detail: string }) {

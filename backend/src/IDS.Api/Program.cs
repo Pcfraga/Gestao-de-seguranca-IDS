@@ -24,6 +24,8 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<EvaluationApplicationService>();
 builder.Services.AddScoped<MonthlyIpfApplicationService>();
 builder.Services.AddScoped<AccessTokenService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IDS.Infrastructure.Persistence.ICurrentUserScope, IDS.Api.Authentication.HttpCurrentUserScope>();
 
 var signingKey = builder.Configuration["AUTH_SIGNING_KEY"];
 if (string.IsNullOrWhiteSpace(signingKey) || Encoding.UTF8.GetByteCount(signingKey) < 32)

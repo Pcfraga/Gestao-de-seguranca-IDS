@@ -4,8 +4,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace IDS.Infrastructure.Persistence;
 
-public sealed class EfEvaluationRepository(IdsDbContext dbContext) : IEvaluationRepository
+public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserScope userScope) : IEvaluationRepository
 {
+    private IQueryable<Evaluation> Visible(IQueryable<Evaluation> query)
+    {
+        if (userScope.IsAdministrator)
+        {
+            return query;
+        }
+
+        var userId = userScope.UserId ?? "-";
+        return query.Where(evaluation => evaluation.CreatedByUserId == userId);
+    }
+
     public async Task<EvaluationReferenceData> LoadReferenceDataAsync(
         CreateEvaluationRequest request,
         CancellationToken cancellationToken)
@@ -44,6 +55,8 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext) : IEvaluation
 
     public async Task AddAsync(Evaluation evaluation, CancellationToken cancellationToken)
     {
+        evaluation.CreatedByUserId = userScope.UserId;
+        evaluation.UpdatedByUserId = userScope.UserId;
         dbContext.Evaluations.Add(evaluation);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
@@ -54,8 +67,15 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext) : IEvaluation
     public Task<Evaluation?> GetForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
         QueryDetails(asNoTracking: false).SingleOrDefaultAsync(evaluation => evaluation.Id == id, cancellationToken);
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken) =>
-        dbContext.SaveChangesAsync(cancellationToken);
+    public Task SaveChangesAsync(CancellationToken cancellationToken)
+    {
+        foreach (var entry in dbContext.ChangeTracker.Entries<Evaluation>().Where(entry => entry.State == EntityState.Modified))
+        {
+            entry.Entity.UpdatedByUserId = userScope.UserId;
+        }
+
+        return dbContext.SaveChangesAsync(cancellationToken);
+    }
 
     public async Task<IReadOnlyCollection<Evaluation>> GetManyAsync(
         DateOnly? from,
@@ -99,7 +119,7 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext) : IEvaluation
         Guid? contractorId,
         CancellationToken cancellationToken)
     {
-        var evaluations = dbContext.Evaluations.AsNoTracking();
+        var evaluations = Visible(dbContext.Evaluations.AsNoTracking());
         if (from.HasValue)
         {
             evaluations = evaluations.Where(evaluation => evaluation.EvaluationDate >= from.Value);
@@ -230,7 +250,7 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext) : IEvaluation
     private IQueryable<Evaluation> QueryDetails(bool asNoTracking = true)
     {
         var query = asNoTracking ? dbContext.Evaluations.AsNoTracking() : dbContext.Evaluations;
-        return query
+        return Visible(query)
         .Include(evaluation => evaluation.Site)
         .Include(evaluation => evaluation.ClientOrganization)
         .Include(evaluation => evaluation.ContractorOrganization)

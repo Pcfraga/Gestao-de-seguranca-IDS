@@ -28,6 +28,8 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options)
 
     public DbSet<MonthlyIpfRecord> MonthlyIpfRecords => Set<MonthlyIpfRecord>();
 
+    public DbSet<ReportSettings> ReportSettings => Set<ReportSettings>();
+
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         ApplyAuditTimestamps();
@@ -144,6 +146,15 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options)
             entity.HasIndex(value => new { value.ContractorOrganizationId, value.Year, value.Month }).IsUnique();
             entity.HasOne(value => value.ContractorOrganization).WithMany().HasForeignKey(value => value.ContractorOrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.Site).WithMany().HasForeignKey(value => value.SiteId).OnDelete(DeleteBehavior.Restrict);
+            entity.ConfigureAuditFields();
+        });
+
+        builder.Entity<ReportSettings>(entity =>
+        {
+            entity.ToTable("report_settings");
+            entity.Property(value => value.CompanyName).HasMaxLength(120).IsRequired();
+            entity.Property(value => value.Tagline).HasMaxLength(160).IsRequired();
+            entity.Property(value => value.PrimaryColor).HasMaxLength(7).IsRequired();
             entity.ConfigureAuditFields();
         });
 

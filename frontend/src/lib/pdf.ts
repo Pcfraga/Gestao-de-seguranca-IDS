@@ -1,34 +1,40 @@
-import type { EvaluationResult, IpfAnnualHistory } from './api'
-import { loadBranding } from './branding'
+﻿import type { EvaluationResult, IpfAnnualHistory } from './api'
+import { loadBranding, shade } from './branding'
 
-const printStyles = `
+function printStyles(primary: string) {
+  const border = shade(primary, 0.55)
+  const soft = shade(primary, 0.92)
+  const head = shade(primary, 0.84)
+  const accent = shade(primary, 0.12)
+  return `
   @page { size: A4; margin: 14mm; }
   * { box-sizing: border-box; }
   body { margin: 0; color: #1f2f25; font: 11px/1.45 Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  h1 { margin: 0; color: #173e2e; font-size: 18px; }
+  h1 { margin: 0; color: ${primary}; font-size: 18px; }
   p { margin: 0; }
-  table.frame { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 0 0 10px; border: 2px solid #173e2e; font-size: 11px; }
-  .frame th, .frame td { padding: 6px 8px; border: 1px solid #8fa598; text-align: left; vertical-align: middle; overflow-wrap: anywhere; white-space: pre-wrap; }
-  .frame .sec-title { background: #173e2e; border-color: #173e2e; color: #fff; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
-  .frame .lbl { background: #edf4ee; color: #244d37; font-size: 10px; font-weight: 700; text-transform: uppercase; }
-  .frame thead th { background: #dcebe0; color: #173e2e; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid #173e2e; }
-  .frame .big { font-size: 16px; font-weight: 700; color: #173e2e; text-align: center; }
+  table.frame { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 0 0 10px; border: 2px solid ${primary}; font-size: 11px; }
+  .frame th, .frame td { padding: 6px 8px; border: 1px solid ${border}; text-align: left; vertical-align: middle; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .frame .sec-title { background: ${primary}; border-color: ${primary}; color: #fff; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  .frame .lbl { background: ${soft}; color: ${primary}; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .frame thead th { background: ${head}; color: ${primary}; font-size: 10px; text-transform: uppercase; border-bottom: 2px solid ${primary}; }
+  .frame .big { font-size: 16px; font-weight: 700; color: ${primary}; text-align: center; }
   .frame .center { text-align: center; }
   .frame .number { text-align: right; white-space: nowrap; }
   .head-logo { text-align: center; }
   .head-logo img { display: block; max-width: 100%; max-height: 64px; margin: 0 auto; object-fit: contain; }
-  .head-company strong { display: block; color: #173e2e; font-size: 14px; }
+  .head-company strong { display: block; color: ${primary}; font-size: 14px; }
   .head-company span { display: block; color: #52655a; font-size: 10px; }
   .head-title { text-align: right !important; }
   .head-title p { margin-top: 2px; color: #52655a; font-size: 10px; }
-  .frame .contractor-label { border-top: 2px solid #173e2e; background: #edf4ee; color: #244d37; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-  .frame .contractor-name { border-top: 2px solid #173e2e; background: #fff; color: #173e2e; font-size: 16px; font-weight: 700; }
+  .frame .contractor-label { border-top: 2px solid ${primary}; background: ${soft}; color: ${primary}; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .frame .contractor-name { border-top: 2px solid ${primary}; background: #fff; color: ${primary}; font-size: 16px; font-weight: 700; }
   .bar-track { min-width: 70px; height: 8px; background: #edf1ed; }
-  .bar { height: 8px; background: #3d7655; }
+  .bar { height: 8px; background: ${accent}; }
   .muted { color: #52655a; font-size: 10px; }
   .footer { margin-top: 12px; color: #52655a; font-size: 10px; text-align: right; }
   @media print { tr { break-inside: avoid; } table.frame { break-inside: auto; } }
 `
+}
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, character => ({
@@ -102,7 +108,7 @@ function notesTable(title: string, entries: Array<[string, string | null | undef
 }
 
 function documentHtml(title: string, content: string) {
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>${printStyles}</style></head><body>${content}<script>window.addEventListener('load', () => window.setTimeout(() => window.print(), 250))</script></body></html>`
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>${printStyles(loadBranding().primaryColor)}</style></head><body>${content}<script>window.addEventListener('load', () => window.setTimeout(() => window.print(), 250))</script></body></html>`
 }
 
 export function writePrintWindow(printWindow: Window, title: string, content: string) {
@@ -187,3 +193,4 @@ export function ipfReportPdf(history: IpfAnnualHistory, upToMonth = 12) {
 
   return { title, content }
 }
+

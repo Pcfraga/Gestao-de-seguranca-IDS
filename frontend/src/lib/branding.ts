@@ -1,30 +1,57 @@
+import { apiRequest } from './api'
+
 export interface ReportBranding {
   companyName: string
   tagline: string
   logoDataUrl: string
+  primaryColor: string
 }
 
-const storageKey = 'ids.report-branding'
 const maxLogoWidth = 480
 const maxLogoHeight = 200
 
-export const defaultBranding: ReportBranding = { companyName: '', tagline: '', logoDataUrl: '' }
+export const defaultPrimaryColor = '#173e2e'
+export const defaultBranding: ReportBranding = { companyName: '', tagline: '', logoDataUrl: '', primaryColor: defaultPrimaryColor }
+
+let cached: ReportBranding = { ...defaultBranding }
 
 export function loadBranding(): ReportBranding {
-  try {
-    const stored = JSON.parse(localStorage.getItem(storageKey) ?? '{}') as Partial<ReportBranding>
-    return {
-      companyName: typeof stored.companyName === 'string' ? stored.companyName : '',
-      tagline: typeof stored.tagline === 'string' ? stored.tagline : '',
-      logoDataUrl: typeof stored.logoDataUrl === 'string' && stored.logoDataUrl.startsWith('data:image/') ? stored.logoDataUrl : '',
-    }
-  } catch {
-    return { ...defaultBranding }
+  return cached
+}
+
+interface ReportSettingsResponse {
+  companyName: string
+  tagline: string
+  logoDataUrl: string | null
+  primaryColor: string
+}
+
+function fromResponse(value: ReportSettingsResponse): ReportBranding {
+  return {
+    companyName: value.companyName ?? '',
+    tagline: value.tagline ?? '',
+    logoDataUrl: value.logoDataUrl ?? '',
+    primaryColor: /^#[0-9a-fA-F]{6}$/.test(value.primaryColor) ? value.primaryColor : defaultPrimaryColor,
   }
 }
 
-export function saveBranding(branding: ReportBranding) {
-  localStorage.setItem(storageKey, JSON.stringify(branding))
+export async function fetchBranding(): Promise<ReportBranding> {
+  cached = fromResponse(await apiRequest<ReportSettingsResponse>('/api/settings/report'))
+  return cached
+}
+
+export async function saveBranding(branding: ReportBranding): Promise<ReportBranding> {
+  cached = fromResponse(await apiRequest<ReportSettingsResponse>('/api/settings/report', {
+    method: 'PUT',
+    body: JSON.stringify({ ...branding, logoDataUrl: branding.logoDataUrl || null }),
+  }))
+  return cached
+}
+
+export function shade(hex: string, amount: number) {
+  const channels = [1, 3, 5].map(start => parseInt(hex.slice(start, start + 2), 16))
+  const mixed = channels.map(channel => Math.round(channel + (255 - channel) * amount))
+  return `#${mixed.map(channel => channel.toString(16).padStart(2, '0')).join('')}`
 }
 
 export function readLogoFile(file: File): Promise<string> {
