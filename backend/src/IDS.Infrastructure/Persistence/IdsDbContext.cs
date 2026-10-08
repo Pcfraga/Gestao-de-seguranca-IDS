@@ -239,7 +239,7 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options)
         for (var index = 0; index < roles.Length; index++)
         {
             var roleName = roles[index];
-            builder.Entity<IdentityRole<Guid>>().HasData(new IdentityRole<Guid>
+            builder.Entity<IdentityRole<Guid>>().HasData(new
             {
                 Id = Guid.Parse($"00000000-0000-0000-0000-{index + 1:000000000000}"),
                 Name = roleName,

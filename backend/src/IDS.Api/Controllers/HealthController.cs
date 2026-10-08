@@ -47,8 +47,7 @@ public sealed class HealthController(IdsDbContext dbContext, ILogger<HealthContr
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new
             {
                 status = "not_ready",
-                database = "unavailable",
-                error = exception.Message
+                database = "unavailable"
             });
         }
     }
