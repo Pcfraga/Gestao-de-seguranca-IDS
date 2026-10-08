@@ -18,9 +18,19 @@ public sealed class HealthController(IdsDbContext dbContext, ILogger<HealthContr
         try
         {
             if (!await dbContext.Database.CanConnectAsync(cancellationToken))
-            {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { status = "not_ready", database = "unavailable" });
-            }
+{
+    var connection = dbContext.Database.GetDbConnection();
+
+    return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+    {
+        status = "not_ready",
+        database = "unavailable",
+        host = connection.Host,
+        port = connection.Port,
+        databaseName = connection.Database,
+        username = connection.UserID
+    });
+}
 
             var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync(cancellationToken);
             if (pendingMigrations.Any())
