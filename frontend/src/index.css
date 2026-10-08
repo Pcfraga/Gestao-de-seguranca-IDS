@@ -1,0 +1,34 @@
+@import "@fontsource-variable/ibm-plex-sans";
+@import "@fontsource/ibm-plex-mono";
+@import "tailwindcss";
+
+:root {
+  font-family: "IBM Plex Sans Variable", "Segoe UI", sans-serif;
+  color: #1e2923;
+  background: #f4f6f3;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  --ink: #1e2923;
+  --muted: #78837c;
+  --line: #e5eae5;
+  --paper: #fff;
+  --canvas: #f4f6f3;
+  --forest: #24543f;
+  --forest-dark: #173e2e;
+  --forest-soft: #e9f2ec;
+  --amber: #b76d26;
+  --rose: #b64e4c;
+  --blue: #4a7187;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+button:focus-visible, input:focus-visible { outline: 3px solid #88ad96; outline-offset: 2px; }
+::selection { color: #173e2e; background: #cfe3d5; }

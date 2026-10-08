@@ -1,0 +1,37 @@
+.login-shell { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 32%); background: #edf1ec; position: relative; overflow: hidden; }
+.login-shell::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(90deg, #dfe7df 1px, transparent 1px), linear-gradient(#dfe7df 1px, transparent 1px); background-size: 48px 48px; mask-image: linear-gradient(90deg, #0003, transparent 60%); pointer-events: none; }
+.login-grain { position: absolute; width: 56vw; height: 56vw; left: -20vw; bottom: -42vw; border: 1px solid #a3b7a650; border-radius: 50%; box-shadow: 0 0 0 70px #a3b7a612, 0 0 0 140px #a3b7a60c; pointer-events: none; }
+.login-panel { width: min(100% - 40px, 410px); align-self: center; justify-self: center; padding: 34px 36px; background: #fff; border: 1px solid #e2e8e1; border-radius: 8px; position: relative; z-index: 1; box-shadow: 0 20px 60px #233c2b12; }
+.login-brand { display: flex; align-items: center; gap: 11px; color: #1d3f2c; text-decoration: none; }
+.login-brand > span:last-child { display: flex; flex-direction: column; }
+.login-brand strong { font-size: 15px; line-height: 18px; }
+.login-brand small { color: #849187; font-size: 10px; margin-top: 1px; }
+.login-heading { margin: 42px 0 25px; }
+.login-overline { color: #64806b; font-size: 9px; font-weight: 700; letter-spacing: 1.1px; }
+.login-heading h1 { color: #203629; font-size: 24px; margin: 9px 0 6px; }
+.login-heading p { color: #7c887f; font-size: 11px; margin: 0; }
+.login-form { display: flex; flex-direction: column; gap: 14px; }
+.login-form label { display: flex; flex-direction: column; gap: 6px; color: #536157; font-size: 10px; font-weight: 600; }
+.login-form input { height: 38px; width: 100%; color: #2d3931; border: 1px solid #dfe6df; background: #fbfcfb; border-radius: 5px; padding: 0 10px; font-size: 12px; outline: none; }
+.login-form input:focus { border-color: #77a184; box-shadow: 0 0 0 3px #4f855518; }
+.login-alert { margin: 0; padding: 9px 10px; border-radius: 4px; font-size: 10px; line-height: 1.45; }
+.login-alert.error { color: #8b3939; background: #fbefee; border: 1px solid #f1d8d5; }
+.login-alert.success { color: #315b3e; background: #edf5ee; border: 1px solid #d9e9da; }
+.login-submit { height: 40px; display: flex; align-items: center; justify-content: space-between; color: #fff; background: #24543f; border: 1px solid #24543f; border-radius: 5px; padding: 0 12px; font-size: 11px; font-weight: 600; margin-top: 3px; transition: background .16s; }
+.login-submit:hover:not(:disabled) { background: #173e2e; }
+.login-submit:disabled { opacity: .65; }
+.login-mode-toggle { display: block; color: #5c7462; background: transparent; border: 0; padding: 0; margin: 17px auto 0; font-size: 10px; text-decoration: underline; text-decoration-color: #bbcabd; text-underline-offset: 3px; }
+.login-security { display: flex; justify-content: center; align-items: center; gap: 7px; margin-top: 28px; padding-top: 16px; border-top: 1px solid #edf0ed; color: #919b93; font-size: 9px; }
+.login-security .status-dot { width: 6px; height: 6px; flex-basis: 6px; background: #6e9d78; box-shadow: none; }
+.login-security > span:last-child { color: #c0c8c1; }
+.login-side-note { align-self: end; justify-self: end; display: flex; gap: 18px; margin: 0 32px 28px 0; color: #64806b; font-size: 8px; font-weight: 700; letter-spacing: 1px; writing-mode: vertical-rl; position: relative; z-index: 1; }
+@media (max-width: 680px) { .login-shell { display: flex; justify-content: center; align-items: center; padding: 22px 0; } .login-panel { width: min(100% - 30px, 410px); padding: 27px 24px; } .login-heading { margin-top: 34px; } .login-side-note { display: none; } }
+.login-brand strong { font-size: 16px; }
+.login-brand small, .login-heading p { font-size: 12px; }
+.login-overline { font-size: 10px; }
+.login-form label { font-size: 12px; }
+.login-form input { font-size: 14px; }
+.login-alert, .login-submit { font-size: 12px; }
+.login-mode-toggle { font-size: 11px; }
+.login-security { font-size: 10px; }
+.password-hint { color: #87938a; font-size: 10px; line-height: 1.4; font-weight: 400; }

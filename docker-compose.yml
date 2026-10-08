@@ -1,0 +1,50 @@
+services:
+  database:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Configure POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Configure POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configure POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ids-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Production
+      DATABASE_CONNECTION: Host=database;Port=5432;Database=${POSTGRES_DB:?Configure POSTGRES_DB};Username=${POSTGRES_USER:?Configure POSTGRES_USER};Password=${POSTGRES_PASSWORD:?Configure POSTGRES_PASSWORD}
+      AUTH_SIGNING_KEY: ${AUTH_SIGNING_KEY:?Configure AUTH_SIGNING_KEY}
+      INITIAL_ADMIN_SETUP_KEY: ${INITIAL_ADMIN_SETUP_KEY:?Configure INITIAL_ADMIN_SETUP_KEY}
+      AUTH_ISSUER: ${AUTH_ISSUER:-IDS.Api}
+      AUTH_AUDIENCE: ${AUTH_AUDIENCE:-IDS.Frontend}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+    depends_on:
+      database:
+        condition: service_healthy
+    expose:
+      - "8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+
+volumes:
+  ids-postgres-data:
