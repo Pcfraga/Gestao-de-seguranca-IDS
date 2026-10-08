@@ -17,45 +17,39 @@ public sealed class HealthController(IdsDbContext dbContext, ILogger<HealthContr
     {
         try
         {
-            if (!await dbContext.Database.CanConnectAsync(cancellationToken))
-{
-    var connection = dbContext.Database.GetDbConnection();
+            await dbContext.Database.OpenConnectionAsync(cancellationToken);
 
-    return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-    {
-        status = "not_ready",
-        database = "unavailable",
-        host = connection.Host,
-        port = connection.Port,
-        databaseName = connection.Database,
-        username = connection.UserID
-    });
-}
+            await dbContext.Database.CloseConnectionAsync();
 
             var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync(cancellationToken);
+
             if (pendingMigrations.Any())
             {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { status = "not_ready", database = "available", schema = "migrations_pending" });
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    status = "not_ready",
+                    database = "available",
+                    schema = "migrations_pending"
+                });
             }
 
-            return Ok(new { status = "ready", database = "available", schema = "current" });
+            return Ok(new
+            {
+                status = "ready",
+                database = "available",
+                schema = "current"
+            });
         }
         catch (Exception exception)
-{
-    logger.LogWarning(exception, "O health check não conseguiu conectar ao PostgreSQL.");
+        {
+            logger.LogWarning(exception, "Erro real ao conectar ao PostgreSQL.");
 
-    return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-    {
-        status = "not_ready",
-        database = "unavailable",
-        error = exception.Message
-    });
-}
-
-return StatusCode(StatusCodes.Status503ServiceUnavailable, new
-{
-    status = "not_ready",
-    database = "unavailable"
-});
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                status = "not_ready",
+                database = "unavailable",
+                error = exception.Message
+            });
+        }
     }
 }
