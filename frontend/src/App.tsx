@@ -45,7 +45,7 @@ import { evaluationPdf, ipfReportPdf, openPrintWindow, writePrintWindow } from '
 import { defaultPrimaryColor, fetchBranding, loadBranding, readLogoFile, saveBranding, type ReportBranding } from './lib/branding'
 import './ids.css'
 
-type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'settings'
+type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'settings' | 'users'
 
 const sections: Array<{ id: Section; label: string; icon: typeof LayoutDashboard }> = [
   { id: 'overview', label: 'Visão geral', icon: LayoutDashboard },
@@ -62,6 +62,7 @@ const sectionCopy: Record<Section, { title: string; description: string }> = {
   indicators: { title: 'Indicadores', description: 'Resultados de IDS, distribuição de desvios e evolução por período.' },
   reports: { title: 'Relatórios', description: 'Consolidações mensais e documentos emitidos para acompanhamento.' },
   settings: { title: 'Configurações', description: 'Cadastros e parâmetros disponíveis para o seu perfil.' },
+  users: { title: 'Usuários e perfis', description: 'Crie usuários, defina perfis e controle o acesso ao sistema.' },
 }
 
 const metrics = [
@@ -164,6 +165,9 @@ function App() {
           <button className={`nav-link ${activeSection === 'settings' ? 'active' : ''}`} onClick={() => setActiveSection('settings')} type="button">
             <Settings2 size={18} strokeWidth={1.8} /><span>Configurações</span>
           </button>
+          <button className={`nav-link ${activeSection === 'users' ? 'active' : ''}`} onClick={() => setActiveSection('users')} type="button">
+            <UsersRound size={18} strokeWidth={1.8} /><span>Usuários e perfis</span>
+          </button>
           </>}        </nav>
 
         <div className="sidebar-footer">
@@ -216,6 +220,7 @@ function App() {
           {activeSection === 'indicators' && <Indicators month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
           {activeSection === 'reports' && <Reports month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
           {activeSection === 'settings' && isAdmin && <SettingsView />}
+          {activeSection === 'users' && isAdmin && <div className="settings-grid"><UsersAdmin /></div>}
 
           <footer className="page-footer"><span>IDS <span className="footer-divider">·</span> Gestão de segurança</span><span>Regras de cálculo centralizadas na API</span></footer>
           </>}
@@ -1149,7 +1154,6 @@ function SettingsView() {
       {message && <div className="report-save-confirmation" role="status"><Check size={16} />{message}</div>}
       <div><button className="primary-button" onClick={() => void save()} type="button">Salvar identidade</button></div>
     </section>
-    <UsersAdmin />
     <EmptySection icon={Settings2} title="Cadastros operacionais" detail="Locais, empresas e catálogo de itens serão configurados conforme a planilha validada." />
   </div>
 }
