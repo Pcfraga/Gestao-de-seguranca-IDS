@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Activity,
@@ -42,6 +42,7 @@ import { LoginScreen } from './components/LoginScreen'
 import { EvaluationForm } from './components/EvaluationForm'
 import { ApiError, apiRequest, clearAccessToken, getAccessToken, type ChecklistCatalog, type DashboardSummary, type DataConsolidation, type EvaluationResult, type EvaluationSummary, type IpfAnnualHistory, type IpfMonthlySuggestion } from './lib/api'
 import { evaluationPdf, ipfReportPdf, openPrintWindow, writePrintWindow } from './lib/pdf'
+import { loadBranding, readLogoFile, saveBranding, type ReportBranding } from './lib/branding'
 import './ids.css'
 
 type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'settings'
@@ -1057,7 +1058,68 @@ function Reports({ month, monthLabel }: { month: string; monthLabel: string }) {
 }
 
 function SettingsView() {
-  return <div className="settings-grid"><EmptySection icon={UsersRound} title="Usuários e perfis" detail="A gestão de acesso será disponibilizada com a autenticação da API." /><EmptySection icon={Settings2} title="Cadastros operacionais" detail="Locais, empresas e catálogo de itens serão configurados conforme a planilha validada." /></div>
+  const [branding, setBranding] = useState<ReportBranding>(loadBranding)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const logoInput = useRef<HTMLInputElement>(null)
+
+  async function chooseLogo(file: File | undefined) {
+    if (!file) return
+    setError('')
+    setMessage('')
+    try {
+      const logoDataUrl = await readLogoFile(file)
+      setBranding(current => ({ ...current, logoDataUrl }))
+    } catch (logoError) {
+      setError(logoError instanceof Error ? logoError.message : 'Não foi possível carregar o logo.')
+    }
+  }
+
+  function save() {
+    try {
+      saveBranding({ ...branding, companyName: branding.companyName.trim(), tagline: branding.tagline.trim() })
+      setError('')
+      setMessage('Identidade dos relatórios salva. Os próximos PDFs já usam estas informações.')
+    } catch {
+      setError('Não foi possível salvar. Tente um logo menor.')
+    }
+  }
+
+  return <div className="settings-grid">
+    <section className="panel branding-card">
+      <div className="panel-heading"><div><h2>Identidade dos relatórios (PDF)</h2><p>Logo e nome da empresa que realiza a avaliação. Aparecem no cabeçalho de todos os PDFs.</p></div></div>
+      <div className="branding-form">
+        <label>Nome da empresa
+          <input maxLength={80} onChange={(event) => { setBranding({ ...branding, companyName: event.target.value }); setMessage('') }} placeholder="Ex.: Segurança & Cia Ltda." value={branding.companyName} />
+        </label>
+        <label>Slogan ou descrição <span className="report-optional">(opcional)</span>
+          <input maxLength={100} onChange={(event) => { setBranding({ ...branding, tagline: event.target.value }); setMessage('') }} placeholder="Ex.: Consultoria em segurança do trabalho" value={branding.tagline} />
+        </label>
+        <div className="branding-logo-row">
+          <button className="outline-button branding-upload" type="button" onClick={() => logoInput.current?.click()}>Escolher logo</button>
+          <input accept="image/png,image/jpeg,image/svg+xml,image/*" className="branding-file-input" onChange={(event) => { void chooseLogo(event.target.files?.[0]); event.target.value = '' }} ref={logoInput} tabIndex={-1} type="file" />
+          {branding.logoDataUrl && <button className="text-button" type="button" onClick={() => { setBranding({ ...branding, logoDataUrl: '' }); setMessage('') }}>Remover logo</button>}
+          <small>PNG, JPG ou SVG. A imagem é reduzida automaticamente.</small>
+        </div>
+      </div>
+      <div className="branding-preview" aria-label="Prévia do cabeçalho">
+        <div className="branding-preview-head">
+          <div className="branding-preview-issuer">
+            {branding.logoDataUrl && <img alt="" src={branding.logoDataUrl} />}
+            <div><strong>{branding.companyName || 'IDS'}</strong><span>{branding.companyName ? branding.tagline : 'Gestão de segurança operacional'}</span></div>
+          </div>
+          <div className="branding-preview-title"><strong>Avaliação de segurança</strong><span>Registro individual</span></div>
+        </div>
+        <div className="branding-preview-contractor"><span>CONTRATADA</span><strong>Nome da contratada avaliada</strong></div>
+      </div>
+      {error && <div className="form-error" role="alert">{error}</div>}
+      {message && <div className="report-save-confirmation" role="status"><Check size={16} />{message}</div>}
+      <div><button className="primary-button" onClick={save} type="button">Salvar identidade</button></div>
+      <small className="branding-note">As informações ficam salvas neste navegador. Em outro computador, configure novamente.</small>
+    </section>
+    <EmptySection icon={UsersRound} title="Usuários e perfis" detail="A gestão de acesso será disponibilizada com a autenticação da API." />
+    <EmptySection icon={Settings2} title="Cadastros operacionais" detail="Locais, empresas e catálogo de itens serão configurados conforme a planilha validada." />
+  </div>
 }
 
 function EmptySection({ icon: Icon, title, detail }: { icon: typeof Gauge; title: string; detail: string }) {

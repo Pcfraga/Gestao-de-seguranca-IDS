@@ -1,4 +1,5 @@
 import type { EvaluationResult, IpfAnnualHistory } from './api'
+import { loadBranding } from './branding'
 
 const printStyles = `
   @page { size: A4; margin: 16mm; }
@@ -9,6 +10,17 @@ const printStyles = `
   p { margin: 0; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid #24543f; padding-bottom: 12px; margin-bottom: 18px; }
   .brand { color: #52655a; font-size: 11px; text-align: right; }
+  .report-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-bottom: 12px; border-bottom: 3px solid #24543f; }
+  .issuer { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .logo { display: block; max-width: 150px; max-height: 60px; object-fit: contain; }
+  .company strong { display: block; color: #173e2e; font-size: 15px; }
+  .company span { display: block; color: #52655a; font-size: 10px; }
+  .doc-title { text-align: right; }
+  .doc-title h1 { font-size: 20px; }
+  .doc-title p { margin-top: 2px; color: #52655a; font-size: 11px; }
+  .contractor-banner { margin: 14px 0 6px; padding: 12px 16px; background: #173e2e; color: #fff; border-radius: 4px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .contractor-banner .label { color: #b9d8c4; letter-spacing: .08em; }
+  .contractor-banner strong { display: block; margin-top: 2px; font-size: 20px; letter-spacing: .01em; }
   .subtitle { margin-top: 4px; color: #52655a; font-size: 13px; }
   .section { margin: 18px 0; break-inside: avoid; }
   .details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }
@@ -60,6 +72,20 @@ function metric(label: string, value: string) {
   return `<div class="metric"><span class="label">${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`
 }
 
+function reportHeader(documentTitle: string, subtitle: string, contractor: string | null | undefined) {
+  const branding = loadBranding()
+  const logo = branding.logoDataUrl ? `<img class="logo" src="${branding.logoDataUrl}" alt="">` : ''
+  const company = branding.companyName
+    ? `<div class="company"><strong>${escapeHtml(branding.companyName)}</strong>${branding.tagline ? `<span>${escapeHtml(branding.tagline)}</span>` : ''}</div>`
+    : '<div class="company"><strong>IDS</strong><span>Gestão de segurança operacional</span></div>'
+  return `
+    <header class="report-header">
+      <div class="issuer">${logo}${company}</div>
+      <div class="doc-title"><h1>${escapeHtml(documentTitle)}</h1><p>${escapeHtml(subtitle)}</p></div>
+    </header>
+    <section class="contractor-banner"><span class="label">Contratada</span><strong>${text(contractor)}</strong></section>`
+}
+
 function documentHtml(title: string, content: string) {
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>${printStyles}</style></head><body>${content}<script>window.addEventListener('load', () => window.setTimeout(() => window.print(), 250))</script></body></html>`
 }
@@ -85,7 +111,7 @@ export function evaluationPdf(evaluation: EvaluationResult) {
     .map(observation => `<tr><td>${text(observation.category)}</td><td>${text(observation.item)}</td><td class="number">${formatNumber(observation.quantity)}</td><td class="number">${formatNumber(observation.severityWeight)}</td><td>${text(observation.comment)}</td></tr>`)
     .join('')
   const content = `
-    <header class="header"><div><h1>Avaliação de segurança</h1><p class="subtitle">Registro individual de observações</p></div><div class="brand"><strong>IDS</strong><br>Gestão de segurança operacional</div></header>
+    ${reportHeader('Avaliação de segurança', `Registro individual · ${formatDate(evaluation.evaluationDate)}`, evaluation.contractor)}
     <section class="section"><h2>Identificação</h2><div class="details">
       ${detail('Data', formatDate(evaluation.evaluationDate))}
       ${detail('Horário', evaluation.evaluationTime?.slice(0, 5))}
@@ -129,7 +155,7 @@ export function ipfReportPdf(history: IpfAnnualHistory, upToMonth = 12) {
   }).join('')
   const title = `Relatório IPF ${history.year} - ${history.contractor}`
   const content = `
-    <header class="header"><div><h1>Relatório de IPF</h1><p class="subtitle">Janeiro a ${escapeHtml(monthName(upToMonth))} de ${escapeHtml(String(history.year))} · ${text(history.contractor)}</p></div><div class="brand"><strong>IDS</strong><br>Gestão de segurança operacional</div></header>
+    ${reportHeader('Relatório de IPF', `Janeiro a ${monthName(upToMonth)} de ${history.year}`, history.contractor)}
     <section class="section">    <h2>Resumo do período</h2><div class="metrics">
       ${metric('Contratada', history.contractor)}
           ${metric('Período', `Janeiro a ${monthName(upToMonth)} de ${history.year}`)}
