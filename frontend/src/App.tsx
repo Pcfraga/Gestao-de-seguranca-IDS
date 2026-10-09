@@ -45,7 +45,7 @@ import { evaluationPdf, ipfReportPdf, openPrintWindow, writePrintWindow } from '
 import { defaultPrimaryColor, fetchBranding, loadBranding, readLogoFile, saveBranding, type ReportBranding } from './lib/branding'
 import './ids.css'
 
-type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'settings' | 'users'
+type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'settings' | 'users' | 'account'
 
 const sections: Array<{ id: Section; label: string; icon: typeof LayoutDashboard }> = [
   { id: 'overview', label: 'Visão geral', icon: LayoutDashboard },
@@ -63,6 +63,7 @@ const sectionCopy: Record<Section, { title: string; description: string }> = {
   reports: { title: 'Relatórios', description: 'Consolidações mensais e documentos emitidos para acompanhamento.' },
   settings: { title: 'Configurações', description: 'Cadastros e parâmetros disponíveis para o seu perfil.' },
   users: { title: 'Usuários e perfis', description: 'Crie usuários, defina perfis e controle o acesso ao sistema.' },
+  account: { title: 'Minha conta', description: 'Altere sua senha de acesso ao sistema.' },
 }
 
 const metrics = [
@@ -168,7 +169,11 @@ function App() {
           <button className={`nav-link ${activeSection === 'users' ? 'active' : ''}`} onClick={() => setActiveSection('users')} type="button">
             <UsersRound size={18} strokeWidth={1.8} /><span>Usuários e perfis</span>
           </button>
-          </>}        </nav>
+          </>}
+          <button className={`nav-link ${activeSection === 'account' ? 'active' : ''}`} onClick={() => { setShowEvaluationForm(false); setActiveSection('account') }} type="button">
+            <UserRound size={18} strokeWidth={1.8} /><span>Minha conta</span>
+          </button>
+        </nav>
 
         <div className="sidebar-footer">
           <div className="security-note"><span className="status-dot" /> Ambiente preparado</div>
@@ -221,6 +226,7 @@ function App() {
           {activeSection === 'reports' && <Reports month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
           {activeSection === 'settings' && isAdmin && <SettingsView />}
           {activeSection === 'users' && isAdmin && <div className="settings-grid"><UsersAdmin /></div>}
+          {activeSection === 'account' && <div className="settings-grid"><AccountPassword /></div>}
 
           <footer className="page-footer"><span>IDS <span className="footer-divider">·</span> Gestão de segurança</span><span>Regras de cálculo centralizadas na API</span></footer>
           </>}
@@ -1156,6 +1162,53 @@ function SettingsView() {
     </section>
     <EmptySection icon={Settings2} title="Cadastros operacionais" detail="Locais, empresas e catálogo de itens serão configurados conforme a planilha validada." />
   </div>
+}
+
+function AccountPassword() {
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError('')
+    setMessage('')
+    if (newPassword !== confirmPassword) {
+      setError('A confirmação deve ser igual à nova senha.')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      await apiRequest('/api/auth/me/password', {
+        method: 'PUT',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      })
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setMessage('Senha alterada. Use a nova senha no próximo acesso.')
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Não foi possível alterar a senha.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return <section className="panel users-card">
+    <div className="panel-heading"><div><h2>Alterar minha senha</h2><p>Informe sua senha atual e escolha uma nova senha com pelo menos 8 caracteres. Não é necessário usar a chave do Render.</p></div></div>
+    <form className="users-form" onSubmit={(event) => void changePassword(event)}>
+      <label>Senha atual<input autoComplete="current-password" disabled={isSubmitting} onChange={(event) => setCurrentPassword(event.target.value)} required type="password" value={currentPassword} /></label>
+      <label>Nova senha<input autoComplete="new-password" disabled={isSubmitting} minLength={8} onChange={(event) => setNewPassword(event.target.value)} required type="password" value={newPassword} /></label>
+      <label>Confirmar nova senha<input autoComplete="new-password" disabled={isSubmitting} minLength={8} onChange={(event) => setConfirmPassword(event.target.value)} required type="password" value={confirmPassword} /></label>
+      <button className="primary-button" disabled={isSubmitting} type="submit">{isSubmitting ? 'Salvando…' : 'Alterar senha'}</button>
+    </form>
+    {error && <div className="form-error" role="alert">{error}</div>}
+    {message && <div className="report-save-confirmation" role="status"><Check size={16} />{message}</div>}
+  </section>
 }
 
 interface ManagedUser { id: string; email: string; displayName: string; role: string; blocked: boolean }

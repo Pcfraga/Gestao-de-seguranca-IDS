@@ -8,7 +8,7 @@ interface LoginScreenProps {
 }
 
 export function LoginScreen({ onAuthenticated }: LoginScreenProps) {
-  const [mode, setMode] = useState<'login' | 'register' | 'bootstrap'>('login')
+  const [mode, setMode] = useState<'login' | 'bootstrap'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -33,17 +33,6 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps) {
         setMode('login')
         setPassword('')
         setSetupKey('')
-        return
-      }
-
-      if (mode === 'register') {
-        await apiRequest('/api/auth/register', {
-          method: 'POST',
-          body: JSON.stringify({ email, displayName, password }),
-        })
-        setNotice('Perfil criado. Entre com seu e-mail e senha.')
-        setMode('login')
-        setPassword('')
         return
       }
 
@@ -75,8 +64,8 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps) {
 
         <div className="login-heading">
           <span className="login-overline">ACESSO SEGURO</span>
-          <h1>{mode === 'bootstrap' ? 'Configurar administrador' : mode === 'register' ? 'Criar meu perfil' : 'Acesse o sistema'}</h1>
-          <p>{mode === 'bootstrap' ? 'Crie a primeira conta administrativa autorizada.' : mode === 'register' ? 'Cadastre-se como usuário comum para acessar o sistema.' : 'Entre com suas credenciais corporativas.'}</p>
+          <h1>{mode === 'bootstrap' ? 'Configurar administrador' : 'Acesse o sistema'}</h1>
+          <p>{mode === 'bootstrap' ? 'Crie a primeira conta administrativa autorizada. A chave de configuração é fornecida pelo responsável pela instalação; escolha sua própria senha.' : 'Entre com suas credenciais corporativas. Para obter uma conta, solicite acesso ao administrador da sua empresa.'}</p>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit}>
@@ -87,15 +76,14 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps) {
           {error && <p className="login-alert error" role="alert">{error}</p>}
           {notice && <p className="login-alert success" role="status">{notice}</p>}
           <button className="login-submit" disabled={isSubmitting} type="submit">
-            {isSubmitting ? 'Aguarde…' : mode === 'bootstrap' ? 'Criar administrador' : mode === 'register' ? 'Criar meu perfil' : 'Entrar'}
+            {isSubmitting ? 'Aguarde…' : mode === 'bootstrap' ? 'Criar administrador' : 'Entrar'}
             {mode === 'login' ? <ArrowRight size={17} /> : <KeyRound size={17} />}
           </button>
         </form>
 
-        {mode === 'login' ? <>
-          <button className="login-mode-toggle" onClick={() => { setMode('register'); setError(''); setNotice('') }} type="button">Criar meu perfil</button>
-          <button className="login-mode-toggle" onClick={() => { setMode('bootstrap'); setError(''); setNotice('') }} type="button">Primeiro acesso: configurar administrador</button>
-        </> : <button className="login-mode-toggle" onClick={() => { setMode('login'); setError(''); setNotice('') }} type="button">Voltar ao login</button>}
+        <button className="login-mode-toggle" disabled={isSubmitting} onClick={() => { setMode(mode === 'login' ? 'bootstrap' : 'login'); setError(''); setNotice('') }} type="button">
+          {mode === 'login' ? 'Primeiro acesso: configurar administrador' : 'Voltar ao login'}
+        </button>
         <div className="login-security"><span className="status-dot" /> Conexão protegida <span>·</span> Acesso auditável</div>
       </section>
       <aside className="login-side-note"><span>OBSERVAR</span><span>PREVENIR</span><span>EVOLUIR</span></aside>

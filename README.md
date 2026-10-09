@@ -67,13 +67,20 @@ Os botões **Gerar PDF** abrem a janela de impressão do navegador. Selecione **
 
 No primeiro acesso, escolha “Primeiro acesso: configurar administrador”, informe a `INITIAL_ADMIN_SETUP_KEY` e crie a primeira conta. A senha deve ter pelo menos 8 caracteres; não há exigência de maiúscula, minúscula, número ou símbolo. A chave de bootstrap é separada da senha e deve corresponder exatamente ao valor configurado na API. O bootstrap só funciona enquanto não houver usuários; guarde a chave fora do repositório e remova-a do ambiente depois do provisionamento. O login usa `POST /api/auth/login` e os demais endpoints exigem bearer token.
 
-Depois da configuração inicial, qualquer pessoa pode escolher “Criar meu perfil” na tela de acesso. O cadastro público cria exclusivamente usuários comuns (`AVALIADOR`), e cada pessoa define sua própria senha (mínimo de 8 caracteres); a senha de `AUTH_SIGNING_KEY` ou a chave do Render não é usada como senha da conta. Administradores também podem criar usuários e definir uma senha inicial na área “Usuários e perfis”.
+Depois da configuração inicial, somente administradores logados podem criar contas na área “Usuários e perfis”. Para cadastrar colaboradores, mantenha o perfil “Usuário comum” (`AVALIADOR`) e defina uma senha inicial de pelo menos 8 caracteres. Não há cadastro público: quem receber o link deve solicitar acesso ao administrador da empresa. A chave `INITIAL_ADMIN_SETUP_KEY` e o segredo `AUTH_SIGNING_KEY` não são senhas de contas.
+
+Administradores e usuários comuns podem alterar a própria senha em **Minha conta**, informando a senha atual, a nova senha (mínimo de 8 caracteres) e a confirmação. Essa operação não exige a chave do Render. Ao entregar a instalação, forneça o acesso inicial ao administrador da empresa para que ele defina sua própria senha. A troca não encerra tokens de acesso já emitidos, que expiram em até 30 minutos.
+
+### Instalação por empresa
+
+Cada empresa deve ter sua própria instalação (frontend e API), link e banco PostgreSQL separado; não reutilize o banco de outra empresa. Configure `DATABASE_CONNECTION`, `ALLOWED_ORIGINS`, `AUTH_SIGNING_KEY` e `INITIAL_ADMIN_SETUP_KEY` para a nova instalação, usando segredos distintos por empresa, e aplique as migrations. O responsável pela instalação provisiona o primeiro administrador com a chave de configuração e uma senha própria. Depois, o administrador gerencia as contas dos colaboradores sem precisar da chave do Render. Remova `INITIAL_ADMIN_SETUP_KEY` do ambiente após o provisionamento. Uma instalação com usuários já existentes não permite configurar outro administrador inicial; novas empresas precisam de um banco próprio.
 
 ### Diagnóstico de acesso
 
 - `GET /api/health/ready` retorna `503` com `database: unavailable` até o PostgreSQL aceitar conexões e as migrations estarem aplicadas.
 - `POST /api/auth/login` retorna `503` quando o banco está inacessível; `401` significa credenciais inválidas ou conta bloqueada.
-- `POST /api/auth/register` cria um usuário comum com a senha enviada no cadastro; retorna `503` quando o banco está inacessível.
+- `POST /api/auth/users` cria contas somente com bearer token de um `ADMINISTRADOR`; sem autenticação retorna `401`, e com perfil comum retorna `403`.
+- `PUT /api/auth/me/password` altera somente a senha da conta autenticada; exige `currentPassword` e `newPassword`. Senha atual incorreta ou nova senha inválida retorna `400`; conta bloqueada retorna `403`.
 - `POST /api/auth/bootstrap-admin` retorna `401` se `SetupKey` não corresponder exatamente a `INITIAL_ADMIN_SETUP_KEY`; `409` indica que já existem usuários. Uma chave correta com o banco indisponível retorna `503`.
 - O frontend local usa `localhost:5173` ou `localhost:5174`; `/favicon.ico` redireciona ao ícone IDS em SVG.
 

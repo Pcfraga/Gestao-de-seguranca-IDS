@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using IDS.Api.Controllers;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -59,20 +62,62 @@ public sealed class ApiIntegrationTests(IdsApiFactory factory) : IClassFixture<I
     }
 
     [Fact]
-    public async Task RegisterReturnsServiceUnavailableWhenDatabaseIsOffline()
+    public async Task CreatingUsersRequiresAuthentication()
     {
         using var client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/api/auth/register", new
+        var response = await client.PostAsJsonAsync("/api/auth/users", new
         {
             email = "user@example.com",
             displayName = "New User",
-            password = "Test-Only-Password-123!"
+            password = "Test-Only-Password-123!",
+            role = "AVALIADOR"
         });
-        var payload = await response.Content.ReadAsStringAsync();
 
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        Assert.Contains("database_unavailable", payload, StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public void CreatingUsersRequiresAdministratorRole()
+    {
+        var method = typeof(AuthController).GetMethod(nameof(AuthController.CreateUser))!;
+        var authorization = Assert.Single(method.GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>());
+
+        Assert.Equal("ADMINISTRADOR", authorization.Roles);
+        Assert.Empty(method.GetCustomAttributes(typeof(AllowAnonymousAttribute), true));
+    }
+
+    [Fact]
+    public async Task ChangingOwnPasswordRequiresAuthentication()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.PutAsJsonAsync("/api/auth/me/password", new
+        {
+            currentPassword = "Test-Only-Password-123!",
+            newPassword = "Test-Only-New-Password-456!"
+        });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public void ChangingOwnPasswordIsAvailableToAllAuthenticatedRoles()
+    {
+        var method = typeof(AuthController).GetMethod(nameof(AuthController.ChangePassword))!;
+        var authorization = Assert.Single(method.GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>());
+
+        Assert.Null(authorization.Roles);
+        Assert.Empty(method.GetCustomAttributes(typeof(AllowAnonymousAttribute), true));
+    }
+
+    [Fact]
+    public void AuthControllerDoesNotExposePublicRegistration()
+    {
+        var postRoutes = typeof(AuthController).GetMethods()
+            .SelectMany(method => method.GetCustomAttributes(typeof(HttpPostAttribute), true).Cast<HttpPostAttribute>());
+
+        Assert.DoesNotContain(postRoutes, route => route.Template == "register");
     }
 
     [Fact]

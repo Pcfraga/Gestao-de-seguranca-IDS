@@ -1,4 +1,5 @@
 using System.Data;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Cryptography;
 using System.Text;
 using IDS.Api.Authentication;
@@ -45,50 +46,6 @@ public sealed class AuthController(
         await userManager.ResetAccessFailedCountAsync(user);
         var (token, expiresAt) = await tokenService.CreateAsync(user, cancellationToken);
         return Ok(new LoginResponse(token, expiresAt, user.DisplayName ?? user.Email ?? string.Empty, (await userManager.GetRolesAsync(user)).ToArray()));
-    }
-
-    [AllowAnonymous]
-    [EnableRateLimiting("auth")]
-    [HttpPost("register")]
-    public async Task<IActionResult> Register(
-        RegisterRequest request,
-        CancellationToken cancellationToken)
-    {
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        if (!await roleManager.RoleExistsAsync("AVALIADOR"))
-        {
-            return Conflict(new { message = "Execute as migrations antes de criar um perfil." });
-        }
-
-        if ((await userManager.GetUsersInRoleAsync("ADMINISTRADOR")).Count == 0)
-        {
-            return Conflict(new { message = "Configure o administrador inicial antes de criar perfis." });
-        }
-
-        var email = request.Email.Trim();
-        var user = new IdsUser
-        {
-            Id = Guid.NewGuid(),
-            UserName = email,
-            Email = email,
-            DisplayName = request.DisplayName.Trim(),
-            EmailConfirmed = true
-        };
-        var result = await userManager.CreateAsync(user, request.Password);
-        if (!result.Succeeded)
-        {
-            return BadRequest(new { errors = result.Errors.Select(error => error.Description) });
-        }
-
-        var roleResult = await userManager.AddToRoleAsync(user, "AVALIADOR");
-        if (!roleResult.Succeeded)
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Não foi possível atribuir o perfil de usuário." });
-        }
-
-        await transaction.CommitAsync(cancellationToken);
-        return Created("/api/auth/login", new { user.Id, user.Email, user.DisplayName, role = "AVALIADOR" });
     }
 
     [AllowAnonymous]
@@ -196,6 +153,28 @@ public sealed class AuthController(
         return Created("/api/auth/users", new { user.Id, user.Email, user.DisplayName, role });
     }
 
+    [Authorize]
+    [EnableRateLimiting("auth")]
+    [HttpPut("me/password")]
+    public async Task<IActionResult> ChangePassword(ChangePasswordRequest request)
+    {
+        var user = await userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        if (await userManager.IsLockedOutAsync(user))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Conta bloqueada. Solicite acesso ao administrador." });
+        }
+
+        var result = await userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+        return result.Succeeded
+            ? NoContent()
+            : BadRequest(new { errors = result.Errors.Select(error => error.Code == "PasswordMismatch" ? "Senha atual incorreta." : error.Description) });
+    }
+
     [Authorize(Roles = "ADMINISTRADOR")]
     [HttpGet("users")]
     public async Task<IActionResult> ListUsers(CancellationToken cancellationToken)
@@ -272,8 +251,10 @@ public sealed record SetActiveRequest(bool Active);
 
 public sealed record ResetPasswordRequest(string Password);
 
-public sealed record BootstrapAdministratorRequest(string SetupKey, string Email, string DisplayName, string Password);
+public sealed record ChangePasswordRequest(
+    [property: Required] string CurrentPassword,
+    [property: Required] string NewPassword);
 
-public sealed record RegisterRequest(string Email, string DisplayName, string Password);
+public sealed record BootstrapAdministratorRequest(string SetupKey, string Email, string DisplayName, string Password);
 
 public sealed record CreateUserRequest(string Email, string DisplayName, string Password, string Role);
