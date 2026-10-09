@@ -109,10 +109,11 @@ public sealed class ApiIntegrationTests(IdsApiFactory factory) : IClassFixture<I
 
     [Theory]
     [InlineData("", "Test-Only-New-Password-456!", "CurrentPassword")]
+    [InlineData(null, "Test-Only-New-Password-456!", "CurrentPassword")]
     [InlineData("Test-Only-Password-123!", "", "NewPassword")]
     [InlineData("Test-Only-Password-123!", null, "NewPassword")]
     public async Task ChangingOwnPasswordRejectsMissingPasswords(
-        string currentPassword, string? newPassword, string expectedField)
+        string? currentPassword, string? newPassword, string expectedField)
     {
         using var client = CreateAuthenticatedClient();
 

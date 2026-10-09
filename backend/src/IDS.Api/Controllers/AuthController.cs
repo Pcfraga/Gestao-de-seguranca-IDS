@@ -251,9 +251,14 @@ public sealed record SetActiveRequest(bool Active);
 
 public sealed record ResetPasswordRequest(string Password);
 
-public sealed record ChangePasswordRequest(
-    [Required] string CurrentPassword,
-    [Required] string NewPassword);
+public sealed class ChangePasswordRequest
+{
+    [Required]
+    public string CurrentPassword { get; init; } = string.Empty;
+
+    [Required]
+    public string NewPassword { get; init; } = string.Empty;
+}
 
 public sealed record BootstrapAdministratorRequest(string SetupKey, string Email, string DisplayName, string Password);
 
