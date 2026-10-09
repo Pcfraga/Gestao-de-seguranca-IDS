@@ -67,10 +67,13 @@ Os botões **Gerar PDF** abrem a janela de impressão do navegador. Selecione **
 
 No primeiro acesso, escolha “Primeiro acesso: configurar administrador”, informe a `INITIAL_ADMIN_SETUP_KEY` e crie a primeira conta. A senha deve ter pelo menos 8 caracteres; não há exigência de maiúscula, minúscula, número ou símbolo. A chave de bootstrap é separada da senha e deve corresponder exatamente ao valor configurado na API. O bootstrap só funciona enquanto não houver usuários; guarde a chave fora do repositório e remova-a do ambiente depois do provisionamento. O login usa `POST /api/auth/login` e os demais endpoints exigem bearer token.
 
+Depois da configuração inicial, qualquer pessoa pode escolher “Criar meu perfil” na tela de acesso. O cadastro público cria exclusivamente usuários comuns (`AVALIADOR`), e cada pessoa define sua própria senha (mínimo de 8 caracteres); a senha de `AUTH_SIGNING_KEY` ou a chave do Render não é usada como senha da conta. Administradores também podem criar usuários e definir uma senha inicial na área “Usuários e perfis”.
+
 ### Diagnóstico de acesso
 
 - `GET /api/health/ready` retorna `503` com `database: unavailable` até o PostgreSQL aceitar conexões e as migrations estarem aplicadas.
 - `POST /api/auth/login` retorna `503` quando o banco está inacessível; `401` significa credenciais inválidas ou conta bloqueada.
+- `POST /api/auth/register` cria um usuário comum com a senha enviada no cadastro; retorna `503` quando o banco está inacessível.
 - `POST /api/auth/bootstrap-admin` retorna `401` se `SetupKey` não corresponder exatamente a `INITIAL_ADMIN_SETUP_KEY`; `409` indica que já existem usuários. Uma chave correta com o banco indisponível retorna `503`.
 - O frontend local usa `localhost:5173` ou `localhost:5174`; `/favicon.ico` redireciona ao ícone IDS em SVG.
 

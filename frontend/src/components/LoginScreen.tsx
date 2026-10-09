@@ -8,7 +8,7 @@ interface LoginScreenProps {
 }
 
 export function LoginScreen({ onAuthenticated }: LoginScreenProps) {
-  const [isBootstrap, setIsBootstrap] = useState(false)
+  const [mode, setMode] = useState<'login' | 'register' | 'bootstrap'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -24,15 +24,26 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps) {
     setIsSubmitting(true)
 
     try {
-      if (isBootstrap) {
+      if (mode === 'bootstrap') {
         await apiRequest('/api/auth/bootstrap-admin', {
           method: 'POST',
           body: JSON.stringify({ setupKey, email, displayName, password }),
         })
         setNotice('Administrador configurado. Entre com o novo usuário.')
-        setIsBootstrap(false)
+        setMode('login')
         setPassword('')
         setSetupKey('')
+        return
+      }
+
+      if (mode === 'register') {
+        await apiRequest('/api/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({ email, displayName, password }),
+        })
+        setNotice('Perfil criado. Entre com seu e-mail e senha.')
+        setMode('login')
+        setPassword('')
         return
       }
 
@@ -43,7 +54,7 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps) {
       setAccessToken(session.accessToken)
       onAuthenticated(session.displayName)
     } catch (requestError) {
-      if (isBootstrap && requestError instanceof ApiError && requestError.status === 401) {
+      if (mode === 'bootstrap' && requestError instanceof ApiError && requestError.status === 401) {
         setError('Chave de configuração inválida ou administrador já configurado.')
       } else {
         setError(requestError instanceof Error ? requestError.message : 'Falha na autenticação.')
@@ -64,26 +75,27 @@ export function LoginScreen({ onAuthenticated }: LoginScreenProps) {
 
         <div className="login-heading">
           <span className="login-overline">ACESSO SEGURO</span>
-          <h1>{isBootstrap ? 'Configurar administrador' : 'Acesse o sistema'}</h1>
-          <p>{isBootstrap ? 'Crie a primeira conta administrativa autorizada.' : 'Entre com suas credenciais corporativas.'}</p>
+          <h1>{mode === 'bootstrap' ? 'Configurar administrador' : mode === 'register' ? 'Criar meu perfil' : 'Acesse o sistema'}</h1>
+          <p>{mode === 'bootstrap' ? 'Crie a primeira conta administrativa autorizada.' : mode === 'register' ? 'Cadastre-se como usuário comum para acessar o sistema.' : 'Entre com suas credenciais corporativas.'}</p>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit}>
-          {isBootstrap && <label>Nome completo<input autoComplete="name" onChange={(event) => setDisplayName(event.target.value)} required value={displayName} /></label>}
+          {mode !== 'login' && <label>Nome completo<input autoComplete="name" onChange={(event) => setDisplayName(event.target.value)} required value={displayName} /></label>}
           <label>E-mail corporativo<input autoComplete="username" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
-          {isBootstrap && <label>Chave de configuração<input autoComplete="off" onChange={(event) => setSetupKey(event.target.value)} required type="password" value={setupKey} /></label>}
-          <label>Senha<input autoComplete={isBootstrap ? 'new-password' : 'current-password'} minLength={isBootstrap ? 8 : undefined} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />{isBootstrap && <small className="password-hint">Mínimo de 8 caracteres.</small>}</label>
+          {mode === 'bootstrap' && <label>Chave de configuração<input autoComplete="off" onChange={(event) => setSetupKey(event.target.value)} required type="password" value={setupKey} /></label>}
+          <label>Senha<input autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'login' ? undefined : 8} onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />{mode !== 'login' && <small className="password-hint">Mínimo de 8 caracteres.</small>}</label>
           {error && <p className="login-alert error" role="alert">{error}</p>}
           {notice && <p className="login-alert success" role="status">{notice}</p>}
           <button className="login-submit" disabled={isSubmitting} type="submit">
-            {isSubmitting ? 'Aguarde…' : isBootstrap ? 'Criar administrador' : 'Entrar'}
-            {isBootstrap ? <KeyRound size={17} /> : <ArrowRight size={17} />}
+            {isSubmitting ? 'Aguarde…' : mode === 'bootstrap' ? 'Criar administrador' : mode === 'register' ? 'Criar meu perfil' : 'Entrar'}
+            {mode === 'login' ? <ArrowRight size={17} /> : <KeyRound size={17} />}
           </button>
         </form>
 
-        <button className="login-mode-toggle" onClick={() => { setIsBootstrap(!isBootstrap); setError(''); setNotice('') }} type="button">
-          {isBootstrap ? 'Voltar ao login' : 'Primeiro acesso: configurar administrador'}
-        </button>
+        {mode === 'login' ? <>
+          <button className="login-mode-toggle" onClick={() => { setMode('register'); setError(''); setNotice('') }} type="button">Criar meu perfil</button>
+          <button className="login-mode-toggle" onClick={() => { setMode('bootstrap'); setError(''); setNotice('') }} type="button">Primeiro acesso: configurar administrador</button>
+        </> : <button className="login-mode-toggle" onClick={() => { setMode('login'); setError(''); setNotice('') }} type="button">Voltar ao login</button>}
         <div className="login-security"><span className="status-dot" /> Conexão protegida <span>·</span> Acesso auditável</div>
       </section>
       <aside className="login-side-note"><span>OBSERVAR</span><span>PREVENIR</span><span>EVOLUIR</span></aside>

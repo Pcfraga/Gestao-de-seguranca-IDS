@@ -49,6 +49,50 @@ public sealed class AuthController(
 
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
+    [HttpPost("register")]
+    public async Task<IActionResult> Register(
+        RegisterRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        if (!await roleManager.RoleExistsAsync("AVALIADOR"))
+        {
+            return Conflict(new { message = "Execute as migrations antes de criar um perfil." });
+        }
+
+        if ((await userManager.GetUsersInRoleAsync("ADMINISTRADOR")).Count == 0)
+        {
+            return Conflict(new { message = "Configure o administrador inicial antes de criar perfis." });
+        }
+
+        var email = request.Email.Trim();
+        var user = new IdsUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = email,
+            Email = email,
+            DisplayName = request.DisplayName.Trim(),
+            EmailConfirmed = true
+        };
+        var result = await userManager.CreateAsync(user, request.Password);
+        if (!result.Succeeded)
+        {
+            return BadRequest(new { errors = result.Errors.Select(error => error.Description) });
+        }
+
+        var roleResult = await userManager.AddToRoleAsync(user, "AVALIADOR");
+        if (!roleResult.Succeeded)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Não foi possível atribuir o perfil de usuário." });
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return Created("/api/auth/login", new { user.Id, user.Email, user.DisplayName, role = "AVALIADOR" });
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     [HttpPost("bootstrap-admin")]
     public async Task<IActionResult> BootstrapAdministrator(
         BootstrapAdministratorRequest request,
@@ -229,5 +273,7 @@ public sealed record SetActiveRequest(bool Active);
 public sealed record ResetPasswordRequest(string Password);
 
 public sealed record BootstrapAdministratorRequest(string SetupKey, string Email, string DisplayName, string Password);
+
+public sealed record RegisterRequest(string Email, string DisplayName, string Password);
 
 public sealed record CreateUserRequest(string Email, string DisplayName, string Password, string Role);

@@ -59,6 +59,23 @@ public sealed class ApiIntegrationTests(IdsApiFactory factory) : IClassFixture<I
     }
 
     [Fact]
+    public async Task RegisterReturnsServiceUnavailableWhenDatabaseIsOffline()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/auth/register", new
+        {
+            email = "user@example.com",
+            displayName = "New User",
+            password = "Test-Only-Password-123!"
+        });
+        var payload = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Contains("database_unavailable", payload, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task BootstrapReturnsUnauthorizedWhenSetupKeyIsIncorrect()
     {
         using var client = factory.CreateClient();
