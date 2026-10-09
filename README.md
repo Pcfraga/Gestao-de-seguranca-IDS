@@ -8,7 +8,7 @@ O projeto começa a substituir o preenchimento manual da planilha IDS por um sis
 - API ASP.NET Core separada em Domain, Application, Infrastructure e API.
 - Cálculo diário de IDS no domínio e testes unitários.
 - EF Core/PostgreSQL, migration inicial, catálogo de seis categorias, 32 itens e três severidades.
-- Login bearer, perfis de acesso, bootstrap de administrador e rate limit no login.
+- Login bearer, cadastro de empresa com administrador, isolamento por empresa e rate limit na autenticação.
 - Cadastro, consulta, edição e envio explícito de avaliações; rascunhos continuam editáveis, avaliações enviadas ficam somente leitura. A lista pode ser filtrada por status, contratada e local e exportada em CSV; cada avaliação também pode ser gerada em PDF.
 - Dashboard com totais mensais, proporções por severidade e evolução do IDS por avaliação; a média semanal/mensal continua desabilitada até validar o calendário da planilha.
 - Aba **Dados** com filtros de período, local e contratada e consolidação por data, categoria, item e severidade. Agrupamento semanal ainda depende de validação da regra do Excel.
@@ -36,7 +36,6 @@ Exportação consolidada PDF/Excel, importação histórica, auditoria completa,
 dotnet tool restore
 $env:DATABASE_CONNECTION = "Host=localhost;Port=5432;Database=ids;Username=ids_app;Password=<senha-local>"
 $env:AUTH_SIGNING_KEY = "<segredo-aleatorio-com-pelo-menos-32-bytes>"
-$env:INITIAL_ADMIN_SETUP_KEY = "<segredo-de-uso-unico>"
 $env:ALLOWED_ORIGINS = "http://localhost:5173"
 ```
 
@@ -65,23 +64,27 @@ Acesse `http://localhost:5173`. O Vite encaminha `/api` para `http://localhost:5
 
 Os botões **Gerar PDF** abrem a janela de impressão do navegador. Selecione **Salvar como PDF** como destino para baixar ou salvar o documento.
 
-No primeiro acesso, escolha “Primeiro acesso: configurar administrador”, informe a `INITIAL_ADMIN_SETUP_KEY` e crie a primeira conta. A senha deve ter pelo menos 8 caracteres; não há exigência de maiúscula, minúscula, número ou símbolo. A chave de bootstrap é separada da senha e deve corresponder exatamente ao valor configurado na API. O bootstrap só funciona enquanto não houver usuários; guarde a chave fora do repositório e remova-a do ambiente depois do provisionamento. O login usa `POST /api/auth/login` e os demais endpoints exigem bearer token.
+No primeiro acesso, escolha **Sou gestor: cadastrar minha empresa**, informe o nome da empresa, seu nome, e-mail e senha. O sistema cria uma empresa independente e sua conta de `ADMINISTRADOR`; não exige chave do Render. A senha deve ter pelo menos 8 caracteres, sem exigência de composição. O login usa `POST /api/auth/login`; cada e-mail identifica uma conta única no sistema e não pode ser reutilizado em outra empresa.
 
-Depois da configuração inicial, somente administradores logados podem criar contas na área “Usuários e perfis”. Para cadastrar colaboradores, mantenha o perfil “Usuário comum” (`AVALIADOR`) e defina uma senha inicial de pelo menos 8 caracteres. Não há cadastro público: quem receber o link deve solicitar acesso ao administrador da empresa. A chave `INITIAL_ADMIN_SETUP_KEY` e o segredo `AUTH_SIGNING_KEY` não são senhas de contas.
+Depois do cadastro, o administrador cria colaboradores em **Usuários e perfis**, mantendo o perfil **Usuário comum** (`AVALIADOR`) e definindo uma senha inicial. Essas contas pertencem automaticamente à empresa do administrador. Colaboradores não usam o cadastro de empresa: devem solicitar uma conta ao seu gestor. Administradores veem todas as avaliações da própria empresa; usuários comuns veem e editam apenas as próprias. Catálogos operacionais, relatórios IPF e identidade visual também são isolados por empresa. O catálogo padrão de itens e severidades é compartilhado e somente leitura.
 
-Administradores e usuários comuns podem alterar a própria senha em **Minha conta**, informando a senha atual, a nova senha (mínimo de 8 caracteres) e a confirmação. Essa operação não exige a chave do Render. Ao entregar a instalação, forneça o acesso inicial ao administrador da empresa para que ele defina sua própria senha. A troca não encerra tokens de acesso já emitidos, que expiram em até 30 minutos.
+Administradores e usuários comuns podem alterar a própria senha em **Minha conta**, informando a senha atual, a nova senha (mínimo de 8 caracteres) e a confirmação. Essa operação não exige a chave do Render. Colaboradores podem trocar a senha inicial fornecida pelo gestor. A troca não encerra tokens de acesso já emitidos, que expiram em até 30 minutos.
 
-### Instalação por empresa
+### Sistema compartilhado por empresas
 
-Cada empresa deve ter sua própria instalação (frontend e API), link e banco PostgreSQL separado; não reutilize o banco de outra empresa. Configure `DATABASE_CONNECTION`, `ALLOWED_ORIGINS`, `AUTH_SIGNING_KEY` e `INITIAL_ADMIN_SETUP_KEY` para a nova instalação, usando segredos distintos por empresa, e aplique as migrations. O responsável pela instalação provisiona o primeiro administrador com a chave de configuração e uma senha própria. Depois, o administrador gerencia as contas dos colaboradores sem precisar da chave do Render. Remova `INITIAL_ADMIN_SETUP_KEY` do ambiente após o provisionamento. Uma instalação com usuários já existentes não permite configurar outro administrador inicial; novas empresas precisam de um banco próprio.
+Todas as empresas usam o mesmo site e banco. A API obtém a empresa do token autenticado, valida o vínculo da conta e aplica filtros e proteção de gravação; nenhum administrador tem acesso global às demais empresas. O cadastro público cria uma empresa nova, nunca permite entrar em uma empresa existente apenas pelo nome.
+
+Antes de publicar esta versão, aplique a migration `AddCompanyIsolation` e publique API e frontend compatíveis. Os usuários e dados anteriores são mantidos numa empresa legada de testes e não aparecem nas novas empresas. Tokens antigos sem identificação de empresa são recusados: entre novamente. `INITIAL_ADMIN_SETUP_KEY` deixou de ser necessária e o endpoint `bootstrap-admin` foi removido. Para testar, cadastre duas empresas com e-mails distintos, crie colaboradores e confirme que usuários, avaliações, locais, relatórios e configuração visual não aparecem na outra empresa.
+
+No Render, é possível aplicar as migrations na inicialização definindo `APPLY_MIGRATIONS=true` no serviço da API antes do deploy. A inicialização falha explicitamente se a migração falhar; não há continuação com um esquema antigo. Após concluir a implantação, volte a `false` ou remova a variável. Alternativamente, use o comando `dotnet ef database update` descrito acima. Não publique somente o frontend novo contra uma API antiga.
 
 ### Diagnóstico de acesso
 
 - `GET /api/health/ready` retorna `503` com `database: unavailable` até o PostgreSQL aceitar conexões e as migrations estarem aplicadas.
 - `POST /api/auth/login` retorna `503` quando o banco está inacessível; `401` significa credenciais inválidas ou conta bloqueada.
 - `POST /api/auth/users` cria contas somente com bearer token de um `ADMINISTRADOR`; sem autenticação retorna `401`, e com perfil comum retorna `403`.
-- `PUT /api/auth/me/password` altera somente a senha da conta autenticada; exige `currentPassword` e `newPassword`. Senha atual incorreta ou nova senha inválida retorna `400`; conta bloqueada retorna `403`.
-- `POST /api/auth/bootstrap-admin` retorna `401` se `SetupKey` não corresponder exatamente a `INITIAL_ADMIN_SETUP_KEY`; `409` indica que já existem usuários. Uma chave correta com o banco indisponível retorna `503`.
+- `PUT /api/auth/me/password` altera somente a senha da conta autenticada; exige `currentPassword` e `newPassword`. Senha atual incorreta ou nova senha inválida retorna `400`; contas bloqueadas não podem alterar senha.
+- `POST /api/auth/register-company` cadastra a empresa e seu administrador sem chave de configuração; dados inválidos, senha inadequada ou e-mail já utilizado retornam `400`. A criação é transacional: uma falha não deixa uma empresa sem administrador.
 - O frontend local usa `localhost:5173` ou `localhost:5174`; `/favicon.ico` redireciona ao ícone IDS em SVG.
 
 ## Dados e relatório IPF

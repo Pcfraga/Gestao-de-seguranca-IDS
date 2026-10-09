@@ -1,6 +1,6 @@
 namespace IDS.Domain.Entities;
 
-public sealed class AuditEvent : AuditableEntity
+public sealed class AuditEvent : TenantEntity
 {
     public required string Action { get; set; }
 

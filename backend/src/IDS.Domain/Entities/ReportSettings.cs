@@ -1,6 +1,6 @@
 namespace IDS.Domain.Entities;
 
-public sealed class ReportSettings : AuditableEntity
+public sealed class ReportSettings : TenantEntity
 {
     public string CompanyName { get; set; } = string.Empty;
 

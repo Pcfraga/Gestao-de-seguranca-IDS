@@ -7,9 +7,13 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace IDS.Infrastructure.Persistence;
 
-public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options)
+public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurrentUserScope? userScope = null)
     : IdentityDbContext<IdsUser, IdentityRole<Guid>, Guid>(options)
 {
+    private Guid? CurrentTenantId => userScope?.TenantId;
+
+    public DbSet<Tenant> Tenants => Set<Tenant>();
+
     public DbSet<Organization> Organizations => Set<Organization>();
 
     public DbSet<Site> Sites => Set<Site>();
@@ -48,11 +52,27 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options)
     {
         base.OnModelCreating(builder);
 
+        builder.Entity<Tenant>(entity =>
+        {
+            entity.ToTable("tenants");
+            entity.Property(value => value.Name).HasMaxLength(120).IsRequired();
+        });
+        builder.Entity<IdsUser>().HasOne<Tenant>().WithMany()
+            .HasForeignKey(user => user.TenantId).OnDelete(DeleteBehavior.Restrict);
+
+        ConfigureTenant<Evaluation>(builder);
+        ConfigureTenant<EvaluationObservation>(builder);
+        ConfigureTenant<Organization>(builder);
+        ConfigureTenant<Site>(builder);
+        ConfigureTenant<MonthlyIpfRecord>(builder);
+        ConfigureTenant<ReportSettings>(builder);
+        ConfigureTenant<AuditEvent>(builder);
+
         builder.Entity<Organization>(entity =>
         {
             entity.ToTable("organizations");
             entity.Property(value => value.Name).HasMaxLength(200).IsRequired();
-            entity.HasIndex(value => new { value.Kind, value.Name }).IsUnique();
+            entity.HasIndex(value => new { value.TenantId, value.Kind, value.Name }).IsUnique();
             entity.ConfigureAuditFields();
         });
 
@@ -61,7 +81,7 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options)
             entity.ToTable("sites");
             entity.Property(value => value.Name).HasMaxLength(200).IsRequired();
             entity.Property(value => value.ProjectOrIsland).HasMaxLength(200);
-            entity.HasIndex(value => new { value.Name, value.ProjectOrIsland }).IsUnique();
+            entity.HasIndex(value => new { value.TenantId, value.Name, value.ProjectOrIsland }).IsUnique();
             entity.ConfigureAuditFields();
         });
 
@@ -143,7 +163,7 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options)
                 table.HasCheckConstraint("ck_monthly_ipf_records_month", "\"Month\" BETWEEN 1 AND 12"));
             entity.Property(value => value.Value).HasPrecision(12, 4);
             entity.Property(value => value.Source).HasMaxLength(40).IsRequired();
-            entity.HasIndex(value => new { value.ContractorOrganizationId, value.Year, value.Month }).IsUnique();
+            entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month }).IsUnique();
             entity.HasOne(value => value.ContractorOrganization).WithMany().HasForeignKey(value => value.ContractorOrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.Site).WithMany().HasForeignKey(value => value.SiteId).OnDelete(DeleteBehavior.Restrict);
             entity.ConfigureAuditFields();
@@ -155,11 +175,19 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options)
             entity.Property(value => value.CompanyName).HasMaxLength(120).IsRequired();
             entity.Property(value => value.Tagline).HasMaxLength(160).IsRequired();
             entity.Property(value => value.PrimaryColor).HasMaxLength(7).IsRequired();
+            entity.HasIndex(value => value.TenantId).IsUnique();
             entity.ConfigureAuditFields();
         });
 
         SeedCatalog(builder);
         SeedRoles(builder);
+    }
+
+    private void ConfigureTenant<TEntity>(ModelBuilder builder) where TEntity : TenantEntity
+    {
+        builder.Entity<TEntity>().HasQueryFilter(entity => CurrentTenantId != null && entity.TenantId == CurrentTenantId);
+        builder.Entity<TEntity>().HasOne<Tenant>().WithMany()
+            .HasForeignKey(entity => entity.TenantId).OnDelete(DeleteBehavior.Restrict);
     }
 
     private static void SeedCatalog(ModelBuilder builder)
@@ -250,6 +278,22 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options)
 
     private void ApplyAuditTimestamps()
     {
+        foreach (var entry in ChangeTracker.Entries<TenantEntity>()
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+        {
+            var tenantId = CurrentTenantId ?? throw new InvalidOperationException("A operação exige uma empresa autenticada.");
+            if (entry.State == EntityState.Added && entry.Entity.TenantId == Guid.Empty)
+            {
+                entry.Entity.TenantId = tenantId;
+            }
+
+            if (entry.Entity.TenantId != tenantId
+                || (entry.State != EntityState.Added && entry.Property(entity => entity.TenantId).OriginalValue != tenantId))
+            {
+                throw new InvalidOperationException("Não é permitido alterar dados de outra empresa.");
+            }
+        }
+
         var now = DateTimeOffset.UtcNow;
         foreach (EntityEntry<AuditableEntity> entry in ChangeTracker.Entries<AuditableEntity>())
         {

@@ -1,7 +1,5 @@
-using System.Data;
 using System.ComponentModel.DataAnnotations;
-using System.Security.Cryptography;
-using System.Text;
+using IDS.Domain.Entities;
 using IDS.Api.Authentication;
 using IDS.Infrastructure.Identity;
 using IDS.Infrastructure.Persistence;
@@ -20,7 +18,7 @@ public sealed class AuthController(
     RoleManager<IdentityRole<Guid>> roleManager,
     IdsDbContext dbContext,
     AccessTokenService tokenService,
-    IConfiguration configuration) : ControllerBase
+    ICurrentUserScope userScope) : ControllerBase
 {
     private static readonly string[] AllowedRoles = ["ADMINISTRADOR", "GESTOR", "AVALIADOR", "CONSULTA"];
 
@@ -50,26 +48,24 @@ public sealed class AuthController(
 
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
-    [HttpPost("bootstrap-admin")]
-    public async Task<IActionResult> BootstrapAdministrator(
-        BootstrapAdministratorRequest request,
+    [HttpPost("register-company")]
+    public async Task<IActionResult> RegisterCompany(
+        RegisterCompanyRequest request,
         CancellationToken cancellationToken)
     {
-        var setupKey = configuration["INITIAL_ADMIN_SETUP_KEY"];
-        if (string.IsNullOrWhiteSpace(setupKey) || !FixedTimeEquals(setupKey, request.SetupKey))
+        if (!await roleManager.RoleExistsAsync("ADMINISTRADOR"))
         {
-            return Unauthorized();
+            return Conflict(new { message = "Execute as migrations antes de cadastrar uma empresa." });
         }
 
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        if (await userManager.Users.AnyAsync(cancellationToken))
-        {
-            return Conflict(new { message = "O administrador inicial já foi configurado." });
-        }
-
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var tenant = new Tenant { Name = request.CompanyName.Trim() };
+        dbContext.Tenants.Add(tenant);
+        await dbContext.SaveChangesAsync(cancellationToken);
         var user = new IdsUser
         {
             Id = Guid.NewGuid(),
+            TenantId = tenant.Id,
             UserName = request.Email.Trim(),
             Email = request.Email.Trim(),
             DisplayName = request.DisplayName.Trim(),
@@ -81,12 +77,6 @@ public sealed class AuthController(
             return BadRequest(new { errors = result.Errors.Select(error => error.Description) });
         }
 
-        if (!await roleManager.RoleExistsAsync("ADMINISTRADOR"))
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            return Conflict(new { message = "Execute as migrations antes de configurar o administrador." });
-        }
-
         var roleResult = await userManager.AddToRoleAsync(user, "ADMINISTRADOR");
         if (!roleResult.Succeeded)
         {
@@ -95,7 +85,7 @@ public sealed class AuthController(
         }
 
         await transaction.CommitAsync(cancellationToken);
-        return Created("/api/auth/me", new { user.Id, user.Email, user.DisplayName, role = "ADMINISTRADOR" });
+        return Created("/api/auth/me", new { user.Id, user.Email, user.DisplayName, companyName = tenant.Name, role = "ADMINISTRADOR" });
     }
 
     [Authorize]
@@ -113,6 +103,8 @@ public sealed class AuthController(
             user.Id,
             user.Email,
             user.DisplayName,
+            companyName = await dbContext.Tenants.Where(tenant => tenant.Id == user.TenantId)
+                .Select(tenant => tenant.Name).SingleAsync(),
             roles = await userManager.GetRolesAsync(user)
         });
     }
@@ -131,6 +123,7 @@ public sealed class AuthController(
         var user = new IdsUser
         {
             Id = Guid.NewGuid(),
+            TenantId = userScope.TenantId ?? throw new InvalidOperationException("Empresa não identificada."),
             UserName = request.Email.Trim(),
             Email = request.Email.Trim(),
             DisplayName = request.DisplayName.Trim(),
@@ -179,7 +172,8 @@ public sealed class AuthController(
     [HttpGet("users")]
     public async Task<IActionResult> ListUsers(CancellationToken cancellationToken)
     {
-        var users = await userManager.Users.OrderBy(user => user.DisplayName).ToListAsync(cancellationToken);
+        var users = await userManager.Users.Where(user => user.TenantId == userScope.TenantId)
+            .OrderBy(user => user.DisplayName).ToListAsync(cancellationToken);
         var result = new List<UserSummary>();
         foreach (var user in users)
         {
@@ -194,7 +188,7 @@ public sealed class AuthController(
     [HttpPut("users/{id:guid}/active")]
     public async Task<IActionResult> SetActive(Guid id, SetActiveRequest request)
     {
-        var user = await userManager.FindByIdAsync(id.ToString());
+        var user = await userManager.Users.SingleOrDefaultAsync(user => user.Id == id && user.TenantId == userScope.TenantId);
         if (user is null)
         {
             return NotFound();
@@ -219,7 +213,7 @@ public sealed class AuthController(
     [HttpPut("users/{id:guid}/password")]
     public async Task<IActionResult> ResetPassword(Guid id, ResetPasswordRequest request)
     {
-        var user = await userManager.FindByIdAsync(id.ToString());
+        var user = await userManager.Users.SingleOrDefaultAsync(user => user.Id == id && user.TenantId == userScope.TenantId);
         if (user is null)
         {
             return NotFound();
@@ -232,13 +226,6 @@ public sealed class AuthController(
             : BadRequest(new { errors = result.Errors.Select(error => error.Description) });
     }
 
-    private static bool FixedTimeEquals(string expected, string provided)
-    {
-        var expectedBytes = Encoding.UTF8.GetBytes(expected);
-        var providedBytes = Encoding.UTF8.GetBytes(provided);
-        return expectedBytes.Length == providedBytes.Length
-            && CryptographicOperations.FixedTimeEquals(expectedBytes, providedBytes);
-    }
 }
 
 public sealed record LoginRequest(string Email, string Password);
@@ -260,6 +247,19 @@ public sealed class ChangePasswordRequest
     public string NewPassword { get; init; } = string.Empty;
 }
 
-public sealed record BootstrapAdministratorRequest(string SetupKey, string Email, string DisplayName, string Password);
+public sealed class RegisterCompanyRequest
+{
+    [Required, StringLength(120)]
+    public string CompanyName { get; init; } = string.Empty;
+
+    [Required, EmailAddress]
+    public string Email { get; init; } = string.Empty;
+
+    [Required, StringLength(120)]
+    public string DisplayName { get; init; } = string.Empty;
+
+    [Required]
+    public string Password { get; init; } = string.Empty;
+}
 
 public sealed record CreateUserRequest(string Email, string DisplayName, string Password, string Role);

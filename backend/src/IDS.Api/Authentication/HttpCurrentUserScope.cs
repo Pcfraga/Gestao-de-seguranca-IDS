@@ -9,5 +9,7 @@ public sealed class HttpCurrentUserScope(IHttpContextAccessor accessor) : ICurre
 
     public string? UserId => Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
 
+    public Guid? TenantId => Guid.TryParse(Principal?.FindFirstValue("tenant_id"), out var id) ? id : null;
+
     public bool IsAdministrator => Principal?.IsInRole("ADMINISTRADOR") == true;
 }

@@ -71,7 +71,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   }
 
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 && token === getAccessToken()) {
       clearAccessToken()
       window.dispatchEvent(new Event('ids:unauthorized'))
     }

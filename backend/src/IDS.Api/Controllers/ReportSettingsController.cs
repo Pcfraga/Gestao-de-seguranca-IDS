@@ -18,7 +18,8 @@ public sealed partial class ReportSettingsController(IdsDbContext dbContext, ICu
     {
         var settings = await dbContext.ReportSettings.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
         return Ok(settings is null
-            ? new ReportSettingsDto("", "", null, "#173e2e")
+            ? new ReportSettingsDto(await dbContext.Tenants.Where(tenant => tenant.Id == userScope.TenantId)
+                .Select(tenant => tenant.Name).SingleAsync(cancellationToken), "", null, "#173e2e")
             : new ReportSettingsDto(settings.CompanyName, settings.Tagline, settings.LogoDataUrl, settings.PrimaryColor));
     }
 

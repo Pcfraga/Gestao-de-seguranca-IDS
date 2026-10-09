@@ -42,7 +42,7 @@ import { LoginScreen } from './components/LoginScreen'
 import { EvaluationForm } from './components/EvaluationForm'
 import { ApiError, apiRequest, clearAccessToken, getAccessToken, type ChecklistCatalog, type DashboardSummary, type DataConsolidation, type EvaluationResult, type EvaluationSummary, type IpfAnnualHistory, type IpfMonthlySuggestion } from './lib/api'
 import { evaluationPdf, ipfReportPdf, openPrintWindow, writePrintWindow } from './lib/pdf'
-import { defaultPrimaryColor, fetchBranding, loadBranding, readLogoFile, saveBranding, type ReportBranding } from './lib/branding'
+import { clearBranding, defaultPrimaryColor, fetchBranding, loadBranding, readLogoFile, saveBranding, type ReportBranding } from './lib/branding'
 import './ids.css'
 
 type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'settings' | 'users' | 'account'
@@ -95,6 +95,8 @@ function App() {
   const [search, setSearch] = useState('')
   const [isAuthenticated, setIsAuthenticated] = useState(Boolean(getAccessToken()))
   const [displayName, setDisplayName] = useState('Usuário')
+  const [companyName, setCompanyName] = useState('')
+  const [profileError, setProfileError] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   const [profileReady, setProfileReady] = useState(false)
   const [showEvaluationForm, setShowEvaluationForm] = useState(false)
@@ -103,7 +105,14 @@ function App() {
   const activeCopy = sectionCopy[activeSection]
 
   useEffect(() => {
-    const handleUnauthorized = () => setIsAuthenticated(false)
+    const handleUnauthorized = () => {
+      clearBranding()
+      setIsAdmin(false)
+      setProfileReady(false)
+      setShowEvaluationForm(false)
+      setActiveSection('overview')
+      setIsAuthenticated(false)
+    }
     window.addEventListener('ids:unauthorized', handleUnauthorized)
     return () => window.removeEventListener('ids:unauthorized', handleUnauthorized)
   }, [])
@@ -112,19 +121,26 @@ function App() {
     if (!isAuthenticated) return
     let active = true
     Promise.all([
-      apiRequest<{ displayName: string; roles: string[] }>('/api/auth/me'),
+      apiRequest<{ displayName: string; companyName: string; roles: string[] }>('/api/auth/me'),
       fetchBranding(),
     ]).then(([me]) => {
       if (!active) return
       setDisplayName(me.displayName || 'Usuário')
+      setCompanyName(me.companyName)
       setIsAdmin(me.roles.includes('ADMINISTRADOR'))
       setProfileReady(true)
-    }).catch(() => { if (active) setProfileReady(true) })
+    }).catch(error => {
+      if (active) setProfileError(error instanceof Error ? error.message : 'Não foi possível carregar sua empresa.')
+    })
     return () => { active = false }
   }, [isAuthenticated])
 
   if (!isAuthenticated) {
-    return <LoginScreen onAuthenticated={(name) => { setDisplayName(name); setProfileReady(false); setIsAuthenticated(true) }} />
+    return <LoginScreen onAuthenticated={(name) => { setDisplayName(name); setProfileError(''); setProfileReady(false); setIsAuthenticated(true) }} />
+  }
+
+  if (profileError) {
+    return <div className="app-loading"><p role="alert">{profileError}</p><button type="button" onClick={() => { clearAccessToken(); clearBranding(); setProfileError(''); setIsAuthenticated(false) }}>Voltar ao login</button></div>
   }
 
   if (!profileReady) {
@@ -133,6 +149,11 @@ function App() {
 
   function signOut() {
     clearAccessToken()
+    clearBranding()
+    setCompanyName('')
+    setProfileError('')
+    setProfileReady(false)
+    setShowEvaluationForm(false)
     setIsAdmin(false)
     setIsAuthenticated(false)
     setActiveSection('overview')
@@ -147,8 +168,8 @@ function App() {
         </a>
 
         <div className="workspace-switcher">
-          <span className="workspace-avatar">C</span>
-          <span className="workspace-copy"><strong>CMPC</strong><small>Unidade operacional</small></span>
+          <span className="workspace-avatar">{companyName.slice(0, 1).toUpperCase()}</span>
+          <span className="workspace-copy"><strong>{companyName}</strong><small>Sua empresa</small></span>
           <ChevronDown size={15} aria-hidden="true" />
         </div>
 
@@ -1114,7 +1135,7 @@ function SettingsView() {
       const saved = await saveBranding({ ...branding, companyName: branding.companyName.trim(), tagline: branding.tagline.trim() })
       setBranding(saved)
       setError('')
-      setMessage('Identidade dos relatórios salva para todos os usuários. Os próximos PDFs já usam estas informações.')
+      setMessage('Identidade dos relatórios salva para os usuários da sua empresa. Os próximos PDFs já usam estas informações.')
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Não foi possível salvar.')
     }
@@ -1124,7 +1145,7 @@ function SettingsView() {
 
   return <div className="settings-grid">
     <section className="panel branding-card">
-      <div className="panel-heading"><div><h2>Identidade dos relatórios (PDF)</h2><p>Logo, nome e cores da empresa que realiza a avaliação. Valem para todos os usuários.</p></div></div>
+      <div className="panel-heading"><div><h2>Identidade dos relatórios (PDF)</h2><p>Logo, nome e cores usados nos relatórios da sua empresa. Não alteram os relatórios de outras empresas.</p></div></div>
       <div className="branding-form">
         <label>Nome da empresa
           <input maxLength={80} onChange={(event) => { setBranding({ ...branding, companyName: event.target.value }); setMessage('') }} placeholder="Ex.: Segurança & Cia Ltda." value={branding.companyName} />
@@ -1252,7 +1273,7 @@ function UsersAdmin() {
   }
 
   return <section className="panel users-card">
-    <div className="panel-heading"><div><h2>Usuários e perfis</h2><p>Administradores veem todas as avaliações. Usuários comuns veem e editam somente as próprias.</p></div></div>
+    <div className="panel-heading"><div><h2>Usuários e perfis</h2><p>Administradores veem todas as avaliações da própria empresa. Usuários comuns veem e editam somente as próprias. As contas criadas aqui pertencem à sua empresa.</p></div></div>
     <form className="users-form" onSubmit={(event) => void create(event)}>
       <label>Nome<input onChange={(event) => setForm({ ...form, displayName: event.target.value })} required value={form.displayName} /></label>
       <label>E-mail<input onChange={(event) => setForm({ ...form, email: event.target.value })} required type="email" value={form.email} /></label>

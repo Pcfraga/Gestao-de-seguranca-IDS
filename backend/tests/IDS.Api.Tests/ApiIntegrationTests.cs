@@ -165,29 +165,29 @@ public sealed class ApiIntegrationTests(IdsApiFactory factory) : IClassFixture<I
     }
 
     [Fact]
-    public async Task BootstrapReturnsUnauthorizedWhenSetupKeyIsIncorrect()
+    public async Task CompanyRegistrationRejectsMissingCompanyName()
     {
         using var client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/api/auth/bootstrap-admin", new
+        var response = await client.PostAsJsonAsync("/api/auth/register-company", new
         {
-            setupKey = "incorrect-setup-key",
+            companyName = "",
             email = "admin@example.com",
             displayName = "Admin",
             password = "Test-Only-Password-123!"
         });
 
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
-    public async Task BootstrapReturnsServiceUnavailableWhenKeyIsCorrectButDatabaseIsOffline()
+    public async Task CompanyRegistrationReturnsServiceUnavailableWhenDatabaseIsOffline()
     {
         using var client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/api/auth/bootstrap-admin", new
+        var response = await client.PostAsJsonAsync("/api/auth/register-company", new
         {
-            setupKey = "integration-tests-only-bootstrap-key",
+            companyName = "Test company",
             email = "admin@example.com",
             displayName = "Admin",
             password = "Test-Only-Password-123!"
@@ -218,7 +218,7 @@ public sealed class ApiIntegrationTests(IdsApiFactory factory) : IClassFixture<I
         var token = new JwtSecurityToken(
             issuer: configuration["AUTH_ISSUER"] ?? "IDS.Api",
             audience: configuration["AUTH_AUDIENCE"] ?? "IDS.Frontend",
-            claims: [new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())],
+            claims: [new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()), new Claim("tenant_id", Guid.NewGuid().ToString())],
             expires: DateTime.UtcNow.AddMinutes(5),
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(

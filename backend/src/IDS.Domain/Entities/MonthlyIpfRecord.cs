@@ -1,6 +1,6 @@
 namespace IDS.Domain.Entities;
 
-public sealed class MonthlyIpfRecord : AuditableEntity
+public sealed class MonthlyIpfRecord : TenantEntity
 {
     public int Year { get; set; }
 

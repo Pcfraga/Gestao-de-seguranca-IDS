@@ -1,6 +1,6 @@
 namespace IDS.Domain.Entities;
 
-public sealed class Site : AuditableEntity
+public sealed class Site : TenantEntity
 {
     public required string Name { get; set; }
 

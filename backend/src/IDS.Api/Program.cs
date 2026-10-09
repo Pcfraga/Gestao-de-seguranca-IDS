@@ -48,12 +48,32 @@ builder.Services.AddIdentityCore<IdsUser>(options =>
     })
     .AddRoles<IdentityRole<Guid>>()
     .AddEntityFrameworkStores<IdsDbContext>()
-    .AddSignInManager();
+    .AddSignInManager()
+    .AddDefaultTokenProviders();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var tenantClaim = context.Principal?.FindFirst("tenant_id")?.Value;
+                if (!Guid.TryParse(tenantClaim, out var tenantId))
+                {
+                    context.Fail("A sessão não identifica uma empresa. Entre novamente.");
+                    return;
+                }
+
+                var users = context.HttpContext.RequestServices.GetRequiredService<UserManager<IdsUser>>();
+                var user = await users.GetUserAsync(context.Principal!);
+                if (user is null || user.TenantId != tenantId || await users.IsLockedOutAsync(user))
+                {
+                    context.Fail("Conta indisponível para esta empresa.");
+                }
+            }
+        };
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -89,6 +109,12 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
     policy.WithOrigins(allowedOrigins.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()).AllowAnyHeader().AllowAnyMethod()));
 
 var app = builder.Build();
+
+if (builder.Configuration.GetValue<bool>("APPLY_MIGRATIONS"))
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<IdsDbContext>().Database.MigrateAsync();
+}
 
 app.UseExceptionHandler();
 

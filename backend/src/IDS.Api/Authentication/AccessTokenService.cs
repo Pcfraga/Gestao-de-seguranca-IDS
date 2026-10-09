@@ -24,6 +24,7 @@ public sealed class AccessTokenService(
             new(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new("tenant_id", user.TenantId.ToString()),
             new(ClaimTypes.Name, user.DisplayName ?? user.UserName ?? user.Email ?? user.Id.ToString())
         };
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));

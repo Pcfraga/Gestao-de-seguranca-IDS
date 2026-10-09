@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace IDS.Infrastructure.Persistence;
 
-public sealed class EfMonthlyIpfRepository(IdsDbContext dbContext) : IMonthlyIpfRepository
+public sealed class EfMonthlyIpfRepository(IdsDbContext dbContext, ICurrentUserScope userScope) : IMonthlyIpfRepository
 {
     public Task<Organization?> GetContractorAsync(Guid contractorId, CancellationToken cancellationToken) =>
         dbContext.Organizations.AsNoTracking()
@@ -38,6 +38,7 @@ public sealed class EfMonthlyIpfRepository(IdsDbContext dbContext) : IMonthlyIpf
             : new DateOnly(year, month + 1, 1);
         var evaluations = await dbContext.Evaluations
             .AsNoTracking()
+            .Where(evaluation => userScope.IsAdministrator || evaluation.CreatedByUserId == userScope.UserId)
             .Where(evaluation => evaluation.ContractorOrganizationId == contractorId
                 && evaluation.EvaluationDate >= monthStart
                 && evaluation.EvaluationDate < nextMonthStart)

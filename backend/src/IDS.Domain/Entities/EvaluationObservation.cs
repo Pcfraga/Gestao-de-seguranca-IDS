@@ -1,6 +1,6 @@
 namespace IDS.Domain.Entities;
 
-public sealed class EvaluationObservation : AuditableEntity
+public sealed class EvaluationObservation : TenantEntity
 {
     public Guid EvaluationId { get; set; }
 

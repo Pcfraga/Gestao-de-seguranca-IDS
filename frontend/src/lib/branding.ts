@@ -14,6 +14,12 @@ export const defaultPrimaryColor = '#173e2e'
 export const defaultBranding: ReportBranding = { companyName: '', tagline: '', logoDataUrl: '', primaryColor: defaultPrimaryColor }
 
 let cached: ReportBranding = { ...defaultBranding }
+let generation = 0
+
+export function clearBranding() {
+  generation += 1
+  cached = { ...defaultBranding }
+}
 
 export function loadBranding(): ReportBranding {
   return cached
@@ -36,16 +42,20 @@ function fromResponse(value: ReportSettingsResponse): ReportBranding {
 }
 
 export async function fetchBranding(): Promise<ReportBranding> {
-  cached = fromResponse(await apiRequest<ReportSettingsResponse>('/api/settings/report'))
-  return cached
+  const requestGeneration = generation
+  const branding = fromResponse(await apiRequest<ReportSettingsResponse>('/api/settings/report'))
+  if (requestGeneration === generation) cached = branding
+  return branding
 }
 
 export async function saveBranding(branding: ReportBranding): Promise<ReportBranding> {
-  cached = fromResponse(await apiRequest<ReportSettingsResponse>('/api/settings/report', {
+  const requestGeneration = generation
+  const saved = fromResponse(await apiRequest<ReportSettingsResponse>('/api/settings/report', {
     method: 'PUT',
     body: JSON.stringify({ ...branding, logoDataUrl: branding.logoDataUrl || null }),
   }))
-  return cached
+  if (requestGeneration === generation) cached = saved
+  return saved
 }
 
 export function shade(hex: string, amount: number) {

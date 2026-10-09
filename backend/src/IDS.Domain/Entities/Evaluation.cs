@@ -1,6 +1,6 @@
 namespace IDS.Domain.Entities;
 
-public sealed class Evaluation : AuditableEntity
+public sealed class Evaluation : TenantEntity
 {
     public DateOnly EvaluationDate { get; set; }
 
