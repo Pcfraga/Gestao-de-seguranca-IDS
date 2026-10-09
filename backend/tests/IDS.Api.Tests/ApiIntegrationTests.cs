@@ -1,11 +1,17 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 using IDS.Api.Controllers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 
 namespace IDS.Api.Tests;
 
@@ -101,6 +107,43 @@ public sealed class ApiIntegrationTests(IdsApiFactory factory) : IClassFixture<I
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("", "Test-Only-New-Password-456!", "CurrentPassword")]
+    [InlineData("Test-Only-Password-123!", "", "NewPassword")]
+    [InlineData("Test-Only-Password-123!", null, "NewPassword")]
+    public async Task ChangingOwnPasswordRejectsMissingPasswords(
+        string currentPassword, string? newPassword, string expectedField)
+    {
+        using var client = CreateAuthenticatedClient();
+
+        var response = await client.PutAsJsonAsync("/api/auth/me/password", new
+        {
+            currentPassword,
+            newPassword
+        });
+        var payload = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Contains(expectedField, payload.Errors.Keys);
+    }
+
+    [Fact]
+    public async Task ChangingOwnPasswordPassesValidationBeforeAccessingDatabase()
+    {
+        using var client = CreateAuthenticatedClient();
+
+        var response = await client.PutAsJsonAsync("/api/auth/me/password", new
+        {
+            currentPassword = "Test-Only-Password-123!",
+            newPassword = "Test-Only-New-Password-456!"
+        });
+        var payload = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Contains("database_unavailable", payload, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ChangingOwnPasswordIsAvailableToAllAuthenticatedRoles()
     {
@@ -164,5 +207,21 @@ public sealed class ApiIntegrationTests(IdsApiFactory factory) : IClassFixture<I
         Assert.False(options.RequireLowercase);
         Assert.False(options.RequireUppercase);
         Assert.False(options.RequireNonAlphanumeric);
+    }
+
+    private HttpClient CreateAuthenticatedClient()
+    {
+        var client = factory.CreateClient();
+        var configuration = factory.Services.GetRequiredService<IConfiguration>();
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["AUTH_SIGNING_KEY"]!));
+        var token = new JwtSecurityToken(
+            issuer: configuration["AUTH_ISSUER"] ?? "IDS.Api",
+            audience: configuration["AUTH_AUDIENCE"] ?? "IDS.Frontend",
+            claims: [new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())],
+            expires: DateTime.UtcNow.AddMinutes(5),
+            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", new JwtSecurityTokenHandler().WriteToken(token));
+        return client;
     }
 }
