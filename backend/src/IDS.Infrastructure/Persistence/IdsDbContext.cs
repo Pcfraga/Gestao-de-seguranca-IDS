@@ -40,6 +40,10 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
 
     public DbSet<ReportSettings> ReportSettings => Set<ReportSettings>();
 
+    public DbSet<IpfComposition> IpfCompositions => Set<IpfComposition>();
+
+    public DbSet<IpfCompositionArea> IpfCompositionAreas => Set<IpfCompositionArea>();
+
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         ApplyAuditTimestamps();
@@ -71,6 +75,8 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
         ConfigureTenant<Organization>(builder);
         ConfigureTenant<Site>(builder);
         ConfigureTenant<MonthlyIpfRecord>(builder);
+        ConfigureTenant<IpfComposition>(builder);
+        ConfigureTenant<IpfCompositionArea>(builder);
         ConfigureTenant<ReportSettings>(builder);
         ConfigureTenant<AuditEvent>(builder);
         ConfigureTenant<InspectionForm>(builder);
@@ -218,6 +224,36 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
             entity.HasOne<InspectionForm>().WithMany().HasForeignKey(value => value.FormId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.ContractorOrganization).WithMany().HasForeignKey(value => value.ContractorOrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.Site).WithMany().HasForeignKey(value => value.SiteId).OnDelete(DeleteBehavior.Restrict);
+            entity.ConfigureAuditFields();
+        });
+
+        builder.Entity<IpfComposition>(entity =>
+        {
+            entity.ToTable("ipf_compositions", table =>
+            {
+                table.HasCheckConstraint("ck_ipf_compositions_month", "\"Month\" BETWEEN 1 AND 12");
+                table.HasCheckConstraint("ck_ipf_compositions_year", "\"Year\" BETWEEN 2000 AND 2200");
+            });
+            entity.Property(value => value.Value).HasPrecision(12, 4);
+            entity.Property(value => value.ContractorName).HasMaxLength(200).IsRequired();
+            entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month }).IsUnique();
+            entity.HasOne(value => value.ContractorOrganization).WithMany()
+                .HasForeignKey(value => value.ContractorOrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.ConfigureAuditFields();
+        });
+
+        builder.Entity<IpfCompositionArea>(entity =>
+        {
+            entity.ToTable("ipf_composition_areas");
+            entity.Property(value => value.AreaName).HasMaxLength(150).IsRequired();
+            entity.Property(value => value.Status).HasMaxLength(20).IsRequired();
+            entity.Property(value => value.Weight).HasPrecision(28, 16);
+            entity.Property(value => value.EffectiveWeight).HasPrecision(28, 16);
+            entity.Property(value => value.Average).HasPrecision(28, 16);
+            entity.Property(value => value.Contribution).HasPrecision(28, 16);
+            entity.HasIndex(value => new { value.CompositionId, value.AreaId }).IsUnique();
+            entity.HasOne(value => value.Composition).WithMany(value => value.Areas)
+                .HasForeignKey(value => value.CompositionId).OnDelete(DeleteBehavior.Cascade);
             entity.ConfigureAuditFields();
         });
 

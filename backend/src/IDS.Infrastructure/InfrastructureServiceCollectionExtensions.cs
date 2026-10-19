@@ -24,6 +24,7 @@ public static class InfrastructureServiceCollectionExtensions
             postgres => postgres.MigrationsAssembly(typeof(IdsDbContext).Assembly.FullName)));
         services.AddScoped<IEvaluationRepository, EfEvaluationRepository>();
         services.AddScoped<IMonthlyIpfRepository, EfMonthlyIpfRepository>();
+        services.AddScoped<IIpfCompositionRepository, EfIpfCompositionRepository>();
 
         return services;
     }

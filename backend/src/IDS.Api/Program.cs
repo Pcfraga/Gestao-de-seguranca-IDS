@@ -23,6 +23,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<EvaluationApplicationService>();
 builder.Services.AddScoped<MonthlyIpfApplicationService>();
+builder.Services.AddScoped<IpfCompositionApplicationService>();
 builder.Services.AddScoped<AccessTokenService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IDS.Infrastructure.Persistence.ICurrentUserScope, IDS.Api.Authentication.HttpCurrentUserScope>();

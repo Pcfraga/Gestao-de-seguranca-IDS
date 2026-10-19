@@ -594,3 +594,80 @@ th { color: #445449; font-size: 11px; }
 .inspection-area-create {
   margin-bottom: 24px;
 }
+.ipf-report-modes,
+.ipf-composition-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.ipf-composition-filter,
+.ipf-composition-history,
+.ipf-composition-result {
+  padding: 20px;
+}
+
+.ipf-composition-fields {
+  border: 0;
+  padding: 0;
+  margin: 18px 0 0;
+  min-width: 0;
+}
+
+.ipf-weight-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) minmax(100px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ipf-weight-row label {
+  display: grid;
+  gap: 6px;
+  color: #46564b;
+  font-size: 12px;
+}
+
+.ipf-weight-row input,
+.ipf-weight-row select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: #263a2d;
+  background: #fff;
+}
+
+.ipf-composition-rule,
+.ipf-composition-result > p,
+.ipf-composition-history p {
+  color: #59675d;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 12px 0;
+}
+
+.ipf-composition-score strong {
+  font-size: 24px;
+  color: #173e2e;
+}
+
+.ipf-composition-result .table-scroll,
+.ipf-composition-history .table-scroll {
+  overflow-x: auto;
+}
+
+.ipf-composition-result table { min-width: 1050px; }
+.ipf-composition-result th:first-child,
+.ipf-composition-result td:first-child { min-width: 220px; }
+.ipf-composition-history table { min-width: 640px; }
+
+@media (max-width: 600px) {
+  .ipf-weight-row { grid-template-columns: minmax(0, 1fr) 90px; }
+  .ipf-weight-row > button { grid-column: 2; justify-self: end; }
+  .ipf-composition-result .panel-heading { flex-wrap: wrap; }
+}

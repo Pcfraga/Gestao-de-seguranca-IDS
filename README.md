@@ -12,7 +12,7 @@ O projeto começa a substituir o preenchimento manual da planilha IDS por um sis
 - Cadastro, consulta, edição e envio explícito de avaliações; rascunhos continuam editáveis, avaliações enviadas ficam somente leitura. A lista pode ser filtrada por status, contratada e local e exportada em CSV; cada avaliação também pode ser gerada em PDF.
 - Dashboard com totais mensais, proporções por severidade e evolução do IDS por avaliação; a média semanal/mensal continua desabilitada até validar o calendário da planilha.
 - Aba **Dados** com filtros de período, local e contratada e consolidação por data, categoria, item e severidade. Agrupamento semanal ainda depende de validação da regra do Excel.
-- Aba **Relatório IPF** com entrada manual do IPF mensal, histórico anual e gráfico de valores registrados; a média considera somente os meses preenchidos. O IPF não é calculado pelo sistema porque a planilha não contém essa fórmula. O histórico anual pode ser gerado em PDF.
+- Aba **Relatórios** com IPF manual por formulário e composição opcional de IPF pelas médias de IDS de até quatro disciplinas com pesos percentuais. Cada modalidade mantém seu próprio histórico mensal e exportação PDF; a composição não substitui a regra manual da planilha.
 - Testes HTTP da API para autorização por padrão, health check sem banco e CORS local; teste de aplicação para média anual e gravação mensal de IPF.
 
 Exportação consolidada PDF/Excel, importação histórica, auditoria completa, cálculo mensal final de IDS e validação com avaliações reais do Excel ainda estão pendentes. Não use o sistema para decisões operacionais até validar o IDS mensal e comparar com avaliações preenchidas no Excel.
@@ -76,7 +76,7 @@ Em **Formulários de inspeção**, no menu lateral, o administrador pode:
 - Editar ou duplicar modelos salvos, incluindo o formulário padrão; adicionar, remover, renomear e reorganizar tópicos e itens.
 - Salvar novas versões sem modificar inspeções antigas. Rascunhos já salvos também mantêm a versão original; não é possível trocar o modelo de uma avaliação salva.
 
-Em **Nova avaliação**, selecione o modelo antes de preencher as observações. Todos os modelos usam os mesmos campos de identificação, pessoas observadas, quantidade, severidade, comentário e contexto. Os pesos 0,3 / 1 / 3 e as fórmulas de IDS são os mesmos. As avaliações alimentam as telas de Dados, Indicadores e Relatórios existentes, respeitando os filtros e permissões atuais. O IPF continua manual e o IDS mensal final continua dependente da validação da regra de calendário.
+Em **Nova avaliação**, selecione o modelo antes de preencher as observações. Todos os modelos usam os mesmos campos de identificação, pessoas observadas, quantidade, severidade, comentário e contexto. Os pesos 0,3 / 1 / 3 e as fórmulas de IDS são os mesmos. As avaliações alimentam as telas de Dados, Indicadores e Relatórios existentes, respeitando os filtros e permissões atuais. O IPF por formulário continua manual; a composição por disciplinas é uma modalidade separada. O IDS mensal final continua dependente da validação da regra de calendário.
 
 O formulário padrão original e os tópicos/itens personalizados criados antes desta funcionalidade são preservados como modelo inicial. Editá-lo gera uma versão exclusiva da empresa; não altera a base compartilhada nem os nomes, itens, respostas ou resultados das inspeções anteriores. Os PDFs individuais identificam o formulário e sua versão. Versões antigas não aparecem como novas opções, mas continuam disponíveis para a leitura e edição dos registros existentes.
 
@@ -113,7 +113,21 @@ No Render, é possível aplicar as migrations na inicialização definindo `APPL
 
 ## Dados e relatório IPF
 
-A consolidação de Dados é servida por `GET /api/dashboard/data?from=&to=&siteId=&contractorId=`. O histórico anual de IPF usa `GET /api/reports/ipf/{year}?contractorId=`; perfis `ADMINISTRADOR` e `GESTOR` podem registrar ou substituir um mês com `PUT /api/reports/ipf/{year}/{month}`. Informe o IPF manualmente conforme a fonte aprovada; não há cálculo automático de IPF. A tabela `monthly_ipf_records` é criada pela migration `AddMonthlyIpfHistory`.
+A consolidação de Dados é servida por `GET /api/dashboard/data?from=&to=&siteId=&contractorId=`. O histórico anual de IPF manual usa `GET /api/reports/ipf/{year}?contractorId=`; perfis `ADMINISTRADOR` e `GESTOR` podem registrar ou substituir um mês com `PUT /api/reports/ipf/{year}/{month}`. Nessa modalidade, informe o IPF manualmente conforme a fonte aprovada; a gravação não calcula a composição por disciplinas. A tabela `monthly_ipf_records` é criada pela migration `AddMonthlyIpfHistory`.
+
+### IPF por disciplinas e pesos
+
+Em **Relatórios → IPF por disciplinas e pesos**, selecione a contratada e o mês de referência. Essa opção calcula uma nota a partir das médias de IDS das avaliações e não modifica o **IPF manual por formulário**, que continua disponível separadamente.
+
+- Escolha de uma a quatro disciplinas (áreas já cadastradas), com pesos percentuais entre 0 e 100 que somem 100%. Sem divisão, use uma única área com 100%.
+- Cada média reúne **todos os tipos e versões de formulário da área**, para a contratada e o mês selecionados, conforme as permissões de consulta existentes. Assim como a sugestão mensal anterior, inclui rascunhos e avaliações enviadas; somente avaliações com IDS calculável entram na média.
+- Áreas sem média válida ou com peso 0% não participam da nota. Os pesos das áreas restantes são ajustados proporcionalmente para totalizar 100%. Uma média válida igual a zero **continua participando** com seu peso; não é confundida com ausência de avaliações.
+- O cálculo é `soma(média da área × peso definido) / soma(pesos das áreas participantes)`. As médias não são arredondadas antes do cálculo; a nota final é arredondada a quatro casas decimais. A escala é a mesma do IDS das avaliações, sem conversão automática para 0–10.
+- Exemplo: Segurança com média 0,9 e peso 70%, Meio Ambiente com média 0,8 e peso 30% resulta em **0,87**. Se Meio Ambiente estiver sem média, Segurança passa a representar 100% e o resultado será **0,9**, com a exclusão indicada na composição. Se a média ambiental for realmente zero, a nota será **0,63**.
+- Use **Calcular IPF por disciplinas** para visualizar as médias, quantidades de avaliações válidas/total, pesos definidos/aplicados, contribuições e áreas excluídas. Sem nenhuma área participante, a nota fica ausente e não pode ser salva.
+- **Salvar IPF por disciplinas** recalcula no servidor e registra um retrato mensal independente por empresa/contratada. Novas avaliações não alteram valores já salvos; para atualizar o mês, calcule e salve novamente, confirmando a substituição. Os pesos do último mês anterior podem ser reutilizados como ponto de partida. O histórico e o PDF exibem a composição efetivamente salva.
+
+A consulta anual usa `GET /api/reports/ipf-composition/{year}?contractorId=...`; a prévia usa `POST /api/reports/ipf-composition/{year}/{month}/preview` e a gravação usa `PUT /api/reports/ipf-composition/{year}/{month}`, com `{ contractorOrganizationId, areas: [{ areaId, weight }] }`. A gravação exige perfil `ADMINISTRADOR` ou `GESTOR`. A área padrão SST usa o identificador vazio documentado acima. Aplique a migration `AddIpfCompositions` junto da API e do frontend compatíveis antes de publicar.
 
 ## Testes e build
 

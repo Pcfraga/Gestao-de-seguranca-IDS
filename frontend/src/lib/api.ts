@@ -252,3 +252,34 @@ export interface IpfMonthlySuggestion {
   evaluationCount: number
   scoredEvaluationCount: number
 }
+
+export interface IpfCompositionArea {
+  areaId: string
+  areaName: string
+  weight: number
+  effectiveWeight: number
+  average: number | null
+  evaluationCount: number
+  scoredEvaluationCount: number
+  contribution: number | null
+  status: 'included' | 'no-average' | 'zero-weight'
+}
+
+export interface IpfComposition {
+  id: string | null
+  year: number
+  month: number
+  contractorOrganizationId: string
+  contractor: string
+  value: number | null
+  areas: IpfCompositionArea[]
+  updatedAtUtc: string | null
+}
+
+export interface IpfCompositionHistory {
+  year: number
+  contractorOrganizationId: string
+  contractor: string
+  annualAverage: number | null
+  months: IpfComposition[]
+}

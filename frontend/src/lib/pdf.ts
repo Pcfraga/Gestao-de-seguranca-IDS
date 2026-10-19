@@ -1,4 +1,4 @@
-﻿import type { EvaluationResult, IpfAnnualHistory } from './api'
+import type { EvaluationResult, IpfAnnualHistory, IpfComposition } from './api'
 import { loadBranding, shade } from './branding'
 
 function printStyles(primary: string) {
@@ -196,5 +196,34 @@ export function ipfReportPdf(history: IpfAnnualHistory, upToMonth = 12) {
     <table class="frame"><tr><td class="muted">O IPF é informado manualmente ou importado. A média considera somente os meses preenchidos; este relatório não calcula o IPF.</td></tr></table>
     <footer class="footer">Documento gerado pelo IDS · ${generatedAt()}</footer>`
 
+  return { title, content }
+}
+
+export function ipfCompositionPdf(record: IpfComposition) {
+  const period = `${String(record.month).padStart(2, '0')}/${record.year}`
+  const title = `IPF por disciplinas ${period} - ${record.contractor}`
+  const number = (value: number | null) => value === null ? '—' : value.toLocaleString('pt-BR', { maximumFractionDigits: 4 })
+  const rows = record.areas.map(area => `<tr>
+    <td>${escapeHtml(area.areaName)}</td>
+    <td class="number">${number(area.average)}</td>
+    <td>${area.scoredEvaluationCount} / ${area.evaluationCount}</td>
+    <td class="number">${number(area.weight)}%</td>
+    <td class="number">${number(area.effectiveWeight)}%</td>
+    <td class="number">${number(area.contribution)}</td>
+    <td>${area.status === 'included' ? 'Participou' : area.status === 'zero-weight' ? 'Sem peso' : 'Sem média — excluída'}</td>
+  </tr>`).join('')
+  const content = `${reportHeader('IPF por disciplinas', period, record.contractor)}
+    ${detailsTable('Identificação', [
+      ['Período', period],
+      ['IPF final', number(record.value)],
+      ['Situação', record.id ? 'Composição salva' : 'Prévia — ainda não salva'],
+      ['Salvo em', record.updatedAtUtc ? new Date(record.updatedAtUtc).toLocaleString('pt-BR') : null],
+    ])}
+    <table class="frame">${sectionTitle('Médias e pesos', 7)}
+      <thead><tr><th>Disciplina</th><th>Média IDS</th><th>Válidas / total</th><th>Peso definido</th><th>Peso aplicado</th><th>Contribuição</th><th>Situação</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <table class="frame"><tr><td>As médias incluem todos os formulários de cada área para a contratada no mês, na escala original do IDS. Áreas sem média ou com peso 0% ficam fora; os demais pesos são ajustados proporcionalmente para 100%. Média válida igual a zero participa normalmente. Fórmula: soma das médias × pesos definidos, dividida pela soma dos pesos participantes. O cálculo usa médias sem arredondamento intermediário e arredonda a nota final a quatro casas.</td></tr></table>
+    <footer class="footer">Documento gerado pelo IDS · ${generatedAt()}</footer>`
   return { title, content }
 }

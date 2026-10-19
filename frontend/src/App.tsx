@@ -46,6 +46,7 @@ import { evaluationPdf, ipfReportPdf, openPrintWindow, writePrintWindow } from '
 import { clearBranding, defaultPrimaryColor, fetchBranding, loadBranding, readLogoFile, saveBranding, type ReportBranding } from './lib/branding'
 import './ids.css'
 import { InspectionScopeSelector } from './components/InspectionScopeSelector'
+import { IpfCompositionReport } from './components/IpfCompositionReport'
 import { inspectionScopeQuery, type InspectionScope } from './lib/api'
 
 type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'forms' | 'settings' | 'users' | 'account'
@@ -107,6 +108,7 @@ function App() {
   const [editingEvaluationId, setEditingEvaluationId] = useState<string | null>(null)
   const [evaluationRefresh, setEvaluationRefresh] = useState(0)
   const [inspectionScope, setInspectionScope] = useState<InspectionScope | null>(null)
+  const [reportMode, setReportMode] = useState<'manual' | 'composition'>('manual')
   const scopeQuery = inspectionScope ? inspectionScopeQuery(inspectionScope) : ''
   const activeCopy = sectionCopy[activeSection]
 
@@ -250,12 +252,18 @@ function App() {
             </div>
           </div>
 
-          {['overview', 'evaluations', 'data', 'indicators', 'reports'].includes(activeSection) && <InspectionScopeSelector onChange={setInspectionScope} />}
+          {activeSection === 'reports' && <div className="ipf-report-modes" role="group" aria-label="Tipo de relatório IPF">
+            <button type="button" className={reportMode === 'manual' ? 'primary-button' : 'outline-button'} aria-pressed={reportMode === 'manual'} onClick={() => setReportMode('manual')}>IPF manual por formulário</button>
+            <button type="button" className={reportMode === 'composition' ? 'primary-button' : 'outline-button'} aria-pressed={reportMode === 'composition'} onClick={() => setReportMode('composition')}>IPF por disciplinas e pesos</button>
+          </div>}
+          {['overview', 'evaluations', 'data', 'indicators', 'reports'].includes(activeSection)
+            && !(activeSection === 'reports' && reportMode === 'composition') && <InspectionScopeSelector onChange={setInspectionScope} />}
           {inspectionScope && activeSection === 'overview' && <Dashboard key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} onOpenEvaluations={() => setActiveSection('evaluations')} />}
           {inspectionScope && activeSection === 'evaluations' && <Evaluations scopeQuery={scopeQuery} key={`${evaluationRefresh}-${scopeQuery}`} search={search} month={selectedMonth} onCreate={() => { setEditingEvaluationId(null); setShowEvaluationForm(true) }} onEdit={(id) => { setEditingEvaluationId(id); setShowEvaluationForm(true) }} />}
           {inspectionScope && activeSection === 'data' && <DataView key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} />}
           {inspectionScope && activeSection === 'indicators' && <Indicators key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
-          {inspectionScope && activeSection === 'reports' && <Reports key={scopeQuery} scope={inspectionScope} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
+          {inspectionScope && activeSection === 'reports' && reportMode === 'manual' && <Reports key={scopeQuery} scope={inspectionScope} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
+          {activeSection === 'reports' && reportMode === 'composition' && <IpfCompositionReport month={selectedMonth} initialAreaId={inspectionScope?.areaId} />}
           {activeSection === 'forms' && isAdmin && <InspectionFormsEditor />}
           {activeSection === 'settings' && isAdmin && <SettingsView />}
           {activeSection === 'users' && isAdmin && <div className="settings-grid"><UsersAdmin /></div>}

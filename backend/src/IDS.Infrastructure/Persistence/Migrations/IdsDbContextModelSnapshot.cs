@@ -763,6 +763,136 @@ namespace IDS.Infrastructure.Persistence.Migrations
                     b.ToTable("inspection_form_versions", (string)null);
                 });
 
+            modelBuilder.Entity("IDS.Domain.Entities.IpfComposition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContractorName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("ContractorOrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(12, 4)
+                        .HasColumnType("numeric(12,4)");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContractorOrganizationId");
+
+                    b.HasIndex("TenantId", "ContractorOrganizationId", "Year", "Month")
+                        .IsUnique();
+
+                    b.ToTable("ipf_compositions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_ipf_compositions_month", "\"Month\" BETWEEN 1 AND 12");
+
+                            t.HasCheckConstraint("ck_ipf_compositions_year", "\"Year\" BETWEEN 2000 AND 2200");
+                        });
+                });
+
+            modelBuilder.Entity("IDS.Domain.Entities.IpfCompositionArea", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AreaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AreaName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<decimal?>("Average")
+                        .HasPrecision(28, 16)
+                        .HasColumnType("numeric(28,16)");
+
+                    b.Property<Guid>("CompositionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Contribution")
+                        .HasPrecision(28, 16)
+                        .HasColumnType("numeric(28,16)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<decimal>("EffectiveWeight")
+                        .HasPrecision(28, 16)
+                        .HasColumnType("numeric(28,16)");
+
+                    b.Property<int>("EvaluationCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ScoredEvaluationCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<decimal>("Weight")
+                        .HasPrecision(28, 16)
+                        .HasColumnType("numeric(28,16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("CompositionId", "AreaId")
+                        .IsUnique();
+
+                    b.ToTable("ipf_composition_areas", (string)null);
+                });
+
             modelBuilder.Entity("IDS.Domain.Entities.MonthlyIpfRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1543,6 +1673,40 @@ namespace IDS.Infrastructure.Persistence.Migrations
                     b.Navigation("Form");
                 });
 
+            modelBuilder.Entity("IDS.Domain.Entities.IpfComposition", b =>
+                {
+                    b.HasOne("IDS.Domain.Entities.Organization", "ContractorOrganization")
+                        .WithMany()
+                        .HasForeignKey("ContractorOrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("IDS.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ContractorOrganization");
+                });
+
+            modelBuilder.Entity("IDS.Domain.Entities.IpfCompositionArea", b =>
+                {
+                    b.HasOne("IDS.Domain.Entities.IpfComposition", "Composition")
+                        .WithMany("Areas")
+                        .HasForeignKey("CompositionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("IDS.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Composition");
+                });
+
             modelBuilder.Entity("IDS.Domain.Entities.MonthlyIpfRecord", b =>
                 {
                     b.HasOne("IDS.Domain.Entities.InspectionArea", null)
@@ -1692,6 +1856,11 @@ namespace IDS.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("IDS.Domain.Entities.InspectionFormVersion", b =>
                 {
                     b.Navigation("Categories");
+                });
+
+            modelBuilder.Entity("IDS.Domain.Entities.IpfComposition", b =>
+                {
+                    b.Navigation("Areas");
                 });
 
             modelBuilder.Entity("IDS.Domain.Entities.ObservationCategory", b =>
