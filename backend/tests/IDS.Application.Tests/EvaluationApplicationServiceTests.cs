@@ -255,7 +255,8 @@ public sealed class EvaluationApplicationServiceTests
             DateOnly? to,
             Guid? siteId,
             Guid? contractorId,
-            CancellationToken cancellationToken) =>
+            CancellationToken cancellationToken,
+            EvaluationScope? scope = null) =>
             Task.FromResult<IReadOnlyCollection<Evaluation>>(SavedEvaluation is null ? [] : [SavedEvaluation]);
 
         public Task<EvaluationPeriodTotals> GetPeriodTotalsAsync(
@@ -263,7 +264,8 @@ public sealed class EvaluationApplicationServiceTests
             DateOnly? to,
             Guid? siteId,
             Guid? contractorId,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            EvaluationScope? scope = null)
         {
             var evaluation = SavedEvaluation;
             var totalDeviations = evaluation?.Observations
@@ -283,7 +285,8 @@ public sealed class EvaluationApplicationServiceTests
             DateOnly? to,
             Guid? siteId,
             Guid? contractorId,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            EvaluationScope? scope = null)
         {
             if (SavedEvaluation is null)
             {
@@ -305,7 +308,8 @@ public sealed class EvaluationApplicationServiceTests
             DateOnly? to,
             Guid? siteId,
             Guid? contractorId,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            EvaluationScope? scope = null)
         {
             if (SavedEvaluation is null)
             {

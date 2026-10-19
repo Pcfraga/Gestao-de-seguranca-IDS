@@ -134,6 +134,9 @@ export function evaluationPdf(evaluation: EvaluationResult) {
   const content = `
     ${reportHeader('Avaliação de segurança', `Registro individual · ${formatDate(evaluation.evaluationDate)}`, evaluation.contractor)}
     ${detailsTable('Identificação', [
+      ['Área', evaluation.areaName],
+      ['Formulário', evaluation.formName],
+      ['Versão do formulário', evaluation.formVersion ? String(evaluation.formVersion) : 'Modelo original'],
       ['Data', formatDate(evaluation.evaluationDate)],
       ['Horário', evaluation.evaluationTime?.slice(0, 5)],
       ['Status', evaluation.status === 'Draft' ? 'Rascunho' : 'Concluída'],
@@ -178,6 +181,8 @@ export function ipfReportPdf(history: IpfAnnualHistory, upToMonth = 12) {
   const content = `
     ${reportHeader('Relatório de IPF', period, history.contractor)}
     ${detailsTable('Identificação', [
+      ['Área', history.areaName],
+      ['Formulário', history.formName],
       ['Contratada', history.contractor],
       ['Período', period],
       ['Meses com IPF', String(history.months.length)],
@@ -193,4 +198,3 @@ export function ipfReportPdf(history: IpfAnnualHistory, upToMonth = 12) {
 
   return { title, content }
 }
-

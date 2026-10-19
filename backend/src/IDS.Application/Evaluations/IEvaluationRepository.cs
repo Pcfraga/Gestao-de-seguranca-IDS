@@ -3,11 +3,14 @@ using IDS.Domain.Entities;
 
 namespace IDS.Application.Evaluations;
 
+public sealed record EvaluationScope(Guid? AreaId = null, Guid? FormId = null);
+
 public sealed record EvaluationReferenceData(
     IReadOnlyDictionary<Guid, ChecklistItem> Items,
     IReadOnlyDictionary<Guid, SeverityLevel> Severities,
     IReadOnlyDictionary<Guid, Site> Sites,
-    IReadOnlyDictionary<Guid, Organization> Organizations);
+    IReadOnlyDictionary<Guid, Organization> Organizations,
+    InspectionFormVersion? FormVersion = null);
 
 public sealed record EvaluationPeriodTotals(
     int EvaluationCount,
@@ -56,26 +59,30 @@ public interface IEvaluationRepository
         DateOnly? to,
         Guid? siteId,
         Guid? contractorId,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        EvaluationScope? scope = null);
 
     Task<EvaluationPeriodTotals> GetPeriodTotalsAsync(
         DateOnly? from,
         DateOnly? to,
         Guid? siteId,
         Guid? contractorId,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        EvaluationScope? scope = null);
 
     Task<IReadOnlyCollection<EvaluationTrendRecord>> GetTrendRecordsAsync(
         DateOnly? from,
         DateOnly? to,
         Guid? siteId,
         Guid? contractorId,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        EvaluationScope? scope = null);
 
     Task<IReadOnlyCollection<ConsolidationRecord>> GetConsolidationRecordsAsync(
         DateOnly? from,
         DateOnly? to,
         Guid? siteId,
         Guid? contractorId,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        EvaluationScope? scope = null);
 }

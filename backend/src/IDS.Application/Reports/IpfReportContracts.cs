@@ -1,9 +1,13 @@
+using IDS.Domain.Entities;
+
 namespace IDS.Application.Reports;
 
 public sealed record UpsertMonthlyIpfRequest(
     Guid ContractorOrganizationId,
     Guid? SiteId,
-    decimal Value);
+    decimal Value,
+    Guid? AreaId = null,
+    Guid? FormId = null);
 
 public sealed record MonthlyIpfValueDto(
     Guid Id,
@@ -15,14 +19,20 @@ public sealed record MonthlyIpfValueDto(
     string? Site,
     decimal Value,
     string Source,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    Guid? AreaId = null,
+    Guid? FormId = null);
 
 public sealed record IpfAnnualHistoryDto(
     int Year,
     Guid ContractorOrganizationId,
     string Contractor,
     decimal? AnnualAverage,
-    IReadOnlyCollection<MonthlyIpfValueDto> Months);
+    IReadOnlyCollection<MonthlyIpfValueDto> Months,
+    Guid? AreaId = null,
+    Guid? FormId = null,
+    string AreaName = InspectionArea.DefaultName,
+    string FormName = "Formulário padrão");
 
 public sealed record MonthlyIpfSuggestionDto(
     int Year,
@@ -30,7 +40,9 @@ public sealed record MonthlyIpfSuggestionDto(
     Guid ContractorOrganizationId,
     decimal? Average,
     int EvaluationCount,
-    int ScoredEvaluationCount);
+    int ScoredEvaluationCount,
+    Guid? AreaId = null,
+    Guid? FormId = null);
 
 public sealed class IpfReportValidationException(IReadOnlyCollection<string> errors)
     : Exception("Os dados do relatório IPF são inválidos.")

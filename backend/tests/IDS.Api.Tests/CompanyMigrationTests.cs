@@ -11,6 +11,49 @@ namespace IDS.Api.Tests;
 public sealed class CompanyMigrationTests
 {
     [Fact]
+    public async Task AreaMigrationPreservesLegacyEvaluationsFormVersionsAndManualIpf()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<IdsDbContext>().UseSqlite(connection)
+            .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)).Options;
+        await using var db = new IdsDbContext(options);
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261019155229_AddInspectionFormVersions");
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO "inspection_forms" ("Id", "TenantId", "IsDefault", "CurrentVersion", "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES ('51000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', 0, 1, '2026-10-01', '2026-10-01');
+            INSERT INTO "inspection_form_versions" ("Id", "TenantId", "FormId", "Version", "Name", "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES ('51000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000001',
+                '51000000-0000-0000-0000-000000000001', 1, 'Modelo anterior', '2026-10-01', '2026-10-01');
+            INSERT INTO "organizations" ("Id", "TenantId", "Name", "Kind", "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES ('51000000-0000-0000-0000-000000000003', '40000000-0000-0000-0000-000000000001',
+                'Contratada anterior', 2, '2026-10-01', '2026-10-01');
+            INSERT INTO "monthly_ipf_records" ("Id", "TenantId", "ContractorOrganizationId", "Year", "Month", "Value", "Source", "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES ('51000000-0000-0000-0000-000000000004', '40000000-0000-0000-0000-000000000001',
+                '51000000-0000-0000-0000-000000000003', 2026, 10, 0.94, 'Manual', '2026-10-01', '2026-10-01');
+            INSERT INTO "evaluations" ("Id", "TenantId", "FormVersionId", "EvaluationDate", "Status", "ObservedPeople", "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES ('51000000-0000-0000-0000-000000000005', '40000000-0000-0000-0000-000000000001',
+                '51000000-0000-0000-0000-000000000002', '2026-10-01', 'Submitted', 10, '2026-10-01', '2026-10-01');
+            """);
+
+        await migrator.MigrateAsync();
+        var version = Assert.Single(await db.InspectionFormVersions.IgnoreQueryFilters().ToArrayAsync());
+        Assert.Null(version.AreaId);
+        Assert.Equal(InspectionArea.DefaultName, version.AreaName);
+        Assert.Equal("Modelo anterior", version.Name);
+        var evaluation = Assert.Single(await db.Evaluations.IgnoreQueryFilters().ToArrayAsync());
+        Assert.Equal(version.Id, evaluation.FormVersionId);
+        Assert.Equal(10, evaluation.ObservedPeople);
+        Assert.Equal(EvaluationStatus.Submitted, evaluation.Status);
+        var ipf = Assert.Single(await db.MonthlyIpfRecords.IgnoreQueryFilters().ToArrayAsync());
+        Assert.Equal(0.94m, ipf.Value);
+        Assert.Null(ipf.AreaId);
+        Assert.Null(ipf.FormId);
+        Assert.Empty(await db.InspectionAreas.IgnoreQueryFilters().ToArrayAsync());
+    }
+
+    [Fact]
     public async Task ExistingUsersAndSitesAreAssignedToLegacyCompany()
     {
         using var connection = new SqliteConnection("Data Source=:memory:");

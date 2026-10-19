@@ -8,9 +8,13 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
     public async Task<IpfAnnualHistoryDto> GetYearAsync(
         int year,
         Guid contractorId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? areaId = null,
+        Guid? formId = null)
     {
         ValidatePeriod(year, 1);
+        (areaId, formId) = CanonicalizeScope(areaId, formId);
+        var (areaName, formName) = await repository.ValidateScopeAsync(areaId, formId, cancellationToken);
         var contractor = await repository.GetContractorAsync(contractorId, cancellationToken)
             ?? throw new IpfReportValidationException(["Contratada não encontrada."]);
         if (contractor.Kind != OrganizationKind.Contractor)
@@ -18,23 +22,31 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
             throw new IpfReportValidationException(["A organização selecionada não é uma contratada."]);
         }
 
-        var records = await repository.GetYearAsync(year, contractorId, cancellationToken);
+        var records = await repository.GetYearAsync(year, contractorId, cancellationToken, areaId, formId);
         var months = records.OrderBy(record => record.Month).Select(ToDto).ToArray();
         return new IpfAnnualHistoryDto(
             year,
             contractor.Id,
             contractor.Name,
             months.Length > 0 ? months.Average(record => record.Value) : null,
-            months);
+            months,
+            areaId,
+            formId,
+            areaName,
+            formName);
     }
 
     public async Task<MonthlyIpfSuggestionDto> GetMonthlySuggestionAsync(
         int year,
         int month,
         Guid contractorId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? areaId = null,
+        Guid? formId = null)
     {
         ValidatePeriod(year, month);
+        (areaId, formId) = CanonicalizeScope(areaId, formId);
+        await repository.ValidateScopeAsync(areaId, formId, cancellationToken);
         var contractor = await repository.GetContractorAsync(contractorId, cancellationToken)
             ?? throw new IpfReportValidationException(["Contratada não encontrada."]);
         if (contractor.Kind != OrganizationKind.Contractor)
@@ -42,7 +54,8 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
             throw new IpfReportValidationException(["A organização selecionada não é uma contratada."]);
         }
 
-        var scores = await repository.GetMonthlyEvaluationScoresAsync(year, month, contractorId, cancellationToken);
+        var scores = await repository.GetMonthlyEvaluationScoresAsync(
+            year, month, contractorId, cancellationToken, areaId, formId);
         var validScores = scores.Where(score => score.HasValue).Select(score => score!.Value).ToArray();
         return new MonthlyIpfSuggestionDto(
             year,
@@ -50,7 +63,9 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
             contractorId,
             validScores.Length > 0 ? decimal.Round(validScores.Average(), 4, MidpointRounding.AwayFromZero) : null,
             scores.Count,
-            validScores.Length);
+            validScores.Length,
+            areaId,
+            formId);
     }
 
     public async Task<MonthlyIpfValueDto> UpsertAsync(
@@ -60,6 +75,8 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
         CancellationToken cancellationToken)
     {
         ValidatePeriod(year, month);
+        var (areaId, formId) = CanonicalizeScope(request.AreaId, request.FormId);
+        await repository.ValidateScopeAsync(areaId, formId, cancellationToken);
         var contractor = await repository.GetContractorAsync(request.ContractorOrganizationId, cancellationToken)
             ?? throw new IpfReportValidationException(["Contratada não encontrada."]);
         if (contractor.Kind != OrganizationKind.Contractor)
@@ -72,7 +89,11 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
             throw new IpfReportValidationException(["Local não encontrado."]);
         }
 
-        var record = await repository.UpsertAsync(year, month, request, cancellationToken);
+        var record = await repository.UpsertAsync(
+            year,
+            month,
+            request with { AreaId = areaId, FormId = formId },
+            cancellationToken);
         record.ContractorOrganization = contractor;
         return ToDto(record);
     }
@@ -87,7 +108,13 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
         record.Site?.Name,
         record.Value,
         record.Source,
-        record.UpdatedAtUtc);
+        record.UpdatedAtUtc,
+        record.AreaId,
+        record.FormId);
+
+    private static (Guid? AreaId, Guid? FormId) CanonicalizeScope(Guid? areaId, Guid? formId) =>
+        (areaId is Guid area && area != Guid.Empty ? area : null,
+            formId is Guid form && form != Guid.Empty ? form : null);
 
     private static void ValidatePeriod(int year, int month)
     {

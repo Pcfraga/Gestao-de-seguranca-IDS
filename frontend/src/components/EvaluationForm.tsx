@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { AlertTriangle, ArrowLeft, Check, Save, X } from 'lucide-react'
 import { CatalogPicker, type CatalogChoice } from './CatalogPicker'
-import { apiRequest, type ChecklistCatalog, type EvaluationResult } from '../lib/api'
+import { apiRequest, defaultInspectionId, type InspectionScope, type ChecklistCatalog, type EvaluationResult, type InspectionFormTemplate } from '../lib/api'
 
 interface EvaluationFormProps {
   evaluationId?: string
+  initialScope?: InspectionScope
   onClose: () => void
   onCreated: (evaluation: EvaluationResult) => void
 }
@@ -19,8 +20,15 @@ function today() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export function EvaluationForm({ evaluationId, onClose, onCreated }: EvaluationFormProps) {
+export function EvaluationForm({ evaluationId, initialScope, onClose, onCreated }: EvaluationFormProps) {
   const [catalog, setCatalog] = useState<ChecklistCatalog | null>(null)
+  const [templates, setTemplates] = useState<InspectionFormTemplate[]>([])
+  const [formVersionId, setFormVersionId] = useState<string | null>(null)
+  const [formName, setFormName] = useState('Formulário padrão')
+  const [formVersion, setFormVersion] = useState(0)
+  const [areaId, setAreaId] = useState(defaultInspectionId)
+  const [areaName, setAreaName] = useState('Saúde e Segurança do Trabalho')
+  const [isChangingForm, setIsChangingForm] = useState(false)
   const [catalogError, setCatalogError] = useState('')
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -41,12 +49,28 @@ export function EvaluationForm({ evaluationId, onClose, onCreated }: EvaluationF
   const [observations, setObservations] = useState<Record<string, ObservationDraft>>({})
 
   useEffect(() => {
+    let active = true
     Promise.all([
-      apiRequest<ChecklistCatalog>('/api/catalog'),
+      apiRequest<InspectionFormTemplate[]>('/api/inspection-forms'),
       evaluationId ? apiRequest<EvaluationResult>(`/api/evaluations/${evaluationId}`) : Promise.resolve(null),
     ])
-      .then(([loadedCatalog, existing]) => {
+      .then(async ([loadedTemplates, existing]) => {
+        const selected = loadedTemplates.find(template => initialScope && template.areaId === initialScope.areaId
+          && (template.isDefault ? defaultInspectionId : template.id) === initialScope.formId)
+          ?? loadedTemplates.find((template) => template.isDefault) ?? loadedTemplates[0]
+        if (!existing && !selected) throw new Error('Nenhum formulário de inspeção está disponível.')
+        const versionId = existing ? existing.formVersionId : selected.versionId
+        const loadedCatalog = await apiRequest<ChecklistCatalog>(
+          versionId ? `/api/catalog?formVersionId=${versionId}` : '/api/catalog',
+        )
+        if (!active) return
         setCatalog(loadedCatalog)
+        setTemplates(loadedTemplates)
+        setFormVersionId(versionId)
+        setFormName(existing ? existing.formName : selected.name)
+        setFormVersion(existing ? existing.formVersion : selected.version)
+        setAreaId(existing ? existing.areaId : selected.areaId)
+        setAreaName(existing ? existing.areaName : selected.areaName)
         if (!existing) return
 
         setEvaluationDate(existing.evaluationDate)
@@ -70,9 +94,37 @@ export function EvaluationForm({ evaluationId, onClose, onCreated }: EvaluationF
           }]
         })))
       })
-      .catch((error: unknown) => setCatalogError(error instanceof Error ? error.message : 'Não foi possível carregar o catálogo.'))
-      .finally(() => setIsLoadingCatalog(false))
-  }, [evaluationId])
+      .catch((error: unknown) => {
+        if (active) setCatalogError(error instanceof Error ? error.message : 'Não foi possível carregar o catálogo.')
+      })
+      .finally(() => { if (active) setIsLoadingCatalog(false) })
+    return () => { active = false }
+  }, [evaluationId, initialScope])
+
+  async function changeForm(value: string) {
+    const selected = templates.find((template) => (template.versionId ?? 'legacy') === value)
+    if (!selected) return
+    if (Object.values(observations).some((observation) => observation.quantity !== ''
+      || observation.severityLevelId !== '' || observation.comment.trim() !== '')
+      && !window.confirm('Trocar o formulário descarta as observações preenchidas. Deseja continuar?')) return
+    setIsChangingForm(true)
+    setSubmitError('')
+    try {
+      const loadedCatalog = await apiRequest<ChecklistCatalog>(selected.versionId
+        ? `/api/catalog?formVersionId=${selected.versionId}` : '/api/catalog')
+      setCatalog(loadedCatalog)
+      setFormVersionId(selected.versionId)
+      setFormName(selected.name)
+      setFormVersion(selected.version)
+      setAreaId(selected.areaId)
+      setAreaName(selected.areaName)
+      setObservations({})
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Não foi possível carregar o formulário selecionado.')
+    } finally {
+      setIsChangingForm(false)
+    }
+  }
 
   function updateObservation(itemId: string, update: Partial<ObservationDraft>) {
     setObservations((current) => {
@@ -119,6 +171,7 @@ export function EvaluationForm({ evaluationId, onClose, onCreated }: EvaluationF
 
     try {
       const request = {
+        formVersionId,
         evaluationDate,
         evaluationTime: evaluationTime || null,
         siteId: siteId || null,
@@ -181,6 +234,29 @@ export function EvaluationForm({ evaluationId, onClose, onCreated }: EvaluationF
 
       {!isLoadingCatalog && catalog && <form className="evaluation-form" onSubmit={handleSubmit}>
         <section className="form-section">
+          <div className="form-section-heading"><span>00</span><div><h3>Formulário de inspeção</h3><p>{evaluationId || createdDraftId ? 'Esta inspeção mantém a versão original do formulário, mesmo após alterações no modelo.' : 'Escolha o modelo. Todos usam as mesmas regras de cálculo.'}</p></div></div>
+          <div className="form-fields">
+            <label>Área da inspeção
+              {evaluationId || createdDraftId ? <input disabled value={areaName} /> : <select
+                disabled={isSaving || isChangingForm} value={areaId} onChange={event => {
+                  const first = templates.find(template => template.areaId === event.target.value)
+                  if (first) void changeForm(first.versionId ?? 'legacy')
+                }}>
+                {[...new Map(templates.map(template => [template.areaId, template.areaName])).entries()]
+                  .map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+              </select>}
+            </label>
+            <label>Modelo de formulário
+              {evaluationId || createdDraftId
+                ? <input disabled value={`${formName} · ${formVersion ? `versão ${formVersion}` : 'modelo original'}`} />
+                : <select disabled={isSaving || isChangingForm} onChange={(event) => void changeForm(event.target.value)} value={formVersionId ?? 'legacy'}>
+                  {templates.filter(template => template.areaId === areaId).map((template) => <option key={template.id} value={template.versionId ?? 'legacy'}>{template.name} · {template.version ? `versão ${template.version}` : 'modelo original'}</option>)}
+                </select>}
+            </label>
+          </div>
+          {isChangingForm && <p role="status">Carregando formulário…</p>}
+        </section>
+        <section className="form-section">
           <div className="form-section-heading"><span>01</span><div><h3>Identificação</h3><p>Dados do local, período e responsáveis.</p></div></div>
           <div className="form-fields form-fields-three">
             <label>Data da avaliação<input onChange={(event) => setEvaluationDate(event.target.value)} required type="date" value={evaluationDate} /></label>
@@ -196,7 +272,7 @@ export function EvaluationForm({ evaluationId, onClose, onCreated }: EvaluationF
           </div>
         </section>
 
-        <section className="form-section checklist-section">
+        <fieldset disabled={isChangingForm || isSaving} className="form-section checklist-section inspection-observations">
           <div className="form-section-heading"><span>02</span><div><h3>Observações</h3><p>Quantidade e peso reproduzem os campos de entrada da planilha.</p></div></div>
           <div className="checklist-head"><span>Item observado</span><span>Quantidade</span><span>Severidade</span><span>Comentário</span></div>
           {catalog.categories.map((category) => (
@@ -214,7 +290,7 @@ export function EvaluationForm({ evaluationId, onClose, onCreated }: EvaluationF
               ))}
             </fieldset>
           ))}
-        </section>
+        </fieldset>
 
         <section className="form-section">
           <div className="form-section-heading"><span>03</span><div><h3>Contexto</h3><p>Registre os pontos relevantes observados.</p></div></div>
@@ -222,7 +298,7 @@ export function EvaluationForm({ evaluationId, onClose, onCreated }: EvaluationF
         </section>
 
         {submitError && <div className="form-error" role="alert">{submitError}</div>}
-        <div className="form-submit-row"><span>Itens incompletos podem ser enviados com aviso, como na planilha.</span><div className="evaluation-actions"><button className="outline-button" disabled={isSaving} name="intent" type="submit" value="draft"><Save size={16} />{isSaving ? 'Salvando…' : 'Salvar rascunho'}</button><button className="primary-button" disabled={isSaving} name="intent" type="submit" value="submit"><Check size={16} />{isSaving ? 'Enviando…' : 'Enviar avaliação'}</button></div></div>
+        <div className="form-submit-row"><span>Itens incompletos podem ser enviados com aviso, como na planilha.</span><div className="evaluation-actions"><button className="outline-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="draft"><Save size={16} />{isSaving ? 'Salvando…' : 'Salvar rascunho'}</button><button className="primary-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="submit"><Check size={16} />{isSaving ? 'Enviando…' : 'Enviar avaliação'}</button></div></div>
       </form>}
     </div>
   )

@@ -48,6 +48,11 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
             throw new EvaluationValidationException(["Somente avaliações em rascunho podem ser editadas."]);
         }
 
+        if (request.FormVersionId != evaluation.FormVersionId)
+        {
+            throw new EvaluationValidationException(["O formulário de uma avaliação salva não pode ser trocado. Crie uma nova avaliação."]);
+        }
+
         ValidateNoDuplicateItems(request);
         var references = await repository.LoadReferenceDataAsync(request, cancellationToken);
         ValidateReferences(request, references);
@@ -85,14 +90,15 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         DateOnly? to,
         Guid? siteId,
         Guid? contractorId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        EvaluationScope? scope = null)
     {
         if (from > to)
         {
             throw new EvaluationValidationException(["A data inicial deve ser anterior ou igual à data final."]);
         }
 
-        var evaluations = await repository.GetManyAsync(from, to, siteId, contractorId, cancellationToken);
+        var evaluations = await repository.GetManyAsync(from, to, siteId, contractorId, cancellationToken, scope);
         return evaluations.Select(ToDto).ToArray();
     }
 
@@ -101,15 +107,16 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         DateOnly? to,
         Guid? siteId,
         Guid? contractorId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        EvaluationScope? scope = null)
     {
         if (from > to)
         {
             throw new EvaluationValidationException(["A data inicial deve ser anterior ou igual à data final."]);
         }
 
-        var totals = await repository.GetPeriodTotalsAsync(from, to, siteId, contractorId, cancellationToken);
-        var trendRecords = await repository.GetTrendRecordsAsync(from, to, siteId, contractorId, cancellationToken);
+        var totals = await repository.GetPeriodTotalsAsync(from, to, siteId, contractorId, cancellationToken, scope);
+        var trendRecords = await repository.GetTrendRecordsAsync(from, to, siteId, contractorId, cancellationToken, scope);
         var trend = trendRecords.Select(record => new DashboardTrendPointDto(
             record.Id,
             record.EvaluationDate,
@@ -134,10 +141,11 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         DateOnly? to,
         Guid? siteId,
         Guid? contractorId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        EvaluationScope? scope = null)
     {
         ValidatePeriod(from, to);
-        var records = await repository.GetConsolidationRecordsAsync(from, to, siteId, contractorId, cancellationToken);
+        var records = await repository.GetConsolidationRecordsAsync(from, to, siteId, contractorId, cancellationToken, scope);
         var observations = records.SelectMany(record => record.Observations).ToArray();
         var low = SumQuantityForWeight(observations, 0.3m);
         var medium = SumQuantityForWeight(observations, 1m);
@@ -195,6 +203,11 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
     private static void ValidateReferences(CreateEvaluationRequest request, EvaluationReferenceData references)
     {
         var errors = new List<string>();
+        if (request.FormVersionId.HasValue && references.FormVersion is null)
+        {
+            errors.Add("Versão de formulário inexistente ou indisponível para esta empresa.");
+        }
+
         foreach (var observation in request.Observations)
         {
             if (!references.Items.ContainsKey(observation.ChecklistItemId))
@@ -238,6 +251,8 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         CreateEvaluationRequest request,
         EvaluationReferenceData references)
     {
+        evaluation.FormVersionId = request.FormVersionId;
+        evaluation.FormVersion = references.FormVersion;
         evaluation.EvaluationDate = request.EvaluationDate;
         evaluation.EvaluationTime = request.EvaluationTime;
         evaluation.SiteId = request.SiteId;
@@ -368,7 +383,13 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
                         input.HasIncompleteQuantitySeverityPair);
                 }).ToArray(),
             evaluation.CreatedAtUtc,
-            evaluation.UpdatedAtUtc);
+            evaluation.UpdatedAtUtc,
+            evaluation.FormVersionId,
+            evaluation.FormVersion?.Name ?? "Formulário padrão",
+            evaluation.FormVersion?.Version ?? 0,
+            evaluation.FormVersion?.AreaId ?? Guid.Empty,
+            evaluation.FormVersion?.AreaName ?? InspectionArea.DefaultName,
+            evaluation.FormVersion?.FormId ?? Guid.Empty);
     }
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

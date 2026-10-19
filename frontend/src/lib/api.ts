@@ -104,14 +104,54 @@ export interface ChecklistCatalog {
     id: string
     code: string
     name: string
-    items: Array<{ id: string; code: string; name: string }>
+    isCustom: boolean
+    items: Array<{ id: string; code: string; name: string; isCustom: boolean }>
   }>
   severities: Array<{ id: string; name: string; weight: number }>
   sites: Array<{ id: string; name: string; projectOrIsland: string | null }>
   organizations: Array<{ id: string; name: string; kind: 'Client' | 'Contractor' | 'Subcontractor' }>
 }
 
+export const defaultInspectionId = '00000000-0000-0000-0000-000000000000'
+
+export interface InspectionArea {
+  id: string
+  name: string
+}
+
+export interface InspectionScope {
+  areaId: string
+  areaName: string
+  formId: string
+  formName: string
+}
+
+export function inspectionScopeQuery(scope: InspectionScope) {
+  return new URLSearchParams({ areaId: scope.areaId, formId: scope.formId }).toString()
+}
+
+export interface InspectionFormTemplate {
+  id: string
+  versionId: string | null
+  version: number
+  name: string
+  isDefault: boolean
+  areaId: string
+  areaName: string
+  categories: Array<{
+    id: string
+    name: string
+    items: Array<{ id: string; name: string }>
+  }>
+}
+
 export interface EvaluationResult extends EvaluationSummary {
+  areaId: string
+  areaName: string
+  formId: string
+  formVersionId: string | null
+  formName: string
+  formVersion: number
   evaluationTime: string | null
   projectOrIsland: string | null
   client: string | null
@@ -182,6 +222,10 @@ export interface DataConsolidation {
 }
 
 export interface IpfAnnualHistory {
+  areaId: string | null
+  areaName: string
+  formId: string | null
+  formName: string
   year: number
   contractorOrganizationId: string
   contractor: string

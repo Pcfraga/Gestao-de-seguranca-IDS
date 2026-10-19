@@ -1,7 +1,11 @@
 namespace IDS.Domain.Entities;
 
-public sealed class ObservationCategory : AuditableEntity
+public sealed class ObservationCategory : TenantCatalogEntity
 {
+    public Guid? FormVersionId { get; set; }
+
+    public InspectionFormVersion? FormVersion { get; set; }
+
     public required string Code { get; set; }
 
     public required string Name { get; set; }

@@ -20,6 +20,12 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
 
     public DbSet<Evaluation> Evaluations => Set<Evaluation>();
 
+    public DbSet<InspectionForm> InspectionForms => Set<InspectionForm>();
+
+    public DbSet<InspectionArea> InspectionAreas => Set<InspectionArea>();
+
+    public DbSet<InspectionFormVersion> InspectionFormVersions => Set<InspectionFormVersion>();
+
     public DbSet<ObservationCategory> ObservationCategories => Set<ObservationCategory>();
 
     public DbSet<ChecklistItem> ChecklistItems => Set<ChecklistItem>();
@@ -67,6 +73,11 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
         ConfigureTenant<MonthlyIpfRecord>(builder);
         ConfigureTenant<ReportSettings>(builder);
         ConfigureTenant<AuditEvent>(builder);
+        ConfigureTenant<InspectionForm>(builder);
+        ConfigureTenant<InspectionFormVersion>(builder);
+        ConfigureTenant<InspectionArea>(builder);
+        ConfigureTenantCatalog<ObservationCategory>(builder);
+        ConfigureTenantCatalog<ChecklistItem>(builder);
 
         builder.Entity<Organization>(entity =>
         {
@@ -85,6 +96,35 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
             entity.ConfigureAuditFields();
         });
 
+        builder.Entity<InspectionArea>(entity =>
+        {
+            entity.ToTable("inspection_areas");
+            entity.Property(value => value.Name).HasMaxLength(150).IsRequired();
+            entity.HasIndex(value => new { value.TenantId, value.Name }).IsUnique();
+            entity.ConfigureAuditFields();
+        });
+
+        builder.Entity<InspectionForm>(entity =>
+        {
+            entity.ToTable("inspection_forms");
+            entity.Property(value => value.CurrentVersion).IsConcurrencyToken();
+            entity.HasIndex(value => value.TenantId).IsUnique().HasFilter("\"IsDefault\" = true");
+            entity.ConfigureAuditFields();
+        });
+
+        builder.Entity<InspectionFormVersion>(entity =>
+        {
+            entity.ToTable("inspection_form_versions");
+            entity.Property(value => value.Name).HasMaxLength(150).IsRequired();
+            entity.Property(value => value.AreaName).HasMaxLength(150).HasDefaultValue(InspectionArea.DefaultName).IsRequired();
+            entity.HasOne(value => value.Area).WithMany()
+                .HasForeignKey(value => value.AreaId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(value => new { value.FormId, value.Version }).IsUnique();
+            entity.HasOne(value => value.Form).WithMany(value => value.Versions)
+                .HasForeignKey(value => value.FormId).OnDelete(DeleteBehavior.Restrict);
+            entity.ConfigureAuditFields();
+        });
+
         builder.Entity<Evaluation>(entity =>
         {
             entity.ToTable("evaluations");
@@ -95,6 +135,7 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
             entity.Property(value => value.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(value => value.EvaluationDate);
             entity.HasIndex(value => new { value.SiteId, value.EvaluationDate });
+            entity.HasOne(value => value.FormVersion).WithMany().HasForeignKey(value => value.FormVersionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.Site).WithMany().HasForeignKey(value => value.SiteId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.ClientOrganization).WithMany().HasForeignKey(value => value.ClientOrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.ContractorOrganization).WithMany().HasForeignKey(value => value.ContractorOrganizationId).OnDelete(DeleteBehavior.Restrict);
@@ -108,6 +149,8 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
             entity.Property(value => value.Code).HasMaxLength(50).IsRequired();
             entity.Property(value => value.Name).HasMaxLength(150).IsRequired();
             entity.HasIndex(value => value.Code).IsUnique();
+            entity.HasOne(value => value.FormVersion).WithMany(value => value.Categories)
+                .HasForeignKey(value => value.FormVersionId).OnDelete(DeleteBehavior.Restrict);
             entity.ConfigureAuditFields();
         });
 
@@ -163,7 +206,16 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
                 table.HasCheckConstraint("ck_monthly_ipf_records_month", "\"Month\" BETWEEN 1 AND 12"));
             entity.Property(value => value.Value).HasPrecision(12, 4);
             entity.Property(value => value.Source).HasMaxLength(40).IsRequired();
-            entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month }).IsUnique();
+            entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month })
+                .IsUnique().HasFilter("\"AreaId\" IS NULL AND \"FormId\" IS NULL");
+            entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month, value.AreaId })
+                .IsUnique().HasFilter("\"AreaId\" IS NOT NULL AND \"FormId\" IS NULL");
+            entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month, value.FormId })
+                .IsUnique().HasFilter("\"AreaId\" IS NULL AND \"FormId\" IS NOT NULL");
+            entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month, value.AreaId, value.FormId })
+                .IsUnique().HasFilter("\"AreaId\" IS NOT NULL AND \"FormId\" IS NOT NULL");
+            entity.HasOne<InspectionArea>().WithMany().HasForeignKey(value => value.AreaId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<InspectionForm>().WithMany().HasForeignKey(value => value.FormId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.ContractorOrganization).WithMany().HasForeignKey(value => value.ContractorOrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.Site).WithMany().HasForeignKey(value => value.SiteId).OnDelete(DeleteBehavior.Restrict);
             entity.ConfigureAuditFields();
@@ -186,6 +238,14 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
     private void ConfigureTenant<TEntity>(ModelBuilder builder) where TEntity : TenantEntity
     {
         builder.Entity<TEntity>().HasQueryFilter(entity => CurrentTenantId != null && entity.TenantId == CurrentTenantId);
+        builder.Entity<TEntity>().HasOne<Tenant>().WithMany()
+            .HasForeignKey(entity => entity.TenantId).OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private void ConfigureTenantCatalog<TEntity>(ModelBuilder builder) where TEntity : TenantCatalogEntity
+    {
+        builder.Entity<TEntity>().HasQueryFilter(entity =>
+            entity.TenantId == null || (CurrentTenantId != null && entity.TenantId == CurrentTenantId));
         builder.Entity<TEntity>().HasOne<Tenant>().WithMany()
             .HasForeignKey(entity => entity.TenantId).OnDelete(DeleteBehavior.Restrict);
     }
@@ -278,6 +338,22 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
 
     private void ApplyAuditTimestamps()
     {
+        foreach (var entry in ChangeTracker.Entries<TenantCatalogEntity>()
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+        {
+            var tenantId = CurrentTenantId ?? throw new InvalidOperationException("A operação exige uma empresa autenticada.");
+            if (entry.State == EntityState.Added && entry.Entity.TenantId is null)
+            {
+                entry.Entity.TenantId = tenantId;
+            }
+
+            if (entry.Entity.TenantId != tenantId
+                || (entry.State != EntityState.Added && entry.Property(entity => entity.TenantId).OriginalValue != tenantId))
+            {
+                throw new InvalidOperationException("Não é permitido alterar dados de catálogo compartilhados ou de outra empresa.");
+            }
+        }
+
         foreach (var entry in ChangeTracker.Entries<TenantEntity>()
             .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
         {

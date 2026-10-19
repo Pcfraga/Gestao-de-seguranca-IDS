@@ -40,12 +40,15 @@ import {
 } from 'recharts'
 import { LoginScreen } from './components/LoginScreen'
 import { EvaluationForm } from './components/EvaluationForm'
+import { InspectionFormsEditor } from './components/InspectionFormsEditor'
 import { ApiError, apiRequest, clearAccessToken, getAccessToken, type ChecklistCatalog, type DashboardSummary, type DataConsolidation, type EvaluationResult, type EvaluationSummary, type IpfAnnualHistory, type IpfMonthlySuggestion } from './lib/api'
 import { evaluationPdf, ipfReportPdf, openPrintWindow, writePrintWindow } from './lib/pdf'
 import { clearBranding, defaultPrimaryColor, fetchBranding, loadBranding, readLogoFile, saveBranding, type ReportBranding } from './lib/branding'
 import './ids.css'
+import { InspectionScopeSelector } from './components/InspectionScopeSelector'
+import { inspectionScopeQuery, type InspectionScope } from './lib/api'
 
-type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'settings' | 'users' | 'account'
+type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'forms' | 'settings' | 'users' | 'account'
 
 const sections: Array<{ id: Section; label: string; icon: typeof LayoutDashboard }> = [
   { id: 'overview', label: 'Visão geral', icon: LayoutDashboard },
@@ -61,6 +64,7 @@ const sectionCopy: Record<Section, { title: string; description: string }> = {
   data: { title: 'Dados', description: 'Consolidação das avaliações por data, categoria e item observado.' },
   indicators: { title: 'Indicadores', description: 'Resultados de IDS, distribuição de desvios e evolução por período.' },
   reports: { title: 'Relatórios', description: 'Consolidações mensais e documentos emitidos para acompanhamento.' },
+  forms: { title: 'Formulários de inspeção', description: 'Crie e edite formulários completos com tópicos e itens, mantendo as regras de cálculo e o histórico das inspeções.' },
   settings: { title: 'Configurações', description: 'Cadastros e parâmetros disponíveis para o seu perfil.' },
   users: { title: 'Usuários e perfis', description: 'Crie usuários, defina perfis e controle o acesso ao sistema.' },
   account: { title: 'Minha conta', description: 'Altere sua senha de acesso ao sistema.' },
@@ -102,6 +106,8 @@ function App() {
   const [showEvaluationForm, setShowEvaluationForm] = useState(false)
   const [editingEvaluationId, setEditingEvaluationId] = useState<string | null>(null)
   const [evaluationRefresh, setEvaluationRefresh] = useState(0)
+  const [inspectionScope, setInspectionScope] = useState<InspectionScope | null>(null)
+  const scopeQuery = inspectionScope ? inspectionScopeQuery(inspectionScope) : ''
   const activeCopy = sectionCopy[activeSection]
 
   useEffect(() => {
@@ -184,6 +190,9 @@ function App() {
           ))}
           {isAdmin && <>
           <span className="nav-caption nav-caption-lower">ADMINISTRAÇÃO</span>
+          <button className={`nav-link ${activeSection === 'forms' ? 'active' : ''}`} onClick={() => { setShowEvaluationForm(false); setActiveSection('forms') }} type="button">
+            <ListChecks size={18} strokeWidth={1.8} /><span>Formulários de inspeção</span>
+          </button>
           <button className={`nav-link ${activeSection === 'settings' ? 'active' : ''}`} onClick={() => setActiveSection('settings')} type="button">
             <Settings2 size={18} strokeWidth={1.8} /><span>Configurações</span>
           </button>
@@ -222,6 +231,7 @@ function App() {
         <div className="page-content">
           {showEvaluationForm ? (
             <EvaluationForm
+              initialScope={inspectionScope ?? undefined}
               evaluationId={editingEvaluationId ?? undefined}
               onClose={() => setShowEvaluationForm(false)}
               onCreated={() => {
@@ -240,11 +250,13 @@ function App() {
             </div>
           </div>
 
-          {activeSection === 'overview' && <Dashboard month={selectedMonth} monthLabel={formatMonth(selectedMonth)} onOpenEvaluations={() => setActiveSection('evaluations')} />}
-          {activeSection === 'evaluations' && <Evaluations key={evaluationRefresh} search={search} month={selectedMonth} onCreate={() => { setEditingEvaluationId(null); setShowEvaluationForm(true) }} onEdit={(id) => { setEditingEvaluationId(id); setShowEvaluationForm(true) }} />}
-          {activeSection === 'data' && <DataView month={selectedMonth} />}
-          {activeSection === 'indicators' && <Indicators month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
-          {activeSection === 'reports' && <Reports month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
+          {['overview', 'evaluations', 'data', 'indicators', 'reports'].includes(activeSection) && <InspectionScopeSelector onChange={setInspectionScope} />}
+          {inspectionScope && activeSection === 'overview' && <Dashboard key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} onOpenEvaluations={() => setActiveSection('evaluations')} />}
+          {inspectionScope && activeSection === 'evaluations' && <Evaluations scopeQuery={scopeQuery} key={`${evaluationRefresh}-${scopeQuery}`} search={search} month={selectedMonth} onCreate={() => { setEditingEvaluationId(null); setShowEvaluationForm(true) }} onEdit={(id) => { setEditingEvaluationId(id); setShowEvaluationForm(true) }} />}
+          {inspectionScope && activeSection === 'data' && <DataView key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} />}
+          {inspectionScope && activeSection === 'indicators' && <Indicators key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
+          {inspectionScope && activeSection === 'reports' && <Reports key={scopeQuery} scope={inspectionScope} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
+          {activeSection === 'forms' && isAdmin && <InspectionFormsEditor />}
           {activeSection === 'settings' && isAdmin && <SettingsView />}
           {activeSection === 'users' && isAdmin && <div className="settings-grid"><UsersAdmin /></div>}
           {activeSection === 'account' && <div className="settings-grid"><AccountPassword /></div>}
@@ -257,7 +269,7 @@ function App() {
   )
 }
 
-function Dashboard({ month, monthLabel, onOpenEvaluations }: { month: string; monthLabel: string; onOpenEvaluations: () => void }) {
+function Dashboard({ month, monthLabel, onOpenEvaluations, scopeQuery }: { month: string; monthLabel: string; onOpenEvaluations: () => void; scopeQuery: string }) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [consolidation, setConsolidation] = useState<DataConsolidation | null>(null)
   const [summaryError, setSummaryError] = useState('')
@@ -276,8 +288,8 @@ function Dashboard({ month, monthLabel, onOpenEvaluations }: { month: string; mo
     setSummaryError('')
     const query = parameters.toString()
     Promise.all([
-      apiRequest<DashboardSummary>(`/api/dashboard/summary?${query}`),
-      apiRequest<DataConsolidation>(`/api/dashboard/data?${query}`),
+      apiRequest<DashboardSummary>(`/api/dashboard/summary?${query}&${scopeQuery}`),
+      apiRequest<DataConsolidation>(`/api/dashboard/data?${query}&${scopeQuery}`),
     ])
       .then(([result, details]) => {
         if (isCurrent) {
@@ -289,7 +301,7 @@ function Dashboard({ month, monthLabel, onOpenEvaluations }: { month: string; mo
       .finally(() => { if (isCurrent) setIsLoadingSummary(false) })
 
     return () => { isCurrent = false }
-  }, [month])
+  }, [month, scopeQuery])
 
   const metricValues = [
     summary?.ids === null || summary?.ids === undefined ? '—' : `${(summary.ids * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`,
@@ -423,7 +435,7 @@ function Dashboard({ month, monthLabel, onOpenEvaluations }: { month: string; mo
       <section className="bottom-grid">
         <article className="panel activity-panel">
           <div className="panel-heading"><div><h2>Avaliações recentes</h2><p>Últimos registros lançados no sistema.</p></div><button className="text-button" type="button" onClick={onOpenEvaluations}>Ver avaliações <ArrowRight size={15} /></button></div>
-          <RecentEvaluations month={month} />
+          <RecentEvaluations month={month} scopeQuery={scopeQuery} />
         </article>
         <aside className="focus-note">
           <div className="focus-note-top"><span><ArrowDownRight size={17} /></span><small>ACOMPANHAMENTO</small></div>
@@ -439,7 +451,7 @@ function DashboardChartEmpty({ isLoading }: { isLoading: boolean }) {
   return <div className="dashboard-chart-empty">{isLoading ? 'Carregando dados do período…' : 'Sem dados para o período selecionado.'}</div>
 }
 
-function RecentEvaluations({ month }: { month: string }) {
+function RecentEvaluations({ month, scopeQuery }: { month: string; scopeQuery: string }) {
   const [evaluations, setEvaluations] = useState<EvaluationSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
@@ -448,13 +460,13 @@ function RecentEvaluations({ month }: { month: string }) {
     let isCurrent = true
     const finalDay = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()
     const parameters = new URLSearchParams({ from: `${month}-01`, to: `${month}-${String(finalDay).padStart(2, '0')}` })
-    apiRequest<EvaluationSummary[]>(`/api/evaluations?${parameters}`)
+    apiRequest<EvaluationSummary[]>(`/api/evaluations?${parameters}&${scopeQuery}`)
       .then((result) => { if (isCurrent) setEvaluations(result.slice(0, 4)) })
       .catch(() => { if (isCurrent) setHasError(true) })
       .finally(() => { if (isCurrent) setIsLoading(false) })
 
     return () => { isCurrent = false }
-  }, [month])
+  }, [month, scopeQuery])
 
   if (isLoading) return <div className="table-empty">Carregando avaliações…</div>
   if (hasError) return <div className="table-empty"><strong>Não foi possível carregar os registros</strong><span>Verifique a conexão com a API.</span></div>
@@ -463,7 +475,7 @@ function RecentEvaluations({ month }: { month: string }) {
   return <div className="recent-evaluations">{evaluations.map((evaluation) => <div className="recent-evaluation-row" key={evaluation.id}><span className="recent-date">{new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(`${evaluation.evaluationDate}T12:00:00`))}</span><span className="recent-main"><strong>{evaluation.site ?? evaluation.contractor ?? 'Avaliação operacional'}</strong><small>{evaluation.leadAuditorName ?? 'Avaliador não informado'}</small></span><span className="recent-score">{evaluation.indicators.ids === null ? '—' : `${(evaluation.indicators.ids * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}</span></div>)}</div>
 }
 
-function DataView({ month }: { month: string }) {
+function DataView({ month, scopeQuery }: { month: string; scopeQuery: string }) {
   const [catalog, setCatalog] = useState<ChecklistCatalog | null>(null)
   const [contractorId, setContractorId] = useState('')
   const [data, setData] = useState<DataConsolidation | null>(null)
@@ -493,12 +505,12 @@ function DataView({ month }: { month: string }) {
     })
     setIsLoadingData(true)
     setError('')
-    apiRequest<DataConsolidation>(`/api/dashboard/data?${query}`)
+    apiRequest<DataConsolidation>(`/api/dashboard/data?${query}&${scopeQuery}`)
       .then((result) => { if (isCurrent) setData(result) })
       .catch((loadError: unknown) => { if (isCurrent) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar os dados consolidados.') })
       .finally(() => { if (isCurrent) setIsLoadingData(false) })
     return () => { isCurrent = false }
-  }, [contractorId, month])
+  }, [contractorId, month, scopeQuery])
 
   const severityData = data ? [
     { name: 'Baixa · 0,3', total: data.lowSeverityDeviations, fill: '#77a989' },
@@ -537,7 +549,7 @@ function DataView({ month }: { month: string }) {
   )
 }
 
-function Evaluations({ search, month, onCreate, onEdit }: { search: string; month: string; onCreate: () => void; onEdit: (id: string) => void }) {
+function Evaluations({ search, month, onCreate, onEdit, scopeQuery }: { search: string; month: string; onCreate: () => void; onEdit: (id: string) => void; scopeQuery: string }) {
   const [evaluations, setEvaluations] = useState<EvaluationSummary[]>([])
   const [catalog, setCatalog] = useState<ChecklistCatalog | null>(null)
   const [contractorId, setContractorId] = useState('')
@@ -576,13 +588,13 @@ function Evaluations({ search, month, onCreate, onEdit }: { search: string; mont
     setIsLoading(true)
     setLoadError('')
 
-    apiRequest<EvaluationSummary[]>(`/api/evaluations?${parameters}`)
+    apiRequest<EvaluationSummary[]>(`/api/evaluations?${parameters}&${scopeQuery}`)
       .then((results) => { if (isCurrent) setEvaluations(results) })
       .catch((error: unknown) => { if (isCurrent) setLoadError(error instanceof Error ? error.message : 'Falha ao carregar avaliações.') })
       .finally(() => { if (isCurrent) setIsLoading(false) })
 
     return () => { isCurrent = false }
-  }, [contractorId, month, siteId])
+  }, [contractorId, month, siteId, scopeQuery])
 
   const searchedEvaluations = evaluations.filter((evaluation) => {
     if (!query) return true
@@ -745,7 +757,7 @@ function Delta({ current, previous, inverse = false, percentagePoints = false }:
   return <span className={`indicator-delta ${good ? 'good' : 'bad'}`}>{difference > 0 ? '▲' : '▼'} {formatted} vs. mês anterior</span>
 }
 
-function Indicators({ month, monthLabel }: { month: string; monthLabel: string }) {
+function Indicators({ month, monthLabel, scopeQuery }: { month: string; monthLabel: string; scopeQuery: string }) {
   const [yearEvaluations, setYearEvaluations] = useState<EvaluationSummary[]>([])
   const [yearData, setYearData] = useState<DataConsolidation | null>(null)
   const [currentData, setCurrentData] = useState<DataConsolidation | null>(null)
@@ -760,10 +772,10 @@ function Indicators({ month, monthLabel }: { month: string; monthLabel: string }
     const yearRange = new URLSearchParams({ from: `${year}-01-01`, to: monthRange(month).to }).toString()
     const previous = previousMonth(month)
     Promise.all([
-      apiRequest<EvaluationSummary[]>(`/api/evaluations?${yearRange}`),
-      apiRequest<DataConsolidation>(`/api/dashboard/data?${yearRange}`),
-      apiRequest<DataConsolidation>(`/api/dashboard/data?${new URLSearchParams(monthRange(month))}`),
-      apiRequest<DataConsolidation>(`/api/dashboard/data?${new URLSearchParams(monthRange(previous))}`),
+      apiRequest<EvaluationSummary[]>(`/api/evaluations?${yearRange}&${scopeQuery}`),
+      apiRequest<DataConsolidation>(`/api/dashboard/data?${yearRange}&${scopeQuery}`),
+      apiRequest<DataConsolidation>(`/api/dashboard/data?${new URLSearchParams(monthRange(month))}&${scopeQuery}`),
+      apiRequest<DataConsolidation>(`/api/dashboard/data?${new URLSearchParams(monthRange(previous))}&${scopeQuery}`),
     ])
       .then(([evaluations, yearConsolidation, current, before]) => {
         if (!isCurrent) return
@@ -776,7 +788,7 @@ function Indicators({ month, monthLabel }: { month: string; monthLabel: string }
       .catch((loadError: unknown) => { if (isCurrent) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar os indicadores.') })
       .finally(() => { if (isCurrent) setIsLoading(false) })
     return () => { isCurrent = false }
-  }, [month, year])
+  }, [month, year, scopeQuery])
 
   const previous = previousMonth(month)
   const monthly = Array.from({ length: monthNumber }, (_, index) => {
@@ -901,7 +913,8 @@ function RankingTable({ title, subtitle, rows }: { title: string; subtitle: stri
   </article>
 }
 
-function Reports({ month, monthLabel }: { month: string; monthLabel: string }) {
+function Reports({ month, monthLabel, scope }: { month: string; monthLabel: string; scope: InspectionScope }) {
+  const scopeQuery = inspectionScopeQuery(scope)
   const [catalog, setCatalog] = useState<ChecklistCatalog | null>(null)
   const [contractorId, setContractorId] = useState('')
   const [siteId, setSiteId] = useState('')
@@ -942,8 +955,8 @@ function Reports({ month, monthLabel }: { month: string; monthLabel: string }) {
     setError('')
     setSaveConfirmation('')
     Promise.all([
-      apiRequest<IpfAnnualHistory>(`/api/reports/ipf/${year}?contractorId=${contractorId}`),
-      apiRequest<IpfMonthlySuggestion>(`/api/reports/ipf/${year}/${monthNumber}/suggestion?contractorId=${contractorId}`),
+      apiRequest<IpfAnnualHistory>(`/api/reports/ipf/${year}?contractorId=${contractorId}&${scopeQuery}`),
+      apiRequest<IpfMonthlySuggestion>(`/api/reports/ipf/${year}/${monthNumber}/suggestion?contractorId=${contractorId}&${scopeQuery}`),
     ])
       .then(([result, monthlySuggestion]) => {
         if (!isCurrent) return
@@ -956,7 +969,7 @@ function Reports({ month, monthLabel }: { month: string; monthLabel: string }) {
       .catch((loadError: unknown) => { if (isCurrent) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar o histórico IPF.') })
       .finally(() => { if (isCurrent) setIsHistoryLoading(false) })
     return () => { isCurrent = false }
-  }, [contractorId, monthNumber, year])
+  }, [contractorId, monthNumber, year, scopeQuery])
 
   async function saveIpf() {
     if (!contractorId) {
@@ -974,7 +987,7 @@ function Reports({ month, monthLabel }: { month: string; monthLabel: string }) {
     try {
       const savedRecord = await apiRequest<IpfAnnualHistory['months'][number]>(`/api/reports/ipf/${year}/${monthNumber}`, {
         method: 'PUT',
-        body: JSON.stringify({ contractorOrganizationId: contractorId, siteId: siteId || null, value }),
+        body: JSON.stringify({ contractorOrganizationId: contractorId, siteId: siteId || null, value, areaId: scope.areaId, formId: scope.formId }),
       })
       setHistory((current) => {
         const months = [
@@ -987,6 +1000,10 @@ function Reports({ month, monthLabel }: { month: string; monthLabel: string }) {
           contractor: savedRecord.contractor,
           annualAverage: months.reduce((total, record) => total + record.value, 0) / months.length,
           months,
+          areaId: scope.areaId,
+          areaName: scope.areaName,
+          formId: scope.formId,
+          formName: scope.formName,
         }
       })
       setIpfValue(savedRecord.value.toString())
@@ -1181,7 +1198,6 @@ function SettingsView() {
       {message && <div className="report-save-confirmation" role="status"><Check size={16} />{message}</div>}
       <div><button className="primary-button" onClick={() => void save()} type="button">Salvar identidade</button></div>
     </section>
-    <EmptySection icon={Settings2} title="Cadastros operacionais" detail="Locais, empresas e catálogo de itens serão configurados conforme a planilha validada." />
   </div>
 }
 
@@ -1298,10 +1314,6 @@ function UsersAdmin() {
       </div>)}
     </div>
   </section>
-}
-
-function EmptySection({ icon: Icon, title, detail }: { icon: typeof Gauge; title: string; detail: string }) {
-  return <section className="panel empty-section"><div className="empty-line-icon"><Icon size={21} /></div><strong>{title}</strong><span>{detail}</span><button className="text-button" type="button" disabled>Disponível após configuração <Check size={15} /></button></section>
 }
 
 export default App

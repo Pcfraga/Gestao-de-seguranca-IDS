@@ -11,12 +11,21 @@ public interface IMonthlyIpfRepository
     Task<IReadOnlyCollection<MonthlyIpfRecord>> GetYearAsync(
         int year,
         Guid contractorId,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        Guid? areaId = null,
+        Guid? formId = null);
 
     Task<IReadOnlyCollection<decimal?>> GetMonthlyEvaluationScoresAsync(
         int year,
         int month,
         Guid contractorId,
+        CancellationToken cancellationToken,
+        Guid? areaId = null,
+        Guid? formId = null);
+
+    Task<(string AreaName, string FormName)> ValidateScopeAsync(
+        Guid? areaId,
+        Guid? formId,
         CancellationToken cancellationToken);
 
     Task<MonthlyIpfRecord> UpsertAsync(

@@ -18,11 +18,13 @@ public sealed class EvaluationsController(EvaluationApplicationService evaluatio
         [FromQuery] DateOnly? to,
         [FromQuery] Guid? siteId,
         [FromQuery] Guid? contractorId,
+        [FromQuery] Guid? areaId,
+        [FromQuery] Guid? formId,
         CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await evaluationService.ListAsync(from, to, siteId, contractorId, cancellationToken));
+            return Ok(await evaluationService.ListAsync(from, to, siteId, contractorId, cancellationToken, new(areaId, formId)));
         }
         catch (EvaluationValidationException exception)
         {
@@ -103,20 +105,28 @@ public sealed class EvaluationsController(EvaluationApplicationService evaluatio
 public sealed class CatalogController(IdsDbContext dbContext) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> Get(CancellationToken cancellationToken)
+    public async Task<IActionResult> Get(CancellationToken cancellationToken, [FromQuery] Guid? formVersionId = null)
     {
+        if (formVersionId.HasValue && !await dbContext.InspectionFormVersions
+            .AnyAsync(version => version.Id == formVersionId, cancellationToken))
+        {
+            return NotFound(new { message = "Versão de formulário não encontrada para esta empresa." });
+        }
+
         var categories = await dbContext.ObservationCategories
             .AsNoTracking()
+            .Where(category => category.FormVersionId == formVersionId)
             .OrderBy(category => category.SortOrder)
             .Select(category => new
             {
                 category.Id,
                 category.Code,
                 category.Name,
+                IsCustom = category.TenantId != null,
                 Items = category.Items
                     .Where(item => item.IsActive)
                     .OrderBy(item => item.SortOrder)
-                    .Select(item => new { item.Id, item.Code, item.Name })
+                    .Select(item => new { item.Id, item.Code, item.Name, IsCustom = item.TenantId != null })
             })
             .ToArrayAsync(cancellationToken);
         var severities = await dbContext.SeverityLevels
@@ -137,6 +147,16 @@ public sealed class CatalogController(IdsDbContext dbContext) : ControllerBase
 
         return Ok(new { categories, severities, sites, organizations });
     }
+
+    [Authorize(Roles = "ADMINISTRADOR")]
+    [HttpPost("categories")]
+    [HttpPut("categories/{id:guid}")]
+    [HttpPost("categories/{categoryId:guid}/items")]
+    [HttpPut("items/{id:guid}")]
+    public IActionResult LegacyCatalogWrite() => Conflict(new
+    {
+        message = "Edite o formulário completo em Formulários de inspeção. Os itens antigos são preservados para manter o histórico."
+    });
 
     [Authorize(Roles = "ADMINISTRADOR,GESTOR")]
     [HttpPost("sites")]
@@ -184,11 +204,13 @@ public sealed class DashboardController(EvaluationApplicationService evaluationS
         [FromQuery] DateOnly? to,
         [FromQuery] Guid? siteId,
         [FromQuery] Guid? contractorId,
+        [FromQuery] Guid? areaId,
+        [FromQuery] Guid? formId,
         CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await evaluationService.GetDataConsolidationAsync(from, to, siteId, contractorId, cancellationToken));
+            return Ok(await evaluationService.GetDataConsolidationAsync(from, to, siteId, contractorId, cancellationToken, new(areaId, formId)));
         }
         catch (EvaluationValidationException exception)
         {
@@ -202,11 +224,13 @@ public sealed class DashboardController(EvaluationApplicationService evaluationS
         [FromQuery] DateOnly? to,
         [FromQuery] Guid? siteId,
         [FromQuery] Guid? contractorId,
+        [FromQuery] Guid? areaId,
+        [FromQuery] Guid? formId,
         CancellationToken cancellationToken)
     {
         try
         {
-            var totals = await evaluationService.GetPeriodTotalsAsync(from, to, siteId, contractorId, cancellationToken);
+            var totals = await evaluationService.GetPeriodTotalsAsync(from, to, siteId, contractorId, cancellationToken, new(areaId, formId));
             return Ok(totals);
         }
         catch (EvaluationValidationException exception)
@@ -224,11 +248,13 @@ public sealed class IpfReportsController(MonthlyIpfApplicationService reportServ
     public async Task<ActionResult<IpfAnnualHistoryDto>> GetYear(
         int year,
         [FromQuery] Guid contractorId,
+        [FromQuery] Guid? areaId,
+        [FromQuery] Guid? formId,
         CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await reportService.GetYearAsync(year, contractorId, cancellationToken));
+            return Ok(await reportService.GetYearAsync(year, contractorId, cancellationToken, areaId, formId));
         }
         catch (IpfReportValidationException exception)
         {
@@ -241,11 +267,13 @@ public sealed class IpfReportsController(MonthlyIpfApplicationService reportServ
         int year,
         int month,
         [FromQuery] Guid contractorId,
+        [FromQuery] Guid? areaId,
+        [FromQuery] Guid? formId,
         CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await reportService.GetMonthlySuggestionAsync(year, month, contractorId, cancellationToken));
+            return Ok(await reportService.GetMonthlySuggestionAsync(year, month, contractorId, cancellationToken, areaId, formId));
         }
         catch (IpfReportValidationException exception)
         {

@@ -42,6 +42,58 @@ public sealed class MonthlyIpfApplicationServiceTests
     }
 
     [Fact]
+    public async Task PreservesAreaAndFormContextInHistoryAndUpsertsIndependently()
+    {
+        var repository = new FakeMonthlyIpfRepository();
+        var service = new MonthlyIpfApplicationService(repository);
+        var areaId = Guid.NewGuid();
+        var formId = Guid.NewGuid();
+
+        var saved = await service.UpsertAsync(
+            2026,
+            10,
+            new UpsertMonthlyIpfRequest(ContractorId, null, 8.37m, areaId, formId),
+            CancellationToken.None);
+        var defaultSaved = await service.UpsertAsync(
+            2026,
+            10,
+            new UpsertMonthlyIpfRequest(ContractorId, null, 7.25m),
+            CancellationToken.None);
+
+        Assert.Equal(areaId, saved.AreaId);
+        Assert.Equal(formId, saved.FormId);
+        Assert.Null(defaultSaved.AreaId);
+        Assert.Null(defaultSaved.FormId);
+        Assert.Equal(2, repository.Records.Count);
+
+        var history = await service.GetYearAsync(2026, ContractorId, CancellationToken.None, areaId, formId);
+        Assert.Equal(areaId, history.AreaId);
+        Assert.Equal(formId, history.FormId);
+        Assert.Equal(areaId, Assert.Single(history.Months).AreaId);
+        Assert.Equal(formId, Assert.Single(history.Months).FormId);
+    }
+
+    [Fact]
+    public async Task TreatsEmptyAreaAndFormIdsAsTheCanonicalDefault()
+    {
+        var repository = new FakeMonthlyIpfRepository();
+        var service = new MonthlyIpfApplicationService(repository);
+
+        var saved = await service.UpsertAsync(
+            2026,
+            10,
+            new UpsertMonthlyIpfRequest(ContractorId, null, 8.37m, Guid.Empty, Guid.Empty),
+            CancellationToken.None);
+        var history = await service.GetYearAsync(
+            2026, ContractorId, CancellationToken.None, Guid.Empty, Guid.Empty);
+
+        Assert.Null(saved.AreaId);
+        Assert.Null(saved.FormId);
+        Assert.Null(history.AreaId);
+        Assert.Null(history.FormId);
+    }
+
+    [Fact]
     public async Task SuggestsTheAverageOfScoredEvaluationsForTheSelectedMonth()
     {
         var repository = new FakeMonthlyIpfRepository();
@@ -98,19 +150,32 @@ public sealed class MonthlyIpfApplicationServiceTests
 
         public Task<bool> SiteExistsAsync(Guid siteId, CancellationToken cancellationToken) => Task.FromResult(true);
 
+        public Task<(string AreaName, string FormName)> ValidateScopeAsync(
+            Guid? areaId,
+            Guid? formId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult((IDS.Domain.Entities.InspectionArea.DefaultName, "Formulário padrão"));
+
         public Task<IReadOnlyCollection<MonthlyIpfRecord>> GetYearAsync(
             int year,
             Guid contractorId,
-            CancellationToken cancellationToken) =>
+            CancellationToken cancellationToken,
+            Guid? areaId = null,
+            Guid? formId = null) =>
             Task.FromResult<IReadOnlyCollection<MonthlyIpfRecord>>(Records
-                .Where(record => record.Year == year && record.ContractorOrganizationId == contractorId)
+                .Where(record => record.Year == year
+                    && record.ContractorOrganizationId == contractorId
+                    && record.AreaId == (areaId == Guid.Empty ? null : areaId)
+                    && record.FormId == (formId == Guid.Empty ? null : formId))
                 .ToArray());
 
         public Task<IReadOnlyCollection<decimal?>> GetMonthlyEvaluationScoresAsync(
             int year,
             int month,
             Guid contractorId,
-            CancellationToken cancellationToken) =>
+            CancellationToken cancellationToken,
+            Guid? areaId = null,
+            Guid? formId = null) =>
             Task.FromResult<IReadOnlyCollection<decimal?>>(MonthlyEvaluationScores);
 
         public Task<MonthlyIpfRecord> UpsertAsync(
@@ -121,7 +186,9 @@ public sealed class MonthlyIpfApplicationServiceTests
         {
             var record = Records.SingleOrDefault(value => value.Year == year
                 && value.Month == month
-                && value.ContractorOrganizationId == request.ContractorOrganizationId);
+                && value.ContractorOrganizationId == request.ContractorOrganizationId
+                && value.AreaId == request.AreaId
+                && value.FormId == request.FormId);
             if (record is null)
             {
                 record = new MonthlyIpfRecord
@@ -130,6 +197,8 @@ public sealed class MonthlyIpfApplicationServiceTests
                     Year = year,
                     Month = month,
                     ContractorOrganizationId = request.ContractorOrganizationId,
+                    AreaId = request.AreaId,
+                    FormId = request.FormId,
                     ContractorOrganization = CreateContractor()
                 };
                 Records.Add(record);

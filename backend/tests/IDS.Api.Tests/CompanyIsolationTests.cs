@@ -98,6 +98,20 @@ public sealed class CompanyIsolationTests
     }
 
     [Fact]
+    public async Task LegacyChecklistCannotBeMutatedOutsideVersionedForms()
+    {
+        using var factory = new CompanyApiFactory();
+        using var adminA = factory.CreateClient();
+        await RegisterAndLogin(adminA, "Company A", "admin-a@example.com");
+        var categoryResponse = await adminA.PostAsJsonAsync("/api/catalog/categories", new { name = "Trabalho em altura" });
+        Assert.Equal(HttpStatusCode.Conflict, categoryResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await adminA.PutAsJsonAsync(
+            "/api/catalog/items/20000000-0000-0000-0000-000000000001", new { name = "Outro nome" })).StatusCode);
+        var catalog = await adminA.GetFromJsonAsync<JsonElement>("/api/catalog");
+        Assert.Equal("Capacete/Jugular", catalog.GetProperty("categories")[0].GetProperty("items")[0].GetProperty("name").GetString());
+    }
+
+    [Fact]
     public async Task SignupIsAtomicAndPasswordsCanBeChangedAndReset()
     {
         using var factory = new CompanyApiFactory();

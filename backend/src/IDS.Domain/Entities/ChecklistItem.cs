@@ -1,6 +1,6 @@
 namespace IDS.Domain.Entities;
 
-public sealed class ChecklistItem : AuditableEntity
+public sealed class ChecklistItem : TenantCatalogEntity
 {
     public Guid CategoryId { get; set; }
 

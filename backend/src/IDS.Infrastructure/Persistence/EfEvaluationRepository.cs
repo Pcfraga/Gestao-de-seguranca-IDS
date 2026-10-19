@@ -36,7 +36,8 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
 
         var items = await dbContext.ChecklistItems
             .Include(item => item.Category)
-            .Where(item => itemIds.Contains(item.Id) && item.IsActive)
+            .Where(item => itemIds.Contains(item.Id) && item.IsActive
+                && item.Category.FormVersionId == request.FormVersionId)
             .ToDictionaryAsync(item => item.Id, cancellationToken);
         var severities = await dbContext.SeverityLevels
             .Where(severity => severityIds.Contains(severity.Id))
@@ -50,7 +51,11 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
                 .Where(organization => organizationIds.Contains(organization.Id))
                 .ToDictionaryAsync(organization => organization.Id, cancellationToken);
 
-        return new EvaluationReferenceData(items, severities, sites, organizations);
+        var formVersion = request.FormVersionId is Guid versionId
+            ? await dbContext.InspectionFormVersions.SingleOrDefaultAsync(version => version.Id == versionId, cancellationToken)
+            : null;
+
+        return new EvaluationReferenceData(items, severities, sites, organizations, formVersion);
     }
 
     public async Task AddAsync(Evaluation evaluation, CancellationToken cancellationToken)
@@ -82,9 +87,10 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
         DateOnly? to,
         Guid? siteId,
         Guid? contractorId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        EvaluationScope? scope = null)
     {
-        var query = QueryDetails();
+        var query = ApplyScope(QueryDetails(), scope);
         if (from.HasValue)
         {
             query = query.Where(evaluation => evaluation.EvaluationDate >= from.Value);
@@ -117,9 +123,10 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
         DateOnly? to,
         Guid? siteId,
         Guid? contractorId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        EvaluationScope? scope = null)
     {
-        var evaluations = Visible(dbContext.Evaluations.AsNoTracking());
+        var evaluations = ApplyScope(Visible(dbContext.Evaluations.AsNoTracking()), scope);
         if (from.HasValue)
         {
             evaluations = evaluations.Where(evaluation => evaluation.EvaluationDate >= from.Value);
@@ -179,9 +186,10 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
         DateOnly? to,
         Guid? siteId,
         Guid? contractorId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        EvaluationScope? scope = null)
     {
-        var query = QueryDetails();
+        var query = ApplyScope(QueryDetails(), scope);
         if (from.HasValue)
         {
             query = query.Where(evaluation => evaluation.EvaluationDate >= from.Value);
@@ -221,9 +229,10 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
         DateOnly? to,
         Guid? siteId,
         Guid? contractorId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        EvaluationScope? scope = null)
     {
-        var query = QueryDetails();
+        var query = ApplyScope(QueryDetails(), scope);
         if (from.HasValue) query = query.Where(evaluation => evaluation.EvaluationDate >= from.Value);
         if (to.HasValue) query = query.Where(evaluation => evaluation.EvaluationDate <= to.Value);
         if (siteId.HasValue) query = query.Where(evaluation => evaluation.SiteId == siteId.Value);
@@ -247,10 +256,25 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
                 observation.SeverityLevel?.Weight)).ToArray())).ToArray();
     }
 
+    private IQueryable<Evaluation> ApplyScope(IQueryable<Evaluation> query, EvaluationScope? scope)
+    {
+        if (scope?.AreaId is Guid areaId)
+            query = areaId == Guid.Empty
+                ? query.Where(evaluation => evaluation.FormVersion == null || evaluation.FormVersion.AreaId == null)
+                : query.Where(evaluation => evaluation.FormVersion != null && evaluation.FormVersion.AreaId == areaId);
+        if (scope?.FormId is Guid formId)
+            query = formId == Guid.Empty
+                ? query.Where(evaluation => evaluation.FormVersion == null || evaluation.FormVersion.Form.IsDefault)
+                : query.Where(evaluation => evaluation.FormVersion != null && evaluation.FormVersion.FormId == formId
+                    || evaluation.FormVersion == null && dbContext.InspectionForms.Any(form => form.Id == formId && form.IsDefault));
+        return query;
+    }
+
     private IQueryable<Evaluation> QueryDetails(bool asNoTracking = true)
     {
         var query = asNoTracking ? dbContext.Evaluations.AsNoTracking() : dbContext.Evaluations;
         return Visible(query)
+        .Include(evaluation => evaluation.FormVersion)
         .Include(evaluation => evaluation.Site)
         .Include(evaluation => evaluation.ClientOrganization)
         .Include(evaluation => evaluation.ContractorOrganization)
