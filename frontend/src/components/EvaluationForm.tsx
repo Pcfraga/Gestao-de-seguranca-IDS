@@ -6,6 +6,7 @@ import { apiRequest, defaultInspectionId, type InspectionScope, type ChecklistCa
 interface EvaluationFormProps {
   evaluationId?: string
   initialScope?: InspectionScope
+  canCreateCatalog: boolean
   onClose: () => void
   onCreated: (evaluation: EvaluationResult) => void
 }
@@ -20,7 +21,7 @@ function today() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export function EvaluationForm({ evaluationId, initialScope, onClose, onCreated }: EvaluationFormProps) {
+export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, onClose, onCreated }: EvaluationFormProps) {
   const [catalog, setCatalog] = useState<ChecklistCatalog | null>(null)
   const [templates, setTemplates] = useState<InspectionFormTemplate[]>([])
   const [formVersionId, setFormVersionId] = useState<string | null>(null)
@@ -262,10 +263,10 @@ export function EvaluationForm({ evaluationId, initialScope, onClose, onCreated 
             <label>Data da avaliação<input onChange={(event) => setEvaluationDate(event.target.value)} required type="date" value={evaluationDate} /></label>
             <label>Hora<input onChange={(event) => setEvaluationTime(event.target.value)} type="time" value={evaluationTime} /></label>
             <label>Pessoas observadas<input onChange={(event) => setObservedPeople(event.target.value)} step="any" type="number" value={observedPeople} /></label>
-            <CatalogPicker label="Local / projeto" placeholder="Selecionar local" value={siteId} options={catalog.sites.map((site) => ({ id: site.id, label: site.projectOrIsland ? `${site.name} · ${site.projectOrIsland}` : site.name }))} onChange={setSiteId} createTitle="Novo local" createSecondaryLabel="Projeto / ilha (opcional)" onCreate={createSite} />
-            <CatalogPicker label="Cliente" placeholder="Selecionar cliente" value={clientId} options={catalog.organizations.filter((organization) => organization.kind === 'Client').map((organization) => ({ id: organization.id, label: organization.name }))} onChange={setClientId} createTitle="Novo cliente" onCreate={(name) => createOrganization(name, 'Client')} />
-            <CatalogPicker label="Contratada" placeholder="Selecionar contratada" value={contractorId} options={catalog.organizations.filter((organization) => organization.kind === 'Contractor').map((organization) => ({ id: organization.id, label: organization.name }))} onChange={setContractorId} createTitle="Nova contratada" onCreate={(name) => createOrganization(name, 'Contractor')} />
-            <CatalogPicker label="Subcontratada" placeholder="Selecionar subcontratada" value={subcontractorId} options={catalog.organizations.filter((organization) => organization.kind === 'Subcontractor').map((organization) => ({ id: organization.id, label: organization.name }))} onChange={setSubcontractorId} createTitle="Nova subcontratada" onCreate={(name) => createOrganization(name, 'Subcontractor')} />
+            <CatalogPicker label="Local / projeto" placeholder="Selecionar local" value={siteId} options={catalog.sites.map((site) => ({ id: site.id, label: site.projectOrIsland ? `${site.name} · ${site.projectOrIsland}` : site.name }))} canCreate={canCreateCatalog} onChange={setSiteId} createTitle="Novo local" createSecondaryLabel="Projeto / ilha (opcional)" onCreate={createSite} />
+            <CatalogPicker label="Cliente" placeholder="Selecionar cliente" value={clientId} options={catalog.organizations.filter((organization) => organization.kind === 'Client').map((organization) => ({ id: organization.id, label: organization.name }))} canCreate={canCreateCatalog} onChange={setClientId} createTitle="Novo cliente" onCreate={(name) => createOrganization(name, 'Client')} />
+            <CatalogPicker label="Contratada" placeholder="Selecionar contratada" value={contractorId} options={catalog.organizations.filter((organization) => organization.kind === 'Contractor').map((organization) => ({ id: organization.id, label: organization.name }))} canCreate={canCreateCatalog} onChange={setContractorId} createTitle="Nova contratada" onCreate={(name) => createOrganization(name, 'Contractor')} />
+            <CatalogPicker label="Subcontratada" placeholder="Selecionar subcontratada" value={subcontractorId} options={catalog.organizations.filter((organization) => organization.kind === 'Subcontractor').map((organization) => ({ id: organization.id, label: organization.name }))} canCreate={canCreateCatalog} onChange={setSubcontractorId} createTitle="Nova subcontratada" onCreate={(name) => createOrganization(name, 'Subcontractor')} />
             <label>Auditor líder<input onChange={(event) => setLeadAuditorName(event.target.value)} value={leadAuditorName} /></label>
             <label>Auditor<input onChange={(event) => setAuditorName(event.target.value)} value={auditorName} /></label>
             <label>Acompanhante<input onChange={(event) => setCompanionName(event.target.value)} value={companionName} /></label>

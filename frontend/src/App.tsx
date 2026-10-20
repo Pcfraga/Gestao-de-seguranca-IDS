@@ -106,6 +106,7 @@ function App() {
   const [companyName, setCompanyName] = useState('')
   const [profileError, setProfileError] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [canManageCatalog, setCanManageCatalog] = useState(false)
   const [profileReady, setProfileReady] = useState(false)
   const [showEvaluationForm, setShowEvaluationForm] = useState(false)
   const [editingEvaluationId, setEditingEvaluationId] = useState<string | null>(null)
@@ -119,6 +120,7 @@ function App() {
     const handleUnauthorized = () => {
       clearBranding()
       setIsAdmin(false)
+      setCanManageCatalog(false)
       setProfileReady(false)
       setShowEvaluationForm(false)
       setActiveSection('overview')
@@ -139,6 +141,7 @@ function App() {
       setDisplayName(me.displayName || 'Usuário')
       setCompanyName(me.companyName)
       setIsAdmin(me.roles.includes('ADMINISTRADOR'))
+      setCanManageCatalog(me.roles.some(role => role === 'ADMINISTRADOR' || role === 'GESTOR'))
       setProfileReady(true)
     }).catch(error => {
       if (active) setProfileError(error instanceof Error ? error.message : 'Não foi possível carregar sua empresa.')
@@ -166,6 +169,7 @@ function App() {
     setProfileReady(false)
     setShowEvaluationForm(false)
     setIsAdmin(false)
+    setCanManageCatalog(false)
     setIsAuthenticated(false)
     setActiveSection('overview')
   }
@@ -241,6 +245,7 @@ function App() {
             <EvaluationForm
               initialScope={inspectionScope ?? undefined}
               evaluationId={editingEvaluationId ?? undefined}
+              canCreateCatalog={canManageCatalog}
               onClose={() => setShowEvaluationForm(false)}
               onCreated={() => {
                 setShowEvaluationForm(false)

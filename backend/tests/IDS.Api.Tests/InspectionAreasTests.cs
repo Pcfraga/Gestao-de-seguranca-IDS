@@ -82,6 +82,13 @@ public sealed class InspectionAreasTests
             entry => entry.Id == area.Id);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await common.PostAsJsonAsync("/api/inspection-areas", new { name = "Não permitida" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await common.PostAsJsonAsync("/api/catalog/sites", new { name = "Local não permitido", projectOrIsland = (string?)null })).StatusCode);
+        foreach (var kind in new[] { "Client", "Contractor", "Subcontractor" })
+        {
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await common.PostAsJsonAsync("/api/catalog/organizations", new { name = $"Cadastro não permitido {kind}", kind })).StatusCode);
+        }
     }
 
     private static async Task AssertScope(HttpClient client, string query, int count, decimal quantity)
