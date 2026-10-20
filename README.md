@@ -113,6 +113,10 @@ No Render, é possível aplicar as migrations na inicialização definindo `APPL
 
 ## Dados e relatório IPF
 
+### Guia de uso dentro do sistema
+
+O botão **Guia de uso**, no menu lateral, está disponível para todos os usuários autenticados. O tutorial tem índice por assunto e passos para primeiro acesso, contas e permissões, áreas e modelos versionados, cadastros de clientes/contratadas/locais, avaliações, consulta de dados, IPF manual e composição por disciplinas. Os cálculos são explicados em linguagem simples com exemplos numéricos, sem exigir a leitura de fórmulas. Inclui os cuidados com dados incompletos, rascunhos, escalas de notas, histórico, PDFs e limitações atuais dos indicadores.
+
 A consolidação de Dados é servida por `GET /api/dashboard/data?from=&to=&siteId=&contractorId=`. O histórico anual de IPF manual usa `GET /api/reports/ipf/{year}?contractorId=`; perfis `ADMINISTRADOR` e `GESTOR` podem registrar ou substituir um mês com `PUT /api/reports/ipf/{year}/{month}`. Nessa modalidade, informe o IPF manualmente conforme a fonte aprovada; a gravação não calcula a composição por disciplinas. A tabela `monthly_ipf_records` é criada pela migration `AddMonthlyIpfHistory`.
 
 ### IPF por disciplinas e pesos

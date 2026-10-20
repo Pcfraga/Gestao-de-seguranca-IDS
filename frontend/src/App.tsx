@@ -5,6 +5,7 @@ import {
   ArrowDownRight,
   ArrowRight,
   BarChart3,
+  BookOpen,
   CalendarDays,
   Check,
   ChevronDown,
@@ -47,9 +48,10 @@ import { clearBranding, defaultPrimaryColor, fetchBranding, loadBranding, readLo
 import './ids.css'
 import { InspectionScopeSelector } from './components/InspectionScopeSelector'
 import { IpfCompositionReport } from './components/IpfCompositionReport'
+import { UserGuide } from './components/UserGuide'
 import { inspectionScopeQuery, type InspectionScope } from './lib/api'
 
-type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'forms' | 'settings' | 'users' | 'account'
+type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'forms' | 'settings' | 'users' | 'account' | 'guide'
 
 const sections: Array<{ id: Section; label: string; icon: typeof LayoutDashboard }> = [
   { id: 'overview', label: 'Visão geral', icon: LayoutDashboard },
@@ -69,6 +71,7 @@ const sectionCopy: Record<Section, { title: string; description: string }> = {
   settings: { title: 'Configurações', description: 'Cadastros e parâmetros disponíveis para o seu perfil.' },
   users: { title: 'Usuários e perfis', description: 'Crie usuários, defina perfis e controle o acesso ao sistema.' },
   account: { title: 'Minha conta', description: 'Altere sua senha de acesso ao sistema.' },
+  guide: { title: 'Guia de uso', description: 'Aprenda a cadastrar, avaliar e interpretar os resultados, do primeiro acesso ao IPF.' },
 }
 
 const metrics = [
@@ -202,6 +205,9 @@ function App() {
             <UsersRound size={18} strokeWidth={1.8} /><span>Usuários e perfis</span>
           </button>
           </>}
+          <button className={`nav-link ${activeSection === 'guide' ? 'active' : ''}`} onClick={() => { setShowEvaluationForm(false); setActiveSection('guide') }} type="button">
+            <BookOpen size={18} strokeWidth={1.8} /><span>Guia de uso</span>
+          </button>
           <button className={`nav-link ${activeSection === 'account' ? 'active' : ''}`} onClick={() => { setShowEvaluationForm(false); setActiveSection('account') }} type="button">
             <UserRound size={18} strokeWidth={1.8} /><span>Minha conta</span>
           </button>
@@ -246,10 +252,10 @@ function App() {
           ) : <>
           <div className="page-heading">
             <div><p className="eyebrow">PAINEL DE SEGURANÇA</p><h1>{activeCopy.title}</h1><p className="page-description">{activeCopy.description}</p></div>
-            <div className="heading-actions">
+            {activeSection !== 'guide' && <div className="heading-actions">
               <label className="period-control"><CalendarDays size={17} /><input aria-label="Selecionar mês de referência" onChange={(event) => setSelectedMonth(event.target.value)} type="month" value={selectedMonth} /></label>
               <button className="secondary-button" type="button" onClick={() => { setEditingEvaluationId(null); setActiveSection('evaluations'); setShowEvaluationForm(true) }}><Plus size={17} /> Nova avaliação</button>
-            </div>
+            </div>}
           </div>
 
           {activeSection === 'reports' && <div className="ipf-report-modes" role="group" aria-label="Tipo de relatório IPF">
@@ -268,6 +274,7 @@ function App() {
           {activeSection === 'settings' && isAdmin && <SettingsView />}
           {activeSection === 'users' && isAdmin && <div className="settings-grid"><UsersAdmin /></div>}
           {activeSection === 'account' && <div className="settings-grid"><AccountPassword /></div>}
+          {activeSection === 'guide' && <UserGuide />}
 
           <footer className="page-footer"><span>IDS <span className="footer-divider">·</span> Gestão de segurança</span><span>Regras de cálculo centralizadas na API</span></footer>
           </>}

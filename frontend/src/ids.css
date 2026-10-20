@@ -671,3 +671,32 @@ th { color: #445449; font-size: 11px; }
   .ipf-weight-row > button { grid-column: 2; justify-self: end; }
   .ipf-composition-result .panel-heading { flex-wrap: wrap; }
 }
+.user-guide { display: grid; gap: 20px; max-width: 1120px; }
+.guide-welcome { display: flex; align-items: flex-start; gap: 16px; padding: 24px; }
+.guide-welcome > svg { flex-shrink: 0; color: #2c6347; }
+.guide-welcome h2, .guide-index h2, .guide-chapter h2 { margin: 0 0 14px; color: #243a2c; font-size: 20px; line-height: 1.4; }
+.guide-index, .guide-chapter { padding: 24px; scroll-margin-top: 20px; }
+.guide-index > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; }
+.guide-index a, .guide-back { color: #245b40; text-decoration: underline; text-underline-offset: 3px; line-height: 1.6; font-size: 14px; }
+.guide-index a { padding: 6px 0; }
+.guide-index a:focus-visible, .guide-back:focus-visible { outline: 2px solid #245b40; outline-offset: 4px; border-radius: 2px; }
+.guide-chapter h3 { margin: 24px 0 10px; color: #304f3b; font-size: 16px; }
+.guide-chapter p, .guide-chapter li, .guide-chapter dd, .guide-welcome p { color: #46564b; font-size: 14px; line-height: 1.85; margin: 10px 0; overflow-wrap: anywhere; }
+.guide-chapter ol, .guide-chapter ul { padding-left: 24px; }
+.guide-chapter dt { color: #304f3b; font-size: 14px; font-weight: 700; margin-top: 20px; }
+.guide-chapter dd { margin-left: 0; }
+.guide-back { display: inline-block; margin-top: 18px; }
+.guide-note { display: flex; align-items: flex-start; gap: 12px; padding: 16px; margin-top: 20px; background: #f0f6f1; border-left: 3px solid #5d8a6a; border-radius: 5px; }
+.guide-note > svg { color: #346047; flex-shrink: 0; margin-top: 5px; }
+.guide-note p { margin: 0; }
+.guide-table-scroll { overflow-x: auto; }
+.guide-table-scroll table { min-width: 650px; width: 100%; border-collapse: collapse; }
+.guide-table-scroll caption { text-align: left; color: #46564b; font-size: 14px; padding-bottom: 12px; }
+.guide-table-scroll td, .guide-table-scroll th { padding: 12px; text-align: left; font-size: 13px; line-height: 1.7; border-bottom: 1px solid var(--line); white-space: normal; }
+.guide-table-scroll thead th { background: #f0f6f1; color: #304f3b; }
+.guide-table-scroll tbody th { font-weight: 600; color: #46564b; }
+@media (max-width: 700px) {
+  .guide-index > div { grid-template-columns: minmax(0, 1fr); }
+  .guide-welcome, .guide-index, .guide-chapter { padding: 18px; }
+  .guide-welcome { flex-direction: column; }
+}
