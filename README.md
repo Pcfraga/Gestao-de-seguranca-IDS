@@ -148,6 +148,32 @@ O SQL da migration pode ser inspecionado sem conectar ao banco:
 dotnet ef migrations script --project backend/src/IDS.Infrastructure/IDS.Infrastructure.csproj --startup-project backend/src/IDS.Api/IDS.Api.csproj
 ```
 
+## Firebase Hosting e API no Render
+
+O frontend de producao em `https://ids-gestao-seguranca.web.app` usa a API
+`https://ids-api-ya5l.onrender.com`. Os workflows do Firebase definem
+`VITE_API_BASE_URL` durante o build. Para um build local de producao, configure
+`VITE_API_BASE_URL=https://ids-api-ya5l.onrender.com` em `frontend/.env.production`
+(arquivo local ignorado pelo Git).
+
+No servico dessa API no Render, configure
+`ALLOWED_ORIGINS=https://ids-gestao-seguranca.web.app`, sem barra final, e conclua
+um novo deploy. Outras origens autorizadas devem ser separadas por virgula;
+canais de preview do Firebase precisam de suas proprias origens autorizadas.
+O endpoint `GET /api/health/ready` verifica o banco e as migrations; o preflight
+`OPTIONS /api/auth/register-company` deve retornar
+`Access-Control-Allow-Origin: https://ids-gestao-seguranca.web.app` para essa origem.
+
+Alterar `VITE_API_BASE_URL` exige gerar e publicar novamente o frontend, pois
+a URL e incorporada ao JavaScript pelo Vite. Para publicacao manual:
+
+```powershell
+cd frontend
+npm run build
+cd ..
+firebase deploy --only hosting --project ids-gestao-seguranca
+```
+
 ## Compose full-stack
 
 Depois de configurar `.env`, o Compose pode iniciar PostgreSQL, API e frontend:
