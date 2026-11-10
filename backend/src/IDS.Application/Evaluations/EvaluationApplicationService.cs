@@ -120,7 +120,8 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         var trend = trendRecords.Select(record => new DashboardTrendPointDto(
             record.Id,
             record.EvaluationDate,
-            IdsCalculator.Calculate(record.Observations, record.ObservedPeople ?? 0m).Score)).ToArray();
+            IdsCalculator.Calculate(record.Observations, record.ObservedPeople ?? 0m).Score,
+            record.SiteId)).ToArray();
         return new DashboardSummaryDto(
             totals.EvaluationCount,
             totals.ObservedPeopleTotal,
@@ -183,6 +184,101 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
             .OrderBy(value => value.Category)
             .ThenBy(value => value.Name)
             .ToArray();
+        var weekdayRecords = records
+            .Where(record => record.EvaluationDate.DayOfWeek != DayOfWeek.Sunday)
+            .ToArray();
+        var weekdays = weekdayRecords
+            .GroupBy(record => new
+            {
+                WeekNumber = ((record.EvaluationDate.Day - 1) / 7) + 1,
+                DayOfWeek = (int)record.EvaluationDate.DayOfWeek
+            })
+            .OrderBy(group => group.Key.WeekNumber)
+            .ThenBy(group => group.Key.DayOfWeek)
+            .Select(group =>
+            {
+                var dayObservations = group.SelectMany(record => record.Observations).ToArray();
+                var dayLow = SumQuantityForWeight(dayObservations, 0.3m);
+                var dayMedium = SumQuantityForWeight(dayObservations, 1m);
+                var dayHigh = SumQuantityForWeight(dayObservations, 3m);
+                var ids = group.Select(record => IdsCalculator.Calculate(
+                        record.Observations.Select(observation => new ObservationInput(observation.Quantity, observation.SeverityWeight)),
+                        record.ObservedPeople ?? 0m).Score)
+                    .Where(score => score.HasValue)
+                    .Select(score => score.GetValueOrDefault())
+                    .ToArray();
+                return new ConsolidationWeekdayDto(
+                    group.Key.WeekNumber,
+                    group.Key.DayOfWeek,
+                    group.Count(),
+                    group.Sum(record => record.ObservedPeople ?? 0m),
+                    dayLow + dayMedium + dayHigh,
+                    (dayLow * 0.3m) + dayMedium + (dayHigh * 3m),
+                    dayLow,
+                    dayMedium,
+                    dayHigh,
+                    ids.Length > 0 ? ids.Average() : null);
+            })
+            .ToArray();
+        var weeklyCategories = weekdayRecords
+            .SelectMany(record => record.Observations.Select(observation => new
+            {
+                WeekNumber = ((record.EvaluationDate.Day - 1) / 7) + 1,
+                observation.CategoryCode,
+                observation.CategoryName,
+                observation.Quantity
+            }))
+            .GroupBy(observation => new { observation.WeekNumber, observation.CategoryCode, observation.CategoryName })
+            .Select(group => new ConsolidationWeekCategoryDto(
+                group.Key.WeekNumber,
+                group.Key.CategoryCode,
+                group.Key.CategoryName,
+                group.Sum(observation => observation.Quantity ?? 0m)))
+            .OrderBy(value => value.WeekNumber)
+            .ThenBy(value => value.Name)
+            .ToArray();
+        var weeklyItems = weekdayRecords
+            .SelectMany(record => record.Observations.Select(observation => new
+            {
+                WeekNumber = ((record.EvaluationDate.Day - 1) / 7) + 1,
+                observation.CategoryCode,
+                observation.CategoryName,
+                observation.ItemCode,
+                observation.ItemName,
+                observation.Quantity
+            }))
+            .GroupBy(observation => new
+            {
+                observation.WeekNumber,
+                observation.CategoryCode,
+                observation.CategoryName,
+                observation.ItemCode,
+                observation.ItemName
+            })
+            .Select(group => new ConsolidationWeekItemDto(
+                group.Key.WeekNumber,
+                group.Key.CategoryCode,
+                group.Key.CategoryName,
+                group.Key.ItemCode,
+                group.Key.ItemName,
+                group.Sum(observation => observation.Quantity ?? 0m)))
+            .OrderBy(value => value.WeekNumber)
+            .ThenBy(value => value.Category)
+            .ThenBy(value => value.Name)
+            .ToArray();
+        var metadata = new ConsolidationReportMetadataDto(
+            DistinctMetadata(records.Select(record => record.ProjectOrIsland)),
+            DistinctMetadata(records.Select(record => record.Site)),
+            DistinctMetadata(records.Select(record => record.Client)),
+            DistinctMetadata(records.Select(record => record.Evaluator)),
+            records.GroupBy(record => record.SiteId)
+                .Select(group => new ConsolidationReportMetadataBySiteDto(
+                    group.Key,
+                    DistinctMetadata(group.Select(record => record.ProjectOrIsland)),
+                    DistinctMetadata(group.Select(record => record.Site)),
+                    DistinctMetadata(group.Select(record => record.Client)),
+                    DistinctMetadata(group.Select(record => record.Evaluator))))
+                .ToArray());
 
         return new DataConsolidationDto(
             from,
@@ -197,7 +293,11 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
             days,
             categories,
             items,
-            "REGRA A VALIDAR: o agrupamento S1-S5 depende da regra de calendário da planilha.");
+            "S1-S5 agrupam os dias 1-7, 8-14, 15-21, 22-28 e 29-31; domingos são excluídos.",
+            weekdays,
+            weeklyCategories,
+            weeklyItems,
+            metadata);
     }
 
     private static void ValidateReferences(CreateEvaluationRequest request, EvaluationReferenceData references)
@@ -245,6 +345,14 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         decimal weight) => observations
             .Where(observation => observation.SeverityWeight == weight)
             .Sum(observation => observation.Quantity ?? 0m);
+
+    private static string[] DistinctMetadata(IEnumerable<string?> values) => values
+        .Select(value => value?.Trim())
+        .Where(value => !string.IsNullOrEmpty(value))
+        .Select(value => value!)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
 
     private static void ApplyRequest(
         Evaluation evaluation,

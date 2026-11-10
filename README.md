@@ -11,8 +11,9 @@ O projeto começa a substituir o preenchimento manual da planilha IDS por um sis
 - Login bearer, cadastro de empresa com administrador, isolamento por empresa e rate limit na autenticação.
 - Cadastro, consulta, edição e envio explícito de avaliações; rascunhos continuam editáveis, avaliações enviadas ficam somente leitura. A lista pode ser filtrada por status, contratada e local e exportada em CSV; cada avaliação também pode ser gerada em PDF.
 - Dashboard com totais mensais, proporções por severidade e evolução do IDS por avaliação; a média semanal/mensal continua desabilitada até validar o calendário da planilha.
-- Aba **Dados** com filtros de período, local e contratada e consolidação por data, categoria, item e severidade. Agrupamento semanal ainda depende de validação da regra do Excel.
-- Aba **Relatórios** com IPF manual por formulário e composição opcional de IPF pelas médias de IDS de até quatro disciplinas com pesos percentuais. Cada modalidade mantém seu próprio histórico mensal e exportação PDF; a composição não substitui a regra manual da planilha.
+- Aba **Dados** com consolidação completa por data, categoria, item e severidade e matrizes S1–S5 (dias 1–7, 8–14, 15–21, 22–28 e 29–31, sem domingos).
+- Aba **Relatório IPF**, com **Dados Relatório Mensal** e os 14 gráficos do modelo: históricos de IPF/IDS, IDS semanal, pessoas, desvios, severidades em quantidade/percentual, categorias e seis detalhamentos por itens. A tela e o PDF compartilham o mesmo gerador SVG, com ordem, séries e paleta extraídas da planilha. O IPF salvo tem prioridade sobre a sugestão de IDS; contratada, local, área e formulário filtram os dados das avaliações.
+- Composição opcional de IPF pelas médias de IDS de até quatro disciplinas com pesos percentuais. Cada modalidade mantém seu próprio histórico mensal e exportação PDF; a composição não substitui a regra manual da planilha.
 - Testes HTTP da API para autorização por padrão, health check sem banco e CORS local; teste de aplicação para média anual e gravação mensal de IPF.
 
 Exportação consolidada PDF/Excel, importação histórica, auditoria completa, cálculo mensal final de IDS e validação com avaliações reais do Excel ainda estão pendentes. Não use o sistema para decisões operacionais até validar o IDS mensal e comparar com avaliações preenchidas no Excel.
@@ -63,6 +64,14 @@ npm run dev
 Acesse `http://localhost:5173`. O Vite encaminha `/api` para `http://localhost:5141`. O endpoint anônimo de prontidão é `GET /api/health/ready`; retorna `503` se o PostgreSQL não estiver acessível.
 
 Os botões **Gerar PDF** abrem a janela de impressão do navegador. Selecione **Salvar como PDF** como destino para baixar ou salvar o documento.
+
+O Relatório IPF preserva as faixas verdes `#00B050` e as cores dos gráficos do modelo, independentemente da cor configurada para os demais PDFs. Nome e logo da empresa continuam no cabeçalho. As tabelas recolhíveis abaixo dos gráficos permitem conferir as séries sem entrar na impressão.
+
+Testes direcionados da fórmula do IPF e dos 14 gráficos (Node.js 24, sem dependências adicionais):
+
+```powershell
+node --experimental-strip-types --test frontend\src\lib\monthlyIpf.test.mjs frontend\src\lib\workbookReport.test.mjs
+```
 
 No primeiro acesso, escolha **Sou gestor: cadastrar minha empresa**, informe o nome da empresa, seu nome, e-mail e senha. O sistema cria uma empresa independente e sua conta de `ADMINISTRADOR`; não exige chave do Render. A senha deve ter pelo menos 8 caracteres, sem exigência de composição. O login usa `POST /api/auth/login`; cada e-mail identifica uma conta única no sistema e não pode ser reutilizado em outra empresa.
 
@@ -117,7 +126,7 @@ No Render, é possível aplicar as migrations na inicialização definindo `APPL
 
 O botão **Guia de uso**, no menu lateral, está disponível para todos os usuários autenticados. O tutorial tem índice por assunto e passos para primeiro acesso, contas e permissões, áreas e modelos versionados, cadastros de clientes/contratadas/locais, avaliações, consulta de dados, IPF manual e composição por disciplinas. Os cálculos são explicados em linguagem simples com exemplos numéricos, sem exigir a leitura de fórmulas. Inclui os cuidados com dados incompletos, rascunhos, escalas de notas, histórico, PDFs e limitações atuais dos indicadores.
 
-A consolidação de Dados é servida por `GET /api/dashboard/data?from=&to=&siteId=&contractorId=`. O histórico anual de IPF manual usa `GET /api/reports/ipf/{year}?contractorId=`; perfis `ADMINISTRADOR` e `GESTOR` podem registrar ou substituir um mês com `PUT /api/reports/ipf/{year}/{month}`. Nessa modalidade, informe o IPF manualmente conforme a fonte aprovada; a gravação não calcula a composição por disciplinas. A tabela `monthly_ipf_records` é criada pela migration `AddMonthlyIpfHistory`.
+A consolidação de Dados é servida por `GET /api/dashboard/data?from=&to=&siteId=&contractorId=`. O histórico anual de IPF por formulário usa `GET /api/reports/ipf/{year}?contractorId=`; perfis `ADMINISTRADOR` e `GESTOR` podem registrar ou substituir um mês com `PUT /api/reports/ipf/{year}/{month}`. A tela calcula `((média IDS (%) × 60 × fator) / 100 + parcela adicional) / 10`, com fator e parcela digitáveis (inicialmente 0,8 e 20). Exemplo: IDS 88,31% resulta em IPF 6,2389. A API recebe `multiplicationFactor` e `additionalScore`, recalcula a partir de todas as avaliações válidas do mês/contratada/área/formulário/local, sem arredondamento intermediário, e salva o resultado a quatro casas decimais e os dois parâmetros. Sem IDS calculável, a gravação por fórmula é rejeitada. Registros anteriores são preservados até novo cálculo; chamadas legadas sem os dois parâmetros continuam aceitando `value`. A tabela `monthly_ipf_records` é criada por `AddMonthlyIpfHistory`; aplique também `AddMonthlyIpfFormulaParameters` antes de usar os novos campos. Essa fórmula não altera a composição por disciplinas nem o formato dos gráficos.
 
 ### IPF por disciplinas e pesos
 

@@ -152,8 +152,8 @@ export function UserGuide() {
         <li>Em <strong>Indicadores</strong>, acompanhe as distribuições e comparações do período, observando o significado de cada indicador e os avisos da tela.</li>
       </ol>
       <p>Rascunhos e avaliações enviadas entram nas consolidações atuais. Os resultados respeitam seu acesso: o administrador consulta a empresa inteira; o usuário comum consulta suas próprias avaliações. Dois perfis podem, portanto, enxergar médias diferentes no mesmo período.</p>
-      <p><strong>Limite importante:</strong> a listagem de avaliações retorna até 200 registros. Médias e gráficos baseados nessa lista não devem ser usados como garantia de cobertura de todos os registros em períodos muito grandes. As consolidações de Dados e a composição por disciplinas consultam seus conjuntos de avaliações separadamente.</p>
-      <p>O IDS mensal final e o agrupamento semanal ainda dependem da validação da regra de calendário. Uma média exibida de notas de avaliações não substitui esse indicador final pendente.</p>
+      <p>A lista de avaliações retorna até 200 registros. As tabelas semanais de <strong>Dados</strong> e o histórico de IDS do <strong>Relatório IPF</strong> usam consolidações completas, sem esse limite da lista.</p>
+      <p>As tabelas S1–S5 agrupam os dias 1–7, 8–14, 15–21, 22–28 e 29–31, excluindo domingos. Em <strong>Relatório IPF</strong>, use as abas <strong>Dados Relatório Mensal</strong> para consultar os dados e registrar o IPF, e <strong>Relatório IPF</strong> para consultar o histórico e imprimir o PDF.</p>
     </Chapter>
 
     <Chapter id="contas-ids">
@@ -173,22 +173,24 @@ export function UserGuide() {
     </Chapter>
 
     <Chapter id="ipf-manual">
-      <p>O IPF manual é o valor mensal informado por um responsável, conforme a fonte aprovada pela empresa. Ele não é a composição automática das disciplinas.</p>
+      <p>O IPF por formulário é calculado a partir da média do IDS do mês, com um fator multiplicador e uma parcela adicional digitáveis. Ele não é a composição automática das disciplinas.</p>
       <ol>
-        <li>Abra <strong>Relatórios → IPF manual por formulário</strong>.</li>
+        <li>Abra <strong>Relatório IPF → IPF manual por formulário → Dados Relatório Mensal</strong>.</li>
         <li>Selecione mês de referência, área, tipo de formulário e contratada.</li>
-        <li>Confira a sugestão baseada na média dos IDS calculáveis das avaliações desse recorte. O campo pode vir preenchido com essa sugestão; sem ela, pode mostrar o valor anteriormente salvo.</li>
-        <li>Revise a sugestão e informe o valor aprovado em <strong>Valor do IPF</strong>. Opcionalmente, associe um local.</li>
+        <li>Opcionalmente, selecione um local. Confira a <strong>Média do IDS (%)</strong> das avaliações calculáveis desse recorte.</li>
+        <li>Preencha <strong>Fator multiplicador</strong> (inicialmente 0,8) e <strong>Parcela adicional</strong> (inicialmente 20). O <strong>Valor do IPF</strong> é calculado automaticamente.</li>
         <li>Como Administrador ou GESTOR, clique em <strong>Salvar IPF</strong>.</li>
       </ol>
       <p>Salvar o mesmo mês, contratada, área e formulário atualiza o registro desse recorte. Outros tipos de formulário mantêm históricos independentes. A média anual/período considera somente meses preenchidos; meses ausentes não viram zero.</p>
-      <p>Use <strong>Gerar PDF</strong> para emitir o histórico. A referência de IPF acima de 7 indicada na planilha não significa que a sugestão IDS foi convertida para uma escala de zero a dez: confirme a escala e o critério aprovado antes de registrar.</p>
+      <p>A fórmula é <strong>((média do IDS em percentual × 60 × fator) / 100 + parcela adicional) / 10</strong>. Com IDS de 88,31%, fator 0,8 e parcela 20, o IPF é <strong>6,2389</strong>. O cálculo usa a média sem arredondamento intermediário e salva o resultado com quatro casas decimais. Sem IDS calculável, não é possível salvar um novo cálculo. Os dois campos são salvos junto com o resultado e restaurados ao reabrir o mês.</p>
+      <p>Registros anteriores são preservados até você alterar os campos ou salvar novamente. Ao salvar, o servidor recalcula usando as avaliações atuais. Use <strong>Gerar PDF</strong> para emitir o histórico; os gráficos não mudam de formato.</p>
+      <p>Na aba <strong>Relatório IPF</strong>, os 14 gráficos seguem a ordem do modelo: IPF, histórico de IDS, IDS por semana, pessoas observadas, desvios registrados, severidade em quantidade e percentual, categorias, EPI, posição das pessoas, ação quando observado, procedimentos, ferramentas e equipamentos e padrões de organização. O PDF usa os mesmos gráficos, dados e cores da tela. Os seletores de contratada e local ficam disponíveis nas duas abas.</p>
     </Chapter>
 
     <Chapter id="ipf-disciplinas">
       <p>Esta opção junta as médias das disciplinas para obter uma nota mensal da contratada, dando mais importância às áreas que você escolher. Ela tem histórico próprio e não substitui os registros manuais por formulário.</p>
       <ol>
-        <li>Abra <strong>Relatórios → IPF por disciplinas e pesos</strong> e selecione a contratada e o mês de referência.</li>
+        <li>Abra <strong>Relatório IPF → IPF por disciplinas e pesos</strong> e selecione a contratada e o mês de referência.</li>
         <li>Sem divisão, deixe <strong>uma disciplina com 100%</strong>.</li>
         <li>Para dividir a nota, clique em <strong>Adicionar disciplina</strong>. Escolha de duas a quatro áreas diferentes e distribua os percentuais até somarem <strong>100%</strong>.</li>
         <li>Clique em <strong>Calcular IPF por disciplinas</strong>. Cada média reúne todos os formulários e versões da área para aquela contratada no mês, respeitando as permissões de consulta.</li>
@@ -215,7 +217,7 @@ export function UserGuide() {
       <h3>Salvar documentos</h3>
       <p>Os botões de PDF abrem uma janela de impressão. Selecione <strong>Salvar como PDF</strong> como destino. Se nada abrir, permita pop-ups para este site e tente novamente. Confira contratada, período, área e modelo antes de compartilhar.</p>
       <h3>Identidade da empresa</h3>
-      <p>Como administrador, abra <strong>Configurações</strong> para ajustar nome, slogan, logo e cor dos relatórios. Salve as alterações. Os próximos PDFs usarão essa identidade; isso não altera as respostas das inspeções.</p>
+      <p>Como administrador, abra <strong>Configurações</strong> para ajustar nome, slogan, logo e cor dos relatórios. Salve as alterações. O Relatório IPF mantém a paleta da planilha para gráficos e faixas; o nome e o logo da empresa continuam no cabeçalho. Os demais PDFs usam a cor configurada. Isso não altera as respostas das inspeções.</p>
       <h3>Minha conta</h3>
       <p>Abra <strong>Minha conta</strong> e informe senha atual, nova senha de pelo menos oito caracteres e confirmação. Se esqueceu a senha, solicite redefinição ao administrador. Use o botão de saída do perfil para encerrar o acesso ao terminar, principalmente em computadores compartilhados.</p>
     </Chapter>

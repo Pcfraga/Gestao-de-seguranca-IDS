@@ -21,7 +21,8 @@ public interface IMonthlyIpfRepository
         Guid contractorId,
         CancellationToken cancellationToken,
         Guid? areaId = null,
-        Guid? formId = null);
+        Guid? formId = null,
+        Guid? siteId = null);
 
     Task<(string AreaName, string FormName)> ValidateScopeAsync(
         Guid? areaId,

@@ -24,13 +24,19 @@ public sealed record EvaluationTrendRecord(
     Guid Id,
     DateOnly EvaluationDate,
     decimal? ObservedPeople,
-    IReadOnlyCollection<ObservationInput> Observations);
+    IReadOnlyCollection<ObservationInput> Observations,
+    Guid? SiteId = null);
 
 public sealed record ConsolidationRecord(
     Guid EvaluationId,
     DateOnly EvaluationDate,
     decimal? ObservedPeople,
-    IReadOnlyCollection<ConsolidationObservationRecord> Observations);
+    IReadOnlyCollection<ConsolidationObservationRecord> Observations,
+    string? ProjectOrIsland = null,
+    string? Site = null,
+    string? Client = null,
+    string? Evaluator = null,
+    Guid? SiteId = null);
 
 public sealed record ConsolidationObservationRecord(
     string CategoryCode,

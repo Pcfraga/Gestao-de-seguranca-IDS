@@ -7,19 +7,30 @@ export interface LoginResponse {
 export interface EvaluationSummary {
   id: string
   evaluationDate: string
+  evaluationTime?: string | null
   status: string
   siteId?: string | null
   clientOrganizationId?: string | null
   contractorOrganizationId?: string | null
   subcontractorOrganizationId?: string | null
   site: string | null
+  projectOrIsland?: string | null
+  client?: string | null
   contractor: string | null
   leadAuditorName: string | null
+  auditorName?: string | null
+  areaName?: string
   indicators: {
     observedPeople: number | null
     totalDeviations: number
     ids: number | null
   }
+  observations?: Array<{
+    category: string
+    item: string
+    quantity: number | null
+    severityWeight: number | null
+  }>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -193,7 +204,7 @@ export interface DashboardSummary {
   highSeverityShare: number | null
   ids: number | null
   idsStatus: string
-  trend: Array<{ evaluationId: string; date: string; ids: number | null }>
+  trend: Array<{ evaluationId: string; date: string; ids: number | null; siteId: string | null }>
 }
 
 export interface DataConsolidation {
@@ -219,6 +230,33 @@ export interface DataConsolidation {
   categories: Array<{ code: string; name: string; quantity: number }>
   items: Array<{ categoryCode: string; category: string; code: string; name: string; quantity: number }>
   weekGroupingStatus: string
+  weekdays: Array<{
+    weekNumber: number
+    dayOfWeek: number
+    evaluationCount: number
+    observedPeople: number
+    totalDeviations: number
+    weightedDeviationTotal: number
+    lowSeverityDeviations: number
+    mediumSeverityDeviations: number
+    highSeverityDeviations: number
+    ids: number | null
+  }>
+  weeklyCategories: Array<{ weekNumber: number; code: string; name: string; quantity: number }>
+  weeklyItems: Array<{ weekNumber: number; categoryCode: string; category: string; code: string; name: string; quantity: number }>
+  metadata: {
+    projectOrIslands: string[]
+    sites: string[]
+    clients: string[]
+    evaluators: string[]
+    bySite: Array<{
+      siteId: string | null
+      projectOrIslands: string[]
+      sites: string[]
+      clients: string[]
+      evaluators: string[]
+    }>
+  }
 }
 
 export interface IpfAnnualHistory {
@@ -240,6 +278,8 @@ export interface IpfAnnualHistory {
     site: string | null
     value: number
     source: string
+    multiplicationFactor: number | null
+    additionalScore: number | null
     updatedAtUtc: string
   }>
 }

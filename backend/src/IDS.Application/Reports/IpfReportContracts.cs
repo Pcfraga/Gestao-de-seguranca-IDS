@@ -7,7 +7,9 @@ public sealed record UpsertMonthlyIpfRequest(
     Guid? SiteId,
     decimal Value,
     Guid? AreaId = null,
-    Guid? FormId = null);
+    Guid? FormId = null,
+    decimal? MultiplicationFactor = null,
+    decimal? AdditionalScore = null);
 
 public sealed record MonthlyIpfValueDto(
     Guid Id,
@@ -21,7 +23,9 @@ public sealed record MonthlyIpfValueDto(
     string Source,
     DateTimeOffset UpdatedAtUtc,
     Guid? AreaId = null,
-    Guid? FormId = null);
+    Guid? FormId = null,
+    decimal? MultiplicationFactor = null,
+    decimal? AdditionalScore = null);
 
 public sealed record IpfAnnualHistoryDto(
     int Year,

@@ -899,6 +899,9 @@ namespace IDS.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("AdditionalScore")
+                        .HasColumnType("numeric");
+
                     b.Property<Guid?>("AreaId")
                         .HasColumnType("uuid");
 
@@ -917,6 +920,9 @@ namespace IDS.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Month")
                         .HasColumnType("integer");
+
+                    b.Property<decimal?>("MultiplicationFactor")
+                        .HasColumnType("numeric");
 
                     b.Property<Guid?>("SiteId")
                         .HasColumnType("uuid");

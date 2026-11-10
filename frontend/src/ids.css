@@ -287,6 +287,7 @@ td { padding: 0; }
 .report-step { color: #496b52; font-size: 10px; font-weight: 700; letter-spacing: .9px; }
 .report-month-badge { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 7px; padding: 8px 11px; color: #2e543a; background: #edf4ee; border: 1px solid #dce9dd; border-radius: 6px; font-size: 12px; font-weight: 600; text-transform: capitalize; }
 .report-controls { display: grid; grid-template-columns: minmax(180px, 1.25fr) minmax(165px, 1fr) minmax(130px, .7fr) auto; align-items: end; gap: 14px; }
+.report-formula-controls { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 16px; }
 .report-controls label { display: flex; min-width: 0; flex-direction: column; gap: 7px; color: #34483a; font-size: 12px; font-weight: 600; }
 .report-controls input, .report-controls select { width: 100%; min-width: 0; height: 42px; padding: 0 11px; color: #263a2d; background: #fff; border: 1px solid #cfdacf; border-radius: 5px; font-size: 13px; }
 .report-controls input:focus, .report-controls select:focus { outline: 3px solid #3d765526; border-color: #3d7655; }
@@ -699,4 +700,39 @@ th { color: #445449; font-size: 11px; }
   .guide-index > div { grid-template-columns: minmax(0, 1fr); }
   .guide-welcome, .guide-index, .guide-chapter { padding: 18px; }
   .guide-welcome { flex-direction: column; }
+}
+.data-week-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.report-history-grid { display: flex; flex-direction: column; gap: 12px; }
+.data-week-grid .data-table-panel { padding: 15px; }
+.data-week-grid .panel-heading p { margin-bottom: 0; }
+.data-week-grid table { min-width: 540px; }
+.report-data-sheet { display: flex; flex-direction: column; gap: 16px; padding: 18px; }
+.report-data-fields { display: flex; flex-direction: column; gap: 0; margin: 0; }
+.report-data-fields > div { display: grid; grid-template-columns: minmax(170px, 30%) minmax(0, 1fr); align-items: center; gap: 12px; min-width: 0; padding: 10px 12px; border-bottom: 1px solid #e6ece5; }
+.report-data-fields dt { color: #78847b; font-size: 10px; }
+.report-data-fields dd { margin: 0; color: #304337; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.report-history-grid table { width: 100%; }
+.report-history-total th, .report-history-total td { background: #f0f5f0; font-weight: 700; }
+.nav-link.workbook-nav.active { color: #000; background: #f4b183; }
+.workbook-tabs { display: flex; flex-wrap: wrap; gap: 3px; border-bottom: 2px solid #ed7d31; margin-bottom: 18px; }
+.workbook-tabs button { padding: 10px 16px; border: 1px solid #c78d61; border-radius: 6px 6px 0 0; background: #f4b183; color: #000; font: 600 12px Arial, sans-serif; cursor: pointer; }
+.workbook-tabs button[aria-selected="true"] { background: #fff; border-bottom: 3px solid #ed7d31; }
+.workbook-tabs button:focus-visible { outline: 2px solid #002060; outline-offset: 3px; }
+.report-data-sheet { color: #000; font-family: Arial, sans-serif; border-color: #bfbfbf; border-radius: 0; }
+.report-data-sheet .report-data-fields > div { border: 1px solid #bfbfbf; border-bottom: 0; padding: 0; gap: 0; }
+.report-data-sheet .report-data-fields > div:last-child { border-bottom: 1px solid #bfbfbf; }
+.report-data-sheet .report-data-fields dt { color: #000; font-size: 12px; padding: 8px; }
+.report-data-sheet .report-data-fields dd { color: #000; background: #e2efda; border-left: 1px solid #bfbfbf; padding: 8px; align-self: stretch; }
+.report-data-sheet .monthly-results-band { margin: 0; padding: 7px 10px; background: #00b050; color: #fff; font-size: 14px; }
+.report-data-sheet .report-history-grid th, .report-data-sheet .report-history-grid td { border: 1px solid #bfbfbf; color: #000; }
+.report-data-sheet .report-history-grid thead th { background: #d9d9d9; text-transform: none; }
+.report-data-sheet .report-history-grid tbody td { background: #e2efda; }
+.report-data-sheet .report-history-grid .report-history-total > * { background: #fff; }
+.data-week-detail { grid-column: 1 / -1; }
+@media (max-width: 760px) {
+  .data-week-grid { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+  .data-week-detail { grid-column: auto; }
+}
+@media (max-width: 430px) {
+  .report-data-fields > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }

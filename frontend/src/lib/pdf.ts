@@ -1,5 +1,6 @@
 import type { EvaluationResult, IpfAnnualHistory, IpfComposition } from './api'
 import { loadBranding, shade } from './branding'
+import { workbookChartHtml, workbookReportStyles, type WorkbookChart } from './workbookReport'
 
 function printStyles(primary: string) {
   const border = shade(primary, 0.55)
@@ -195,6 +196,71 @@ export function ipfReportPdf(history: IpfAnnualHistory, upToMonth = 12) {
     </table>
     <table class="frame"><tr><td class="muted">O IPF é informado manualmente ou importado. A média considera somente os meses preenchidos; este relatório não calcula o IPF.</td></tr></table>
     <footer class="footer">Documento gerado pelo IDS · ${generatedAt()}</footer>`
+
+  return { title, content }
+}
+
+export interface MonthlyIpfReportData {
+  year: number
+  month: number
+  monthLabel: string
+  contractor: string
+  projectOrIsland: string | null
+  site: string | null
+  client: string | null
+  discipline: string
+  evaluatedBy: string | null
+  issuedAt: string
+  ipfValue: number | null
+  ipfAverage: number | null
+  idsAverage: number | null
+  idsAnnualAverage: number | null
+  ipfMonths: Array<{ month: number; value: number | null }>
+  idsMonths: Array<{ month: number; value: number | null }>
+  weeklyIds: Array<{ label: string; values: Array<number | null>; average: number | null }>
+  charts: WorkbookChart[]
+}
+
+export function monthlyIpfReportPdf(report: MonthlyIpfReportData) {
+  const percentage = (value: number | null) => value === null ? '—' : `${formatNumber(value * 100, 1)}%`
+  const issueDate = new Intl.DateTimeFormat('pt-BR').format(new Date(report.issuedAt))
+  const issueTime = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date(report.issuedAt))
+  const ipfStatus = report.ipfValue === null
+    ? 'Sem IPF informado'
+    : report.ipfValue > 7 ? '[Ok - Meta Alcançada]' : '[Resultado Abaixo da Meta]'
+  const branding = loadBranding()
+  const identification: Array<[string, string | null]> = [
+    ['Nome do projeto e Ilha', report.projectOrIsland],
+    ['Local do site', report.site],
+    ['Cliente', report.client],
+    ['Contratada', report.contractor],
+    ['Disciplina', report.discipline],
+    ['Mês e ano da avaliação', report.monthLabel],
+    ['Avaliado por', report.evaluatedBy],
+    ['Data de emissão', issueDate],
+    ['Horário de emissão', issueTime],
+  ]
+  const title = `Relatório IPF ${report.monthLabel} - ${report.contractor}`
+  const content = `<style>${workbookReportStyles}</style><section class="workbook-ipf" aria-label="Relatório IPF">
+    <header class="workbook-header"><div><strong>HSE</strong><h2>Relatório IPF</h2><p>${text(branding.companyName)}</p></div>
+      ${branding.logoDataUrl ? `<img src="${escapeHtml(branding.logoDataUrl)}" alt="Logo da empresa">` : ''}
+    </header>
+    <table class="workbook-details"><caption>Informações da Contratada e da Avaliação</caption><tbody>
+      ${identification.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${text(value)}</td></tr>`).join('')}
+    </tbody></table>
+    <h2 class="workbook-band">IPF DE HSE</h2>
+    <p class="workbook-note">A nota de referência mínima para o IPF mensal é acima de 7 (sete).</p>
+    <p class="workbook-note">Quando o IPF for menor do que 7 (sete) deverá ser apresentado um plano de ação pela contratada.</p>
+    <div class="workbook-score"><span>IPF</span><strong>${formatNumber(report.ipfValue)}</strong><span>${ipfStatus}</span></div>
+    ${report.charts.slice(0, 1).map(workbookChartHtml).join('')}
+    <h2 class="workbook-band">IDS</h2>
+    <h3 class="workbook-subtitle">(1) Resultados do IDS - Semanal e Média do Mês</h3>
+    ${report.charts.slice(1, 2).map(workbookChartHtml).join('')}
+    <div class="workbook-score"><span>Resultados dos IDS</span><strong>${percentage(report.idsAverage)}</strong></div>
+    <h3 class="workbook-subtitle">(2) Gráficos</h3>
+    ${report.charts.slice(2).map(workbookChartHtml).join('')}
+    <footer class="workbook-footer">Semanas S1–S5: dias 1–7, 8–14, 15–21, 22–28 e 29–31; domingos excluídos. Dados conforme os filtros e permissões de consulta. Emitido em ${issueDate} às ${issueTime}.</footer>
+  </section>`
 
   return { title, content }
 }

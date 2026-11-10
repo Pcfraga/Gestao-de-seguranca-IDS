@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { calculateMonthlyIpf } from './lib/monthlyIpf'
 import {
   AlertTriangle,
   Activity,
@@ -43,7 +44,8 @@ import { LoginScreen } from './components/LoginScreen'
 import { EvaluationForm } from './components/EvaluationForm'
 import { InspectionFormsEditor } from './components/InspectionFormsEditor'
 import { ApiError, apiRequest, clearAccessToken, getAccessToken, type ChecklistCatalog, type DashboardSummary, type DataConsolidation, type EvaluationResult, type EvaluationSummary, type IpfAnnualHistory, type IpfMonthlySuggestion } from './lib/api'
-import { evaluationPdf, ipfReportPdf, openPrintWindow, writePrintWindow } from './lib/pdf'
+import { evaluationPdf, monthlyIpfReportPdf, openPrintWindow, writePrintWindow } from './lib/pdf'
+import { buildWorkbookCharts } from './lib/workbookReport'
 import { clearBranding, defaultPrimaryColor, fetchBranding, loadBranding, readLogoFile, saveBranding, type ReportBranding } from './lib/branding'
 import './ids.css'
 import { InspectionScopeSelector } from './components/InspectionScopeSelector'
@@ -58,7 +60,7 @@ const sections: Array<{ id: Section; label: string; icon: typeof LayoutDashboard
   { id: 'evaluations', label: 'Avaliações', icon: ClipboardCheck },
   { id: 'data', label: 'Dados', icon: Database },
   { id: 'indicators', label: 'Indicadores', icon: Gauge },
-  { id: 'reports', label: 'Relatórios', icon: FileBarChart },
+  { id: 'reports', label: 'Relatório IPF', icon: FileBarChart },
 ]
 
 const sectionCopy: Record<Section, { title: string; description: string }> = {
@@ -66,7 +68,7 @@ const sectionCopy: Record<Section, { title: string; description: string }> = {
   evaluations: { title: 'Avaliações', description: 'Registros de observações comportamentais e condições de segurança.' },
   data: { title: 'Dados', description: 'Consolidação das avaliações por data, categoria e item observado.' },
   indicators: { title: 'Indicadores', description: 'Resultados de IDS, distribuição de desvios e evolução por período.' },
-  reports: { title: 'Relatórios', description: 'Consolidações mensais e documentos emitidos para acompanhamento.' },
+  reports: { title: 'Relatório IPF', description: 'Dados Relatório Mensal e gráficos do modelo de acompanhamento IPF.' },
   forms: { title: 'Formulários de inspeção', description: 'Crie e edite formulários completos com tópicos e itens, mantendo as regras de cálculo e o histórico das inspeções.' },
   settings: { title: 'Configurações', description: 'Cadastros e parâmetros disponíveis para o seu perfil.' },
   users: { title: 'Usuários e perfis', description: 'Crie usuários, defina perfis e controle o acesso ao sistema.' },
@@ -191,7 +193,7 @@ function App() {
         <nav className="primary-nav" aria-label="Navegação principal">
           <span className="nav-caption">GESTÃO</span>
           {sections.map(({ id, label, icon: Icon }) => (
-            <button className={`nav-link ${activeSection === id ? 'active' : ''}`} key={id} onClick={() => setActiveSection(id)} type="button">
+            <button className={`nav-link ${id === 'data' || id === 'reports' ? 'workbook-nav' : ''} ${activeSection === id ? 'active' : ''}`} key={id} onClick={() => setActiveSection(id)} type="button">
               <Icon size={18} strokeWidth={1.8} />
               <span>{label}</span>
               {id === 'evaluations' && <span className="nav-indicator" aria-label="Sem avaliações" />}
@@ -495,6 +497,31 @@ function RecentEvaluations({ month, scopeQuery }: { month: string; scopeQuery: s
   return <div className="recent-evaluations">{evaluations.map((evaluation) => <div className="recent-evaluation-row" key={evaluation.id}><span className="recent-date">{new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(`${evaluation.evaluationDate}T12:00:00`))}</span><span className="recent-main"><strong>{evaluation.site ?? evaluation.contractor ?? 'Avaliação operacional'}</strong><small>{evaluation.leadAuditorName ?? 'Avaliador não informado'}</small></span><span className="recent-score">{evaluation.indicators.ids === null ? '—' : `${(evaluation.indicators.ids * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}</span></div>)}</div>
 }
 
+const reportWeekdays = [
+  { index: 1, label: 'Segunda' },
+  { index: 2, label: 'Terça' },
+  { index: 3, label: 'Quarta' },
+  { index: 4, label: 'Quinta' },
+  { index: 5, label: 'Sexta' },
+  { index: 6, label: 'Sábado' },
+]
+
+function weeklyDayMatrix(
+  days: DataConsolidation['weekdays'],
+  selectValue: (day: DataConsolidation['weekdays'][number]) => number,
+) {
+  return reportWeekdays.map(({ index, label }) => {
+    const values = Array.from({ length: 5 }, (_, week) => days
+      .filter(day => day.dayOfWeek === index && day.weekNumber === week + 1)
+      .reduce((sum, day) => sum + selectValue(day), 0))
+    return { label, values, total: values.reduce((sum, value) => sum + value, 0) }
+  })
+}
+
+function reportWeekIndex(date: string) {
+  return Math.floor((Number(date.slice(8, 10)) - 1) / 7)
+}
+
 function DataView({ month, scopeQuery }: { month: string; scopeQuery: string }) {
   const [catalog, setCatalog] = useState<ChecklistCatalog | null>(null)
   const [contractorId, setContractorId] = useState('')
@@ -513,6 +540,7 @@ function DataView({ month, scopeQuery }: { month: string; scopeQuery: string }) 
   useEffect(() => {
     if (!contractorId) {
       setData(null)
+      setIsLoadingData(false)
       return
     }
 
@@ -526,17 +554,113 @@ function DataView({ month, scopeQuery }: { month: string; scopeQuery: string }) 
     setIsLoadingData(true)
     setError('')
     apiRequest<DataConsolidation>(`/api/dashboard/data?${query}&${scopeQuery}`)
-      .then((result) => { if (isCurrent) setData(result) })
+      .then((result) => {
+        if (!isCurrent) return
+        setData(result)
+      })
       .catch((loadError: unknown) => { if (isCurrent) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar os dados consolidados.') })
       .finally(() => { if (isCurrent) setIsLoadingData(false) })
     return () => { isCurrent = false }
   }, [contractorId, month, scopeQuery])
 
-  const severityData = data ? [
-    { name: 'Baixa · 0,3', total: data.lowSeverityDeviations, fill: '#77a989' },
-    { name: 'Média · 1', total: data.mediumSeverityDeviations, fill: '#d29b54' },
-    { name: 'Alta · 3', total: data.highSeverityDeviations, fill: '#bf6963' },
+  const weekdays = data?.weekdays ?? []
+  const weekdayIds = reportWeekdays.map(({ index, label }) => ({
+    label,
+    values: Array.from({ length: 5 }, (_, week) => weekdays.find(day => day.dayOfWeek === index && day.weekNumber === week + 1)?.ids ?? null),
+  }))
+  const weeklyIds = [
+    ...weekdayIds,
+    {
+      label: 'Média',
+      values: Array.from({ length: 5 }, (_, week) => {
+        const values = weekdayIds.flatMap(row => {
+          const value = row.values[week]
+          return value === null ? [] : [value]
+        })
+        return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
+      }),
+    },
+  ]
+  const weeklyObservationRows = (() => {
+    const rows = new Map<string, { category: string; item: string; values: number[] }>()
+    data?.weeklyItems.forEach(item => {
+      const week = item.weekNumber - 1
+      if (week < 0 || week >= 5) return
+      const key = `${item.categoryCode}\u0000${item.code}`
+      const row = rows.get(key) ?? { category: item.category, item: item.name, values: Array.from({ length: 5 }, () => 0) }
+      row.values[week] += item.quantity
+      rows.set(key, row)
+    })
+    return [...rows.values()].sort((left, right) => left.category.localeCompare(right.category, 'pt-BR') || left.item.localeCompare(right.item, 'pt-BR'))
+  })()
+  const weeklyCategoryRows = (() => {
+    const rows = new Map<string, { code: string; values: number[] }>()
+    data?.weeklyCategories.forEach(category => {
+      const week = category.weekNumber - 1
+      if (week < 0 || week >= 5) return
+      const row = rows.get(category.code) ?? { code: category.name, values: Array.from({ length: 5 }, () => 0) }
+      row.values[week] += category.quantity
+      rows.set(category.code, row)
+    })
+    return [...rows.values()].sort((left, right) => left.code.localeCompare(right.code, 'pt-BR'))
+  })()
+  const weeklySeverityRows = [
+    { label: 'Baixa · 0,3', weight: 0.3 },
+    { label: 'Média · 1', weight: 1 },
+    { label: 'Alta · 3', weight: 3 },
+  ].map(level => {
+    const values = Array.from({ length: 5 }, () => 0)
+    weekdays.forEach(day => {
+      const week = day.weekNumber - 1
+      if (week < 0 || week >= values.length) return
+      const quantity = level.weight === 0.3 ? day.lowSeverityDeviations
+        : level.weight === 1 ? day.mediumSeverityDeviations
+          : day.highSeverityDeviations
+      values[week] += quantity
+    })
+    return { label: level.label, values, total: values.reduce((sum, value) => sum + value, 0) }
+  })
+  const reportDays = data?.days.filter(day => new Date(`${day.date}T12:00:00`).getDay() !== 0) ?? []
+  const reportCategories = weeklyCategoryRows.map(row => ({
+    code: row.code,
+    name: row.code,
+    quantity: row.values.reduce((sum, value) => sum + value, 0),
+  }))
+  const reportItems = weeklyObservationRows.map(row => ({
+    categoryCode: row.category,
+    category: row.category,
+    code: row.item,
+    name: row.item,
+    quantity: row.values.reduce((sum, value) => sum + value, 0),
+  }))
+  const reportData: DataConsolidation | null = data ? {
+    ...data,
+    evaluationCount: weekdays.reduce((sum, day) => sum + day.evaluationCount, 0),
+    observedPeople: weekdays.reduce((sum, day) => sum + day.observedPeople, 0),
+    totalDeviations: weeklySeverityRows.reduce((sum, row) => sum + row.total, 0),
+    weightedDeviationTotal: weeklySeverityRows.reduce((sum, row) => {
+      const weight = row.label === 'Baixa · 0,3' ? 0.3 : row.label === 'Média · 1' ? 1 : 3
+      return sum + row.total * weight
+    }, 0),
+    lowSeverityDeviations: weeklySeverityRows[0].total,
+    mediumSeverityDeviations: weeklySeverityRows[1].total,
+    highSeverityDeviations: weeklySeverityRows[2].total,
+    days: reportDays,
+    categories: reportCategories,
+    items: reportItems,
+    weekGroupingStatus: data.weekGroupingStatus,
+  } : null
+  const severityData = reportData ? [
+    { name: 'Baixa · 0,3', total: reportData.lowSeverityDeviations, fill: '#77a989' },
+    { name: 'Média · 1', total: reportData.mediumSeverityDeviations, fill: '#d29b54' },
+    { name: 'Alta · 3', total: reportData.highSeverityDeviations, fill: '#bf6963' },
   ] : []
+  const weeklyMetrics = reportData ? [
+    { title: 'Pessoas observadas', selectValue: (day: DataConsolidation['weekdays'][number]) => day.observedPeople },
+    { title: 'Desvios registrados', selectValue: (day: DataConsolidation['weekdays'][number]) => day.totalDeviations },
+    { title: 'Desvio ponderado (SD)', selectValue: (day: DataConsolidation['weekdays'][number]) => day.weightedDeviationTotal },
+    { title: 'Avaliações', selectValue: (day: DataConsolidation['weekdays'][number]) => day.evaluationCount },
+  ].map(metric => ({ ...metric, rows: weeklyDayMatrix(reportData.weekdays, metric.selectValue) })) : []
 
   return (
     <div className="data-view">
@@ -547,22 +671,69 @@ function DataView({ month, scopeQuery }: { month: string; scopeQuery: string }) 
       {error && <div className="form-error" role="alert">{error}</div>}
       {!contractorId && !isLoadingCatalog && <div className="data-prompt panel"><div className="empty-line-icon"><Database size={20} /></div><strong>Selecione uma contratada</strong><span>A consolidação será carregada para uma empresa por vez.</span></div>}
       {isLoadingData && <div className="form-loading">Carregando consolidação…</div>}
-      {data && <>
-        <div className="period-ribbon"><span className="period-icon"><CalendarDays size={16} /></span><span>{formatMonth(month)}</span><strong>{data.evaluationCount} avaliações</strong></div>
+      {reportData && <>
+        <div className="period-ribbon"><span className="period-icon"><CalendarDays size={16} /></span><span>{formatMonth(month)}</span><strong>{reportData.evaluationCount} avaliações</strong></div>
         <section className="metric-grid data-metric-grid" aria-label="Totais consolidados">
-          <article className="metric-card"><p className="metric-label">Pessoas observadas</p><strong className="metric-value">{data.observedPeople.toLocaleString('pt-BR')}</strong><span className="metric-note">Soma das avaliações no período</span></article>
-          <article className="metric-card"><p className="metric-label">Desvios</p><strong className="metric-value">{data.totalDeviations.toLocaleString('pt-BR')}</strong><span className="metric-note">Pesos válidos 0,3 · 1 · 3</span></article>
-          <article className="metric-card"><p className="metric-label">Desvio ponderado (SD)</p><strong className="metric-value">{data.weightedDeviationTotal.toLocaleString('pt-BR')}</strong><span className="metric-note">Quantidade × severidade</span></article>
-          <article className="metric-card"><p className="metric-label">Avaliações</p><strong className="metric-value">{data.evaluationCount.toLocaleString('pt-BR')}</strong><span className="metric-note">Rascunhos e enviadas</span></article>
+          <article className="metric-card"><p className="metric-label">Pessoas observadas</p><strong className="metric-value">{reportData.observedPeople.toLocaleString('pt-BR')}</strong><span className="metric-note">Soma das avaliações no período</span></article>
+          <article className="metric-card"><p className="metric-label">Desvios</p><strong className="metric-value">{reportData.totalDeviations.toLocaleString('pt-BR')}</strong><span className="metric-note">Pesos válidos 0,3 · 1 · 3</span></article>
+          <article className="metric-card"><p className="metric-label">Desvio ponderado (SD)</p><strong className="metric-value">{reportData.weightedDeviationTotal.toLocaleString('pt-BR')}</strong><span className="metric-note">Quantidade × severidade</span></article>
+          <article className="metric-card"><p className="metric-label">Avaliações</p><strong className="metric-value">{reportData.evaluationCount.toLocaleString('pt-BR')}</strong><span className="metric-note">Rascunhos e enviadas</span></article>
         </section>
-        <div className="data-validation-note"><AlertTriangle size={16} /><span>{data.weekGroupingStatus}</span></div>
+        <div className="data-validation-note"><AlertTriangle size={16} /><span>{reportData.weekGroupingStatus}</span></div>
+        <section className="data-week-grid" aria-label="Consolidação por semana e dia">
+          {weeklyMetrics.map(metric => <article className="panel data-table-panel" key={metric.title}>
+            <div className="panel-heading"><div><h2>{metric.title} por semana</h2><p>Distribuição de segunda a sábado, conforme a planilha.</p></div></div>
+            <div className="table-scroll"><table><thead><tr><th>Dia</th>{Array.from({ length: 5 }, (_, index) => <th key={index}>S{index + 1}</th>)}<th>Total</th></tr></thead>
+              <tbody>{metric.rows.map(row => <tr key={row.label}><td>{row.label}</td>{row.values.map((value, index) => <td key={index}>{value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>)}<td>{row.total.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td></tr>)}
+                <tr className="report-history-total"><th>Total</th>{Array.from({ length: 5 }, (_, week) => <td key={week}>{metric.rows.reduce((sum, row) => sum + row.values[week], 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>)}<td>{metric.rows.reduce((sum, row) => sum + row.total, 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td></tr>
+              </tbody>
+            </table></div>
+          </article>)}
+        </section>
+        <article className="panel data-table-panel">
+          <div className="panel-heading"><div><h2>IDS por semana e dia</h2><p>Média das avaliações com IDS calculado em cada dia da semana.</p></div></div>
+          <div className="table-scroll"><table><thead><tr><th>Dia</th>{Array.from({ length: 5 }, (_, index) => <th key={index}>S{index + 1}</th>)}<th>Média</th></tr></thead>
+            <tbody>{weeklyIds.map(row => {
+              const validValues = row.values.filter((value): value is number => value !== null)
+              const average = validValues.length ? validValues.reduce((sum, value) => sum + value, 0) / validValues.length : null
+              return <tr className={row.label === 'Média' ? 'report-history-total' : ''} key={row.label}><td>{row.label}</td>{row.values.map((value, index) => <td key={index}>{formatPercent(value)}</td>)}<td>{formatPercent(average)}</td></tr>
+            })}</tbody>
+          </table></div>
+        </article>
         <section className="data-charts-grid">
           <article className="panel data-chart-panel"><div className="panel-heading"><div><h2>Desvios por severidade</h2><p>Contagens do período selecionado</p></div></div><div className="data-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={severityData} layout="vertical" margin={{ top: 8, right: 20, left: 15, bottom: 8 }}><CartesianGrid stroke="#e8ece7" strokeDasharray="3 5" horizontal={false} /><XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#858e87', fontSize: 10 }} /><YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={90} tick={{ fill: '#68766d', fontSize: 10 }} /><Tooltip formatter={(value) => [Number(value).toLocaleString('pt-BR'), 'Desvios']} /><Bar dataKey="total" radius={[0, 4, 4, 0]} /></BarChart></ResponsiveContainer></div></article>
-          <article className="panel data-chart-panel"><div className="panel-heading"><div><h2>Quantidade por categoria</h2><p>Somatório dos itens observados</p></div></div><div className="data-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={data.categories} layout="vertical" margin={{ top: 8, right: 20, left: 15, bottom: 8 }}><CartesianGrid stroke="#e8ece7" strokeDasharray="3 5" horizontal={false} /><XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#858e87', fontSize: 10 }} /><YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={132} tick={{ fill: '#68766d', fontSize: 9 }} /><Tooltip formatter={(value) => [Number(value).toLocaleString('pt-BR'), 'Quantidade']} /><Bar dataKey="quantity" fill="#3d7655" radius={[0, 4, 4, 0]} /></BarChart></ResponsiveContainer></div></article>
+          <article className="panel data-chart-panel"><div className="panel-heading"><div><h2>Quantidade por categoria</h2><p>Somatório dos itens observados</p></div></div><div className="data-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={reportData.categories} layout="vertical" margin={{ top: 8, right: 20, left: 15, bottom: 8 }}><CartesianGrid stroke="#e8ece7" strokeDasharray="3 5" horizontal={false} /><XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#858e87', fontSize: 10 }} /><YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={132} tick={{ fill: '#68766d', fontSize: 9 }} /><Tooltip formatter={(value) => [Number(value).toLocaleString('pt-BR'), 'Quantidade']} /><Bar dataKey="quantity" fill="#3d7655" radius={[0, 4, 4, 0]} /></BarChart></ResponsiveContainer></div></article>
         </section>
         <section className="data-tables-grid">
-          <article className="panel data-table-panel"><div className="panel-heading"><div><h2>Consolidação diária</h2><p>Totais por data da avaliação</p></div></div><div className="table-scroll"><table><thead><tr><th>Data</th><th>Avaliações</th><th>Pessoas</th><th>Desvios</th><th>SD</th></tr></thead><tbody>{data.days.length === 0 ? <tr><td colSpan={5} className="data-empty-cell">Sem avaliações neste mês.</td></tr> : data.days.map((day) => <tr key={day.date}><td>{new Intl.DateTimeFormat('pt-BR').format(new Date(`${day.date}T12:00:00`))}</td><td>{day.evaluationCount}</td><td>{day.observedPeople.toLocaleString('pt-BR')}</td><td>{day.totalDeviations.toLocaleString('pt-BR')}</td><td>{day.weightedDeviationTotal.toLocaleString('pt-BR')}</td></tr>)}</tbody></table></div></article>
-          <article className="panel data-table-panel"><div className="panel-heading"><div><h2>Itens por categoria</h2><p>Origem detalhada dos totais</p></div></div><div className="table-scroll"><table><thead><tr><th>Categoria</th><th>Item</th><th>Quantidade</th></tr></thead><tbody>{data.items.length === 0 ? <tr><td colSpan={3} className="data-empty-cell">Sem itens observados.</td></tr> : data.items.map((item) => <tr key={`${item.categoryCode}:${item.code}`}><td>{item.category}</td><td>{item.name}</td><td>{item.quantity.toLocaleString('pt-BR')}</td></tr>)}</tbody></table></div></article>
+          <article className="panel data-table-panel"><div className="panel-heading"><div><h2>Consolidação diária</h2><p>Totais por data da avaliação</p></div></div><div className="table-scroll"><table><thead><tr><th>Data</th><th>Avaliações</th><th>Pessoas</th><th>Desvios</th><th>SD</th></tr></thead><tbody>{reportData.days.length === 0 ? <tr><td colSpan={5} className="data-empty-cell">Sem avaliações neste mês.</td></tr> : reportData.days.map((day) => <tr key={day.date}><td>{new Intl.DateTimeFormat('pt-BR').format(new Date(`${day.date}T12:00:00`))}</td><td>{day.evaluationCount}</td><td>{day.observedPeople.toLocaleString('pt-BR')}</td><td>{day.totalDeviations.toLocaleString('pt-BR')}</td><td>{day.weightedDeviationTotal.toLocaleString('pt-BR')}</td></tr>)}</tbody></table></div></article>
+          <article className="panel data-table-panel"><div className="panel-heading"><div><h2>Itens por categoria</h2><p>Origem detalhada dos totais</p></div></div><div className="table-scroll"><table><thead><tr><th>Categoria</th><th>Item</th><th>Quantidade</th></tr></thead><tbody>{reportData.items.length === 0 ? <tr><td colSpan={3} className="data-empty-cell">Sem itens observados.</td></tr> : reportData.items.map((item) => <tr key={`${item.categoryCode}:${item.code}`}><td>{item.category}</td><td>{item.name}</td><td>{item.quantity.toLocaleString('pt-BR')}</td></tr>)}</tbody></table></div></article>
+        </section>
+        <section className="data-tables-grid" aria-label="Detalhamento semanal">
+          <article className="panel data-table-panel"><div className="panel-heading"><div><h2>Desvios por severidade e semana</h2><p>Contagem de observações de segunda a sábado.</p></div></div>
+            <div className="table-scroll"><table><thead><tr><th>Severidade</th>{Array.from({ length: 5 }, (_, index) => <th key={index}>S{index + 1}</th>)}<th>Total</th></tr></thead>
+              <tbody>{weeklySeverityRows.map(row => <tr key={row.label}><td>{row.label}</td>{row.values.map((value, index) => <td key={index}>{value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>)}<td>{row.total.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td></tr>)}
+                <tr className="report-history-total"><th>Total</th>{Array.from({ length: 5 }, (_, week) => <td key={week}>{weeklySeverityRows.reduce((sum, row) => sum + row.values[week], 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>)}<td>{weeklySeverityRows.reduce((sum, row) => sum + row.total, 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td></tr>
+              </tbody>
+            </table></div>
+          </article>
+          <article className="panel data-table-panel"><div className="panel-heading"><div><h2>Quantidade por categoria e semana</h2><p>Somatório dos itens observados por categoria.</p></div></div>
+            <div className="table-scroll"><table><thead><tr><th>Categoria</th>{Array.from({ length: 5 }, (_, index) => <th key={index}>S{index + 1}</th>)}<th>Total</th></tr></thead>
+              <tbody>{weeklyCategoryRows.length === 0
+                ? <tr><td colSpan={7} className="data-empty-cell">Sem itens observados.</td></tr>
+                : weeklyCategoryRows.map(row => <tr key={row.code}><td>{row.code}</td>{row.values.map((value, index) => <td key={index}>{value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>)}<td>{row.values.reduce((sum, value) => sum + value, 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td></tr>)}
+                {weeklyCategoryRows.length > 0 && <tr className="report-history-total"><th>Total</th>{Array.from({ length: 5 }, (_, week) => <td key={week}>{weeklyCategoryRows.reduce((sum, row) => sum + row.values[week], 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>)}<td>{weeklyCategoryRows.reduce((sum, row) => sum + row.values.reduce((total, value) => total + value, 0), 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td></tr>}
+              </tbody>
+            </table></div>
+          </article>
+          <article className="panel data-table-panel data-week-detail"><div className="panel-heading"><div><h2>Itens por categoria e semana</h2><p>Quantidade detalhada por item, agrupada nas cinco semanas da planilha.</p></div></div>
+            <div className="table-scroll"><table><thead><tr><th>Categoria</th><th>Item</th>{Array.from({ length: 5 }, (_, index) => <th key={index}>S{index + 1}</th>)}<th>Total</th></tr></thead>
+              <tbody>{weeklyObservationRows.length === 0
+                ? <tr><td colSpan={8} className="data-empty-cell">Sem itens observados.</td></tr>
+                : weeklyObservationRows.map(row => <tr key={`${row.category}:${row.item}`}><td>{row.category}</td><td>{row.item}</td>{row.values.map((value, index) => <td key={index}>{value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>)}<td>{row.values.reduce((sum, value) => sum + value, 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td></tr>)}
+                {weeklyObservationRows.length > 0 && <tr className="report-history-total"><th colSpan={2}>Total</th>{Array.from({ length: 5 }, (_, week) => <td key={week}>{weeklyObservationRows.reduce((sum, row) => sum + row.values[week], 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>)}<td>{weeklyObservationRows.reduce((sum, row) => sum + row.values.reduce((total, value) => total + value, 0), 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td></tr>}
+              </tbody>
+            </table></div>
+          </article>
         </section>
       </>}
     </div>
@@ -935,14 +1106,22 @@ function RankingTable({ title, subtitle, rows }: { title: string; subtitle: stri
 
 function Reports({ month, monthLabel, scope }: { month: string; monthLabel: string; scope: InspectionScope }) {
   const scopeQuery = inspectionScopeQuery(scope)
+  const [reportTab, setReportTab] = useState<'monthly-data' | 'ipf-report'>('monthly-data')
   const [catalog, setCatalog] = useState<ChecklistCatalog | null>(null)
   const [contractorId, setContractorId] = useState('')
   const [siteId, setSiteId] = useState('')
   const [history, setHistory] = useState<IpfAnnualHistory | null>(null)
   const [suggestion, setSuggestion] = useState<IpfMonthlySuggestion | null>(null)
-  const [ipfValue, setIpfValue] = useState('')
+  const [yearSummary, setYearSummary] = useState<DashboardSummary | null>(null)
+  const [monthlyData, setMonthlyData] = useState<DataConsolidation | null>(null)
+  const [reportIssuedAt, setReportIssuedAt] = useState<Date | null>(null)
+  const [multiplicationFactor, setMultiplicationFactor] = useState('0.8')
+  const [additionalScore, setAdditionalScore] = useState('20')
+  const [isFormulaDirty, setIsFormulaDirty] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
+  const [isReportDataLoading, setIsReportDataLoading] = useState(false)
+  const [reportDataError, setReportDataError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
   const [saveConfirmation, setSaveConfirmation] = useState('')
@@ -951,7 +1130,10 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
 
   useEffect(() => {
     apiRequest<ChecklistCatalog>('/api/catalog')
-      .then(setCatalog)
+      .then(result => {
+        setCatalog(result)
+        setReportIssuedAt(new Date())
+      })
       .catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar as contratadas.'))
       .finally(() => setIsLoading(false))
   }, [])
@@ -960,7 +1142,10 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
     if (!contractorId) {
       setHistory(null)
       setSuggestion(null)
-      setIpfValue('')
+      setYearSummary(null)
+      setMultiplicationFactor('0.8')
+      setAdditionalScore('20')
+      setIsFormulaDirty(false)
       setSiteId('')
       setIsHistoryLoading(false)
       return
@@ -969,45 +1154,89 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
     let isCurrent = true
     setHistory(null)
     setSuggestion(null)
-    setIpfValue('')
+    setYearSummary(null)
+    setMultiplicationFactor('0.8')
+    setAdditionalScore('20')
+    setIsFormulaDirty(false)
     setSiteId('')
     setIsHistoryLoading(true)
     setError('')
     setSaveConfirmation('')
+    const evaluationQuery = new URLSearchParams({
+      from: `${year}-01-01`,
+      to: `${year}-12-31`,
+      contractorId,
+    })
     Promise.all([
       apiRequest<IpfAnnualHistory>(`/api/reports/ipf/${year}?contractorId=${contractorId}&${scopeQuery}`),
       apiRequest<IpfMonthlySuggestion>(`/api/reports/ipf/${year}/${monthNumber}/suggestion?contractorId=${contractorId}&${scopeQuery}`),
+      apiRequest<DashboardSummary>(`/api/dashboard/summary?${evaluationQuery}&${scopeQuery}`),
     ])
-      .then(([result, monthlySuggestion]) => {
+      .then(([result, monthlySuggestion, summary]) => {
         if (!isCurrent) return
         setHistory(result)
         setSuggestion(monthlySuggestion)
+        setYearSummary(summary)
         const currentValue = result.months.find(record => record.month === monthNumber)
-        setIpfValue(monthlySuggestion.average?.toString() ?? currentValue?.value.toString() ?? '')
+        setMultiplicationFactor((currentValue?.multiplicationFactor ?? 0.8).toString())
+        setAdditionalScore((currentValue?.additionalScore ?? 20).toString())
         setSiteId(currentValue?.siteId ?? '')
       })
       .catch((loadError: unknown) => { if (isCurrent) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar o histórico IPF.') })
       .finally(() => { if (isCurrent) setIsHistoryLoading(false) })
     return () => { isCurrent = false }
-  }, [contractorId, monthNumber, year, scopeQuery])
+  }, [contractorId, month, monthNumber, year, scopeQuery])
+
+  useEffect(() => {
+    let active = true
+    setMonthlyData(null)
+    setReportDataError('')
+    if (!contractorId) {
+      setIsReportDataLoading(false)
+      return
+    }
+    const finalDay = new Date(year, monthNumber, 0).getDate()
+    const query = new URLSearchParams({
+      from: `${month}-01`,
+      to: `${month}-${String(finalDay).padStart(2, '0')}`,
+      contractorId,
+    })
+    if (siteId) query.set('siteId', siteId)
+    setIsReportDataLoading(true)
+    apiRequest<DataConsolidation>(`/api/dashboard/data?${query}&${scopeQuery}`)
+      .then(data => { if (active) setMonthlyData(data) })
+      .catch((loadError: unknown) => {
+        if (active) setReportDataError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar os gráficos do relatório.')
+      })
+      .finally(() => { if (active) setIsReportDataLoading(false) })
+    return () => { active = false }
+  }, [contractorId, siteId, month, year, monthNumber, scopeQuery])
 
   async function saveIpf() {
     if (!contractorId) {
       setError('Selecione uma contratada antes de salvar o IPF.')
       return
     }
-    if (ipfValue.trim() === '' || !Number.isFinite(Number(ipfValue))) {
-      setError('Informe um valor numérico válido para o IPF.')
+    if (monthlyIdsAverage === null) {
+      setError('Não há avaliações com IDS calculável neste mês e recorte para calcular o IPF.')
       return
     }
-    const value = Number(ipfValue)
+    if (calculatedIpf === null) {
+      setError('Informe valores numéricos válidos para o fator multiplicador e a parcela adicional, dentro do limite de cálculo do IPF.')
+      return
+    }
+    const value = calculatedIpf
     setIsSaving(true)
     setError('')
     setSaveConfirmation('')
     try {
       const savedRecord = await apiRequest<IpfAnnualHistory['months'][number]>(`/api/reports/ipf/${year}/${monthNumber}`, {
         method: 'PUT',
-        body: JSON.stringify({ contractorOrganizationId: contractorId, siteId: siteId || null, value, areaId: scope.areaId, formId: scope.formId }),
+        body: JSON.stringify({
+          contractorOrganizationId: contractorId, siteId: siteId || null, value,
+          areaId: scope.areaId, formId: scope.formId,
+          multiplicationFactor: Number(multiplicationFactor), additionalScore: Number(additionalScore),
+        }),
       })
       setHistory((current) => {
         const months = [
@@ -1026,7 +1255,7 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
           formName: scope.formName,
         }
       })
-      setIpfValue(savedRecord.value.toString())
+      setIsFormulaDirty(false)
       setSaveConfirmation('IPF salvo com sucesso.')
       setSiteId(savedRecord.siteId ?? '')
     } catch (saveError) {
@@ -1040,16 +1269,100 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
 
   const periodMonths = history?.months.filter(record => record.month <= monthNumber) ?? []
   const periodAverage = periodMonths.length > 0 ? periodMonths.reduce((total, record) => total + record.value, 0) / periodMonths.length : null
-  const chartData = Array.from({ length: monthNumber }, (_, index) => {
-    const monthIndex = index + 1
-    return { month: new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(new Date(Date.UTC(year, index, 15))), value: periodMonths.find(record => record.month === monthIndex)?.value ?? null }
+  const yearTrend = (yearSummary?.trend ?? []).filter(point => !siteId || point.siteId === siteId)
+  const averageTrendIds = (points: typeof yearTrend) => {
+    const values = points.flatMap(point => point.ids === null ? [] : [point.ids])
+    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
+  }
+  const distinctMetadata = (values: Array<string | null | undefined>) => {
+    const uniqueValues = [...new Set(values.map(value => value?.trim()).filter((value): value is string => Boolean(value)))]
+    return uniqueValues.length > 1 ? 'Múltiplos registros' : uniqueValues[0] ?? null
+  }
+  const reportMetadata = (field: 'projectOrIslands' | 'sites' | 'clients' | 'evaluators') => {
+    const metadata = monthlyData?.metadata
+    const values = siteId
+      ? metadata?.bySite.filter(group => group.siteId === siteId).flatMap(group => group[field]) ?? []
+      : metadata?.[field] ?? []
+    return distinctMetadata(values)
+  }
+  const monthIds = Array.from({ length: 12 }, (_, index) => {
+    const key = `${year}-${String(index + 1).padStart(2, '0')}`
+    return { month: index + 1, value: averageTrendIds(yearTrend.filter(point => point.date.startsWith(key))) }
   })
-
+  const weekdayIds = reportWeekdays.map(({ index, label }) => {
+    const values = Array.from({ length: 5 }, (_, week) => averageTrendIds(yearTrend.filter(point => {
+      const date = new Date(`${point.date}T12:00:00`)
+      return point.date.startsWith(month) && date.getDay() === index && reportWeekIndex(point.date) === week
+    })))
+    const populatedValues = values.filter((value): value is number => value !== null)
+    return { label, values, average: populatedValues.length ? populatedValues.reduce((sum, value) => sum + value, 0) / populatedValues.length : null }
+  })
+  const weeklyIds = [
+    ...weekdayIds,
+    {
+      label: 'Média',
+      values: Array.from({ length: 5 }, (_, week) => {
+        const values = weekdayIds.flatMap(row => {
+          const value = row.values[week]
+          return value === null ? [] : [value]
+        })
+        return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
+      }),
+      average: (() => {
+        const values = weekdayIds.flatMap(row => row.values.filter((value): value is number => value !== null))
+        return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
+      })(),
+    },
+  ]
+  const monthlyIdsAverage = monthIds[monthNumber - 1]?.value ?? null
+  const calculatedIpf = calculateMonthlyIpf(monthlyIdsAverage, multiplicationFactor, additionalScore)
+  const savedIpf = history?.months.find(record => record.month === monthNumber)?.value ?? null
+  const enteredIpf = isFormulaDirty ? calculatedIpf : savedIpf ?? calculatedIpf
+  const reportIpfMonths = Array.from({ length: 12 }, (_, index) => {
+    const reportMonth = index + 1
+    const savedValue = history?.months.find(record => record.month === reportMonth)?.value ?? null
+    return { month: reportMonth, value: reportMonth === monthNumber && enteredIpf !== null ? enteredIpf : savedValue }
+  })
+  const idsAnnualAverage = (() => {
+    const values = monthIds.flatMap(record => record.value === null ? [] : [record.value])
+    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
+  })()
+  const ipfReportAverage = reportIpfMonths.some(record => record.value !== null)
+    ? reportIpfMonths.reduce((sum, record) => sum + (record.value ?? 0), 0) / reportIpfMonths.filter(record => record.value !== null).length
+    : null
+  const reportPdf = history && monthlyData && reportIssuedAt ? monthlyIpfReportPdf({
+      year,
+      month: monthNumber,
+      monthLabel,
+      contractor: history.contractor,
+      projectOrIsland: reportMetadata('projectOrIslands'),
+      site: catalog?.sites.find(site => site.id === siteId)?.name ?? reportMetadata('sites'),
+      client: reportMetadata('clients'),
+      discipline: scope.areaName,
+      evaluatedBy: reportMetadata('evaluators'),
+      issuedAt: reportIssuedAt.toISOString(),
+      ipfValue: enteredIpf,
+      ipfAverage: ipfReportAverage,
+      idsAverage: monthIds[monthNumber - 1]?.value ?? null,
+      idsAnnualAverage,
+      ipfMonths: reportIpfMonths,
+      idsMonths: monthIds,
+      weeklyIds,
+      charts: buildWorkbookCharts({
+        year,
+        ipfMonths: reportIpfMonths,
+        idsMonths: monthIds,
+        ipfValue: enteredIpf,
+        ipfAverage: ipfReportAverage,
+        idsAnnualAverage,
+        weeklyIds,
+        data: monthlyData,
+      }),
+    }) : null
   function exportReportPdf() {
-    if (!history) return
+    if (!reportPdf) return
     setError('')
-    const pdf = ipfReportPdf({ ...history, months: periodMonths, annualAverage: periodAverage ?? 0 }, monthNumber)
-    if (!openPrintWindow(pdf.title, pdf.content)) {
+    if (!openPrintWindow(reportPdf.title, reportPdf.content)) {
       setError('O navegador bloqueou a janela do PDF. Permita pop-ups para este site e tente novamente.')
     }
   }
@@ -1057,25 +1370,31 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
   return <section className="report-layout">
     <div className="report-intro">
       <div>
-        <span className="summary-kicker"><FileBarChart size={16} /> RELATÓRIO IPF</span>
-        <h2>Histórico mensal</h2>
-        <p>Consulte os resultados do ano e registre o IPF informado para cada mês.</p>
+        <span className="summary-kicker"><FileBarChart size={16} /> {reportTab === 'monthly-data' ? 'DADOS DO RELATÓRIO MENSAL' : 'RELATÓRIO IPF'}</span>
+        <h2>{reportTab === 'monthly-data' ? 'Dados Relatório Mensal' : 'Relatório IPF'}</h2>
+        <p>{reportTab === 'monthly-data'
+          ? 'Consulte os dados da avaliação e registre o IPF para o mês de referência.'
+          : 'Os 14 gráficos do modelo, na mesma ordem e com as cores e séries da planilha.'}</p>
       </div>
-      <button className="outline-button" disabled={!history || isHistoryLoading} onClick={exportReportPdf} type="button"><FileDown size={16} /> Gerar PDF</button>
+      {reportTab === 'ipf-report' && <button className="outline-button" disabled={!reportPdf || isHistoryLoading || isReportDataLoading} onClick={exportReportPdf} type="button"><FileDown size={16} /> Gerar PDF</button>}
+    </div>
+    <div className="workbook-tabs" role="tablist" aria-label="Abas do relatório mensal">
+      <button id="monthly-data-tab" aria-controls="monthly-data-panel" type="button" role="tab" aria-selected={reportTab === 'monthly-data'} onClick={() => setReportTab('monthly-data')}>Dados Relatório Mensal</button>
+      <button id="ipf-report-tab" aria-controls="ipf-report-panel" type="button" role="tab" aria-selected={reportTab === 'ipf-report'} onClick={() => setReportTab('ipf-report')}>Relatório IPF</button>
     </div>
     <form className="report-entry-card" onSubmit={(event) => { event.preventDefault(); void saveIpf() }}>
       <div className="report-entry-heading">
         <div>
           <span className="report-step">LANÇAMENTO DO MÊS</span>
-          <h3>Registrar valor de IPF</h3>
-          <p>Cada mês começa sem média; o valor cresce com os IDS das avaliações da contratada no próprio mês.</p>
+          <h3>Dados Relatório Mensal</h3>
+          <p>O IPF usa a média do IDS em percentual. Preencha o fator multiplicador e a parcela adicional; o resultado é calculado automaticamente.</p>
         </div>
         <span className="report-month-badge"><CalendarDays size={15} />{monthLabel}</span>
       </div>
       <div className="report-controls">
         <label>
           Contratada
-          <select disabled={isLoading} onChange={(event) => { setContractorId(event.target.value); setSaveConfirmation(''); setError('') }} value={contractorId}>
+          <select disabled={isLoading || isSaving} onChange={(event) => { setContractorId(event.target.value); setSaveConfirmation(''); setError('') }} value={contractorId}>
             <option value="">Selecionar contratada</option>
             {catalog?.organizations.filter(organization => organization.kind === 'Contractor').map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
           </select>
@@ -1083,43 +1402,74 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
         </label>
         <label>
           Local / site <span className="report-optional">(opcional)</span>
-          <select disabled={!contractorId || isHistoryLoading} onChange={(event) => { setSiteId(event.target.value); setSaveConfirmation(''); setError('') }} value={siteId}>
+          <select disabled={!contractorId || isHistoryLoading || isSaving} onChange={(event) => { setSiteId(event.target.value); setIsFormulaDirty(true); setSaveConfirmation(''); setError('') }} value={siteId}>
             <option value="">Sem local específico</option>
             {catalog?.sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
           </select>
           <small>Associe o registro a um local, se necessário.</small>
         </label>
+      </div>
+      <div className="report-controls report-formula-controls">
         <label>
-          Valor do IPF
+          Média do IDS (%)
           <input
-            aria-describedby="report-ipf-help"
-            disabled={!contractorId || isHistoryLoading}
+            readOnly
+            type="text"
+            value={monthlyIdsAverage === null ? '' : (monthlyIdsAverage * 100).toLocaleString('pt-BR', { maximumFractionDigits: 4 })}
+          />
+          <small>Média das avaliações válidas do mês e recorte selecionados.</small>
+        </label>
+        <label>
+          Fator multiplicador
+          <input
+            disabled={!contractorId || isHistoryLoading || isSaving}
             inputMode="decimal"
-            onChange={(event) => { setIpfValue(event.target.value); setSaveConfirmation(''); setError('') }}
+            onChange={(event) => { setMultiplicationFactor(event.target.value); setIsFormulaDirty(true); setSaveConfirmation(''); setError('') }}
             step="any"
             type="number"
-            value={ipfValue}
+            required
+            value={multiplicationFactor}
           />
-          <small id="report-ipf-help">Informe o valor correspondente a {monthLabel}.</small>
+          <small>Campo correspondente ao 0,8 do exemplo.</small>
+        </label>
+        <label>
+          Parcela adicional
+          <input
+            disabled={!contractorId || isHistoryLoading || isSaving}
+            inputMode="decimal"
+            onChange={(event) => { setAdditionalScore(event.target.value); setIsFormulaDirty(true); setSaveConfirmation(''); setError('') }}
+            step="any"
+            type="number"
+            required
+            value={additionalScore}
+          />
+          <small>Campo correspondente ao +20 do exemplo.</small>
+        </label>
+        <label>
+          Valor do IPF
+          <input aria-describedby="report-ipf-help" readOnly type="text" value={enteredIpf?.toLocaleString('pt-BR', { maximumFractionDigits: 4 }) ?? ''} />
+          <small id="report-ipf-help">((Média do IDS (%) × 60 × fator) / 100 + parcela adicional) / 10.</small>
+          {savedIpf !== null && !isFormulaDirty && <small>IPF salvo preservado. Altere os campos ou salve para recalcular com a média atual.</small>}
           {suggestion && <small className="report-suggestion-note">
-            {suggestion.average !== null
-              ? `Média automática das ${suggestion.scoredEvaluationCount} avaliações com IDS calculado neste mês.`
+            {monthlyIdsAverage !== null
+              ? 'O cálculo usa a média completa, sem arredondamento intermediário. O resultado é salvo com quatro casas decimais.'
               : suggestion.evaluationCount > 0
-                ? 'As avaliações deste mês ainda não têm dados suficientes para calcular o IDS.'
-                : 'Este mês ainda não tem avaliações. A média começa em branco, sem reaproveitar meses anteriores.'}
+                ? 'Não há IDS calculável no recorte selecionado.'
+                : 'Este mês ainda não tem avaliações. Não é possível calcular o IPF.'}
           </small>}
         </label>
-        <button className="primary-button report-save-button" disabled={isLoading || isHistoryLoading || isSaving} type="submit">
+        <button className="primary-button report-save-button" disabled={!contractorId || isLoading || isHistoryLoading || isSaving || calculatedIpf === null} type="submit">
           {isSaving ? 'Salvando…' : 'Salvar IPF'}
         </button>
       </div>
       <div className="report-access-note"><ShieldCheck size={15} /><span>O registro é permitido para os perfis Administrador e Gestor.</span></div>
     </form>
     {error && <div className="form-error report-feedback" role="alert">{error}</div>}
+    {reportDataError && <div className="form-error report-feedback" role="alert">{reportDataError}</div>}
     {saveConfirmation && <div className="report-save-confirmation report-feedback" role="status"><Check size={16} />{saveConfirmation}</div>}
     {!contractorId
       ? <div className="report-empty panel"><div className="empty-line-icon"><FileBarChart size={21} /></div><strong>Selecione uma contratada</strong><span>O histórico mensal e os indicadores aparecerão aqui.</span></div>
-      : isHistoryLoading
+      : isHistoryLoading || isReportDataLoading
         ? <div className="report-empty panel" role="status"><span>Carregando histórico de {year}…</span></div>
         : history && <>
           <div className="report-summary-strip">
@@ -1128,23 +1478,34 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
             <div><span>Média do período</span><strong>{periodAverage?.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) ?? '—'}</strong></div>
             <div><span>Meses registrados</span><strong>{periodMonths.length} de {monthNumber}</strong></div>
           </div>
-          <article className="panel data-chart-panel">
-            <div className="panel-heading"><div><h2>Resultados mensais</h2><p>Valores de IPF de janeiro até {monthLabel}</p></div></div>
-            {periodMonths.length === 0
-              ? <div className="report-chart-empty">Ainda não há valores de IPF registrados para {history.year}. Use o formulário acima para adicionar o primeiro mês.</div>
-              : <div className="data-chart">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 10, right: 12, left: 0, bottom: 8 }}>
-                    <CartesianGrid stroke="#e8ece7" strokeDasharray="3 5" vertical={false} />
-                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#59675d', fontSize: 11 }} />
-                    <YAxis domain={['auto', 'auto']} axisLine={false} tickLine={false} tick={{ fill: '#59675d', fontSize: 11 }} />
-                    <Tooltip formatter={(value) => [value === null ? 'Sem registro' : Number(value).toLocaleString('pt-BR'), 'IPF']} />
-                    <Bar dataKey="value" fill="#3d7655" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>}
-          </article>
-          <div className="report-validation"><ShieldCheck size={18} /><span>Referência indicada na planilha: IPF acima de 7. O sistema preserva o valor informado; a regra de geração do plano de ação permanece conforme o Excel.</span></div>
+          {reportTab === 'monthly-data' && <article id="monthly-data-panel" role="tabpanel" aria-labelledby="monthly-data-tab" className="panel report-data-sheet">
+            <div className="panel-heading"><div><h2>Dados Relatório Mensal</h2><p>Identificação preenchida a partir das avaliações e do escopo selecionado.</p></div></div>
+            <dl className="report-data-fields">
+              <div><dt>Nome do projeto e ilha</dt><dd>{reportMetadata('projectOrIslands') ?? '—'}</dd></div>
+              <div><dt>Local do site</dt><dd>{catalog?.sites.find(site => site.id === siteId)?.name ?? reportMetadata('sites') ?? '—'}</dd></div>
+              <div><dt>Cliente</dt><dd>{reportMetadata('clients') ?? '—'}</dd></div>
+              <div><dt>Contratada</dt><dd>{history.contractor}</dd></div>
+              <div><dt>Disciplina</dt><dd>{scope.areaName}</dd></div>
+              <div><dt>Mês e ano da avaliação</dt><dd>{monthLabel}</dd></div>
+              <div><dt>Avaliado por</dt><dd>{reportMetadata('evaluators') ?? '—'}</dd></div>
+              <div><dt>Data de emissão</dt><dd>{reportIssuedAt ? new Intl.DateTimeFormat('pt-BR').format(reportIssuedAt) : '—'}</dd></div>
+              <div><dt>Horário de emissão</dt><dd>{reportIssuedAt ? new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(reportIssuedAt) : '—'}</dd></div>
+            </dl>
+            <div className="report-history-grid">
+              <h3 className="monthly-results-band">Resultados</h3>
+              <div className="table-scroll"><table><thead><tr><th colSpan={2}>Resultados de IPF Anteriores</th></tr><tr><th>Mês</th><th>Média</th></tr></thead><tbody>
+                {reportIpfMonths.map(record => <tr key={record.month}><td>{new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date(Date.UTC(year, record.month - 1, 15)))}</td><td>{record.value?.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) ?? '—'}</td></tr>)}
+                <tr className="report-history-total"><th>Resultado do Mês de Referência</th><td>{enteredIpf?.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) ?? '—'}</td></tr>
+                <tr className="report-history-total"><th>Média Anual</th><td>{ipfReportAverage?.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) ?? '—'}</td></tr>
+              </tbody></table></div>
+              <div className="table-scroll"><table><thead><tr><th colSpan={2}>Resultados de IDS</th></tr><tr><th>Mês</th><th>Média</th></tr></thead><tbody>
+                {monthIds.map(record => <tr key={record.month}><td>{new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date(Date.UTC(year, record.month - 1, 15)))}</td><td>{formatPercent(record.value)}</td></tr>)}
+                <tr className="report-history-total"><th>Resultado do Mês de Referência</th><td>{formatPercent(monthIds[monthNumber - 1]?.value ?? null)}</td></tr>
+                <tr className="report-history-total"><th>Média Anual</th><td>{formatPercent(idsAnnualAverage)}</td></tr>
+              </tbody></table></div>
+            </div>
+          </article>}
+          {reportTab === 'ipf-report' && reportPdf && <div id="ipf-report-panel" role="tabpanel" aria-labelledby="ipf-report-tab" dangerouslySetInnerHTML={{ __html: reportPdf.content }} />}
         </>}
   </section>
 }

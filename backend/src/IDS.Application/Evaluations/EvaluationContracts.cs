@@ -54,7 +54,7 @@ public sealed record DashboardSummaryDto(
     string IdsStatus,
     IReadOnlyCollection<DashboardTrendPointDto> Trend);
 
-public sealed record DashboardTrendPointDto(Guid EvaluationId, DateOnly Date, decimal? Ids);
+public sealed record DashboardTrendPointDto(Guid EvaluationId, DateOnly Date, decimal? Ids, Guid? SiteId);
 
 public sealed record ConsolidationCategoryDto(string Code, string Name, decimal Quantity);
 
@@ -70,6 +70,42 @@ public sealed record ConsolidationDayDto(
     decimal MediumSeverityDeviations,
     decimal HighSeverityDeviations);
 
+public sealed record ConsolidationWeekdayDto(
+    int WeekNumber,
+    int DayOfWeek,
+    int EvaluationCount,
+    decimal ObservedPeople,
+    decimal TotalDeviations,
+    decimal WeightedDeviationTotal,
+    decimal LowSeverityDeviations,
+    decimal MediumSeverityDeviations,
+    decimal HighSeverityDeviations,
+    decimal? Ids);
+
+public sealed record ConsolidationWeekCategoryDto(int WeekNumber, string Code, string Name, decimal Quantity);
+
+public sealed record ConsolidationWeekItemDto(
+    int WeekNumber,
+    string CategoryCode,
+    string Category,
+    string Code,
+    string Name,
+    decimal Quantity);
+
+public sealed record ConsolidationReportMetadataDto(
+    IReadOnlyCollection<string> ProjectOrIslands,
+    IReadOnlyCollection<string> Sites,
+    IReadOnlyCollection<string> Clients,
+    IReadOnlyCollection<string> Evaluators,
+    IReadOnlyCollection<ConsolidationReportMetadataBySiteDto> BySite);
+
+public sealed record ConsolidationReportMetadataBySiteDto(
+    Guid? SiteId,
+    IReadOnlyCollection<string> ProjectOrIslands,
+    IReadOnlyCollection<string> Sites,
+    IReadOnlyCollection<string> Clients,
+    IReadOnlyCollection<string> Evaluators);
+
 public sealed record DataConsolidationDto(
     DateOnly? From,
     DateOnly? To,
@@ -83,7 +119,11 @@ public sealed record DataConsolidationDto(
     IReadOnlyCollection<ConsolidationDayDto> Days,
     IReadOnlyCollection<ConsolidationCategoryDto> Categories,
     IReadOnlyCollection<ConsolidationItemDto> Items,
-    string WeekGroupingStatus);
+    string WeekGroupingStatus,
+    IReadOnlyCollection<ConsolidationWeekdayDto> Weekdays,
+    IReadOnlyCollection<ConsolidationWeekCategoryDto> WeeklyCategories,
+    IReadOnlyCollection<ConsolidationWeekItemDto> WeeklyItems,
+    ConsolidationReportMetadataDto Metadata);
 
 public sealed record EvaluationDto(
     Guid Id,

@@ -221,7 +221,8 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
             evaluation.ObservedPeople,
             evaluation.Observations.Select(observation => new IDS.Domain.Calculations.ObservationInput(
                 observation.Quantity,
-                observation.SeverityLevel?.Weight)).ToArray())).ToArray();
+                observation.SeverityLevel?.Weight)).ToArray(),
+            evaluation.SiteId)).ToArray();
     }
 
     public async Task<IReadOnlyCollection<ConsolidationRecord>> GetConsolidationRecordsAsync(
@@ -253,7 +254,12 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
                 observation.ChecklistItem.Code,
                 observation.ChecklistItem.Name,
                 observation.Quantity,
-                observation.SeverityLevel?.Weight)).ToArray())).ToArray();
+                observation.SeverityLevel?.Weight)).ToArray(),
+            evaluation.Site?.ProjectOrIsland,
+            evaluation.Site?.Name,
+            evaluation.ClientOrganization?.Name,
+            evaluation.LeadAuditorName ?? evaluation.AuditorName,
+            evaluation.SiteId)).ToArray();
     }
 
     private IQueryable<Evaluation> ApplyScope(IQueryable<Evaluation> query, EvaluationScope? scope)

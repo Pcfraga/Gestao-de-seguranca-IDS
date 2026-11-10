@@ -18,6 +18,41 @@ public sealed class InspectionAreaIpfTests
     private static readonly Guid High = Guid.Parse("30000000-0000-0000-0000-000000000003");
 
     [Fact]
+    public async Task FormulaUsesSelectedSiteAndRestoresSavedParameters()
+    {
+        using var factory = new CompanyApiFactory();
+        using var admin = await Administrator(factory, "formula");
+        var contractorResponse = await admin.PostAsJsonAsync("/api/catalog/organizations",
+            new { name = "Contratada fórmula", kind = "Contractor" });
+        Assert.Equal(HttpStatusCode.Created, contractorResponse.StatusCode);
+        var contractorId = (await contractorResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var siteResponse = await admin.PostAsJsonAsync("/api/catalog/sites", new { name = "Local fórmula" });
+        Assert.Equal(HttpStatusCode.Created, siteResponse.StatusCode);
+        var siteId = (await siteResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var form = await SaveForm(admin, Guid.Empty, "SST padrão");
+        var selected = await CreateEvaluation(admin, form, contractorId, 1, siteId);
+        await CreateEvaluation(admin, form, contractorId, 5);
+        var request = new UpsertMonthlyIpfRequest(contractorId, siteId, 999m,
+            MultiplicationFactor: 0.8m, AdditionalScore: 20m);
+
+        var response = await admin.PutAsJsonAsync("/api/reports/ipf/2026/10", request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var saved = (await response.Content.ReadFromJsonAsync<MonthlyIpfValueDto>())!;
+        Assert.Equal((selected.Indicators.Ids!.Value * 60m * 0.8m + 20m) / 10m, saved.Value);
+        Assert.Equal("Formula", saved.Source);
+        var history = await admin.GetFromJsonAsync<IpfAnnualHistoryDto>(
+            $"/api/reports/ipf/2026?contractorId={contractorId}");
+        var reloaded = Assert.Single(history!.Months);
+        Assert.Equal(saved.Value, reloaded.Value);
+        Assert.Equal(0.8m, reloaded.MultiplicationFactor);
+        Assert.Equal(20m, reloaded.AdditionalScore);
+        Assert.Equal(siteId, reloaded.SiteId);
+
+        var withoutIds = await admin.PutAsJsonAsync("/api/reports/ipf/2026/11", request);
+        Assert.Equal(HttpStatusCode.BadRequest, withoutIds.StatusCode);
+    }
+
+    [Fact]
     public async Task HistorySuggestionsAndUpsertsAreSeparatedByAreaFormAndTenant()
     {
         using var factory = new CompanyApiFactory();
@@ -128,13 +163,14 @@ public sealed class InspectionAreaIpfTests
         HttpClient client,
         InspectionFormDto form,
         Guid contractorId,
-        decimal lowQuantity)
+        decimal lowQuantity,
+        Guid? siteId = null)
     {
         var items = form.Categories.Single().Items.ToArray();
         var request = new CreateEvaluationRequest(
             new DateOnly(2026, 10, 19),
             null,
-            null,
+            siteId,
             null,
             contractorId,
             null,

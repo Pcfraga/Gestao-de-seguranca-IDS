@@ -89,6 +89,41 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
             throw new IpfReportValidationException(["Local não encontrado."]);
         }
 
+        if (request.MultiplicationFactor.HasValue != request.AdditionalScore.HasValue)
+        {
+            throw new IpfReportValidationException(["Informe o fator multiplicador e a parcela adicional para calcular o IPF."]);
+        }
+
+        if (request.MultiplicationFactor is decimal factor && request.AdditionalScore is decimal additionalScore)
+        {
+            var scores = await repository.GetMonthlyEvaluationScoresAsync(
+                year, month, request.ContractorOrganizationId, cancellationToken, areaId, formId, request.SiteId);
+            var validScores = scores.Where(score => score.HasValue).Select(score => score!.Value).ToArray();
+            if (validScores.Length == 0)
+            {
+                throw new IpfReportValidationException(["Não há avaliações com IDS calculável neste mês e recorte para calcular o IPF."]);
+            }
+
+            decimal value;
+            try
+            {
+                var idsPercentage = validScores.Average() * 100m;
+                value = decimal.Round(((idsPercentage * 60m * factor / 100m) + additionalScore) / 10m,
+                    4, MidpointRounding.AwayFromZero);
+            }
+            catch (OverflowException)
+            {
+                throw new IpfReportValidationException(["Os valores informados excedem o limite numérico do cálculo do IPF."]);
+            }
+
+            if (value is < -99999999.9999m or > 99999999.9999m)
+            {
+                throw new IpfReportValidationException(["O resultado do IPF excede o limite numérico de armazenamento."]);
+            }
+
+            request = request with { Value = value };
+        }
+
         var record = await repository.UpsertAsync(
             year,
             month,
@@ -110,7 +145,9 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
         record.Source,
         record.UpdatedAtUtc,
         record.AreaId,
-        record.FormId);
+        record.FormId,
+        record.MultiplicationFactor,
+        record.AdditionalScore);
 
     private static (Guid? AreaId, Guid? FormId) CanonicalizeScope(Guid? areaId, Guid? formId) =>
         (areaId is Guid area && area != Guid.Empty ? area : null,

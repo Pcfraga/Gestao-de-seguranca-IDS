@@ -114,7 +114,32 @@ public sealed class EvaluationApplicationServiceTests
         Assert.Equal(2m, data.Categories.Single().Quantity);
         Assert.Equal("Item de teste", data.Items.Single().Name);
         Assert.Equal(new DateOnly(2026, 10, 6), data.Days.Single().Date);
-        Assert.Contains("REGRA A VALIDAR", data.WeekGroupingStatus, StringComparison.Ordinal);
+        Assert.Equal("S1-S5 agrupam os dias 1-7, 8-14, 15-21, 22-28 e 29-31; domingos são excluídos.", data.WeekGroupingStatus);
+        Assert.Equal(1, data.Weekdays.Single().WeekNumber);
+        Assert.Equal((int)DayOfWeek.Tuesday, data.Weekdays.Single().DayOfWeek);
+        Assert.Equal(0.7m, data.Weekdays.Single().Ids);
+        Assert.Equal(2m, data.WeeklyCategories.Single().Quantity);
+        Assert.Equal(2m, data.WeeklyItems.Single().Quantity);
+        Assert.Equal("Auditor líder", data.Metadata.Evaluators.Single());
+    }
+
+    [Fact]
+    public async Task ExcludesSundaysFromWorkbookWeeklyBreakdowns()
+    {
+        var repository = CreateRepository();
+        var service = new EvaluationApplicationService(repository);
+        var request = CreateRequest(
+        [
+            new EvaluationObservationRequest(ItemId, 2m, LowSeverityId, null)
+        ]) with { EvaluationDate = new DateOnly(2026, 10, 4) };
+        await service.CreateDraftAsync(request, CancellationToken.None);
+
+        var data = await service.GetDataConsolidationAsync(null, null, null, null, CancellationToken.None);
+
+        Assert.Equal(1, data.EvaluationCount);
+        Assert.Empty(data.Weekdays);
+        Assert.Empty(data.WeeklyCategories);
+        Assert.Empty(data.WeeklyItems);
     }
 
     [Fact]
@@ -135,7 +160,7 @@ public sealed class EvaluationApplicationServiceTests
         Assert.Equal(2m, data.Categories.Single().Quantity);
         Assert.Equal("Item de teste", data.Items.Single().Name);
         Assert.Equal(new DateOnly(2026, 10, 6), data.Days.Single().Date);
-        Assert.Contains("REGRA A VALIDAR", data.WeekGroupingStatus, StringComparison.Ordinal);
+        Assert.Equal("S1-S5 agrupam os dias 1-7, 8-14, 15-21, 22-28 e 29-31; domingos são excluídos.", data.WeekGroupingStatus);
     }
 
     [Fact]
@@ -326,7 +351,11 @@ public sealed class EvaluationApplicationServiceTests
                     observation.ChecklistItem.Code,
                     observation.ChecklistItem.Name,
                     observation.Quantity,
-                    observation.SeverityLevel?.Weight)).ToArray());
+                    observation.SeverityLevel?.Weight)).ToArray(),
+                SavedEvaluation.Site?.ProjectOrIsland,
+                SavedEvaluation.Site?.Name,
+                SavedEvaluation.ClientOrganization?.Name,
+                SavedEvaluation.LeadAuditorName ?? SavedEvaluation.AuditorName);
             return Task.FromResult<IReadOnlyCollection<ConsolidationRecord>>([record]);
         }
 

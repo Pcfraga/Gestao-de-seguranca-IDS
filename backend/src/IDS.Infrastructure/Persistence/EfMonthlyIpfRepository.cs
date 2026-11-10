@@ -41,7 +41,8 @@ public sealed class EfMonthlyIpfRepository(IdsDbContext dbContext, ICurrentUserS
         Guid contractorId,
         CancellationToken cancellationToken,
         Guid? areaId = null,
-        Guid? formId = null)
+        Guid? formId = null,
+        Guid? siteId = null)
     {
         areaId = Canonicalize(areaId);
         formId = Canonicalize(formId);
@@ -55,6 +56,7 @@ public sealed class EfMonthlyIpfRepository(IdsDbContext dbContext, ICurrentUserS
             .Where(evaluation => evaluation.ContractorOrganizationId == contractorId
                 && evaluation.EvaluationDate >= monthStart
                 && evaluation.EvaluationDate < nextMonthStart)
+            .Where(evaluation => !siteId.HasValue || evaluation.SiteId == siteId)
             .Where(evaluation => areaId.HasValue
                 ? evaluation.FormVersion != null && evaluation.FormVersion.AreaId == areaId
                 : evaluation.FormVersion == null || evaluation.FormVersion.AreaId == null)
@@ -172,7 +174,9 @@ public sealed class EfMonthlyIpfRepository(IdsDbContext dbContext, ICurrentUserS
             ? await dbContext.Sites.SingleAsync(site => site.Id == siteId, cancellationToken)
             : null;
         record.Value = request.Value;
-        record.Source = "Manual";
+        record.MultiplicationFactor = request.MultiplicationFactor;
+        record.AdditionalScore = request.AdditionalScore;
+        record.Source = request.MultiplicationFactor.HasValue ? "Formula" : "Manual";
         await dbContext.SaveChangesAsync(cancellationToken);
         return record;
     }
