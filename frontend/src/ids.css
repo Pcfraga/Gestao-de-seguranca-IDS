@@ -225,6 +225,8 @@ td { padding: 0; }
 .checklist-row { min-height: 39px; border-top: 1px solid #f1f3f1; padding: 4px 6px; }
 .checklist-row.incomplete { background: #fffaf1; }
 .checklist-item-name { display: flex; align-items: center; gap: 6px; color: #59665d; font-size: 9px; }
+.checklist-field { display: block; min-width: 0; }
+.checklist-field > span { display: none; }
 .checklist-row.incomplete .checklist-item-name svg { color: #b2742e; flex: 0 0 auto; }
 .checklist-row input, .checklist-row select { height: 29px; }
 .checklist-row input[type="number"] { font-family: "IBM Plex Mono", monospace; }
@@ -508,6 +510,26 @@ th { color: #445449; font-size: 11px; }
 .rank-bar { position: relative; min-width: 120px; height: 26px; background: #eef2ee; border-radius: 6px; overflow: hidden; }
 .rank-bar-fill { position: absolute; inset: 0 auto 0 0; background: #b9d8c4; }
 .rank-bar span { position: relative; display: block; padding: 4px 8px; font-weight: 600; color: #17271d; }
+
+@media (max-width: 760px) {
+  .inspection-observations .checklist-row {
+    grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr);
+    align-items: start;
+    gap: 10px 12px;
+    min-height: 0;
+    margin-bottom: 9px;
+    padding: 11px;
+    background: #fff;
+    border: 1px solid #e3e9e3;
+    border-radius: 6px;
+  }
+
+  .inspection-observations .checklist-row.incomplete { background: #fffaf1; }
+  .inspection-observations .checklist-item-name { grid-column: 1 / -1; color: #34463a; font-size: 12px; line-height: 1.4; }
+  .inspection-observations .checklist-field { display: flex; flex-direction: column; gap: 5px; }
+  .inspection-observations .checklist-field > span { display: block; color: #657168; font-size: 11px; font-weight: 600; }
+  .inspection-observations .checklist-field:last-child { grid-column: 1 / -1; }
+}
 
 .branding-card { grid-column: 1 / -1; display: grid; gap: 16px; padding: 18px; }
 .branding-form { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -282,11 +282,11 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
               {category.items.map((item) => (
                 <div className={`checklist-row ${isIncomplete(item.id) ? 'incomplete' : ''}`} key={item.id}>
                   <span className="checklist-item-name">{item.name}{isIncomplete(item.id) && <AlertTriangle size={14} aria-label="Quantidade ou severidade pendente" />}</span>
-                  <input aria-label={`Quantidade: ${item.name}`} onChange={(event) => updateObservation(item.id, { quantity: event.target.value })} step="any" type="number" value={observations[item.id]?.quantity ?? ''} />
-                  <select aria-label={`Severidade: ${item.name}`} onChange={(event) => updateObservation(item.id, { severityLevelId: event.target.value })} value={observations[item.id]?.severityLevelId ?? ''}>
+                  <label className="checklist-field"><span>Quantidade</span><input aria-label={`Quantidade: ${item.name}`} onChange={(event) => updateObservation(item.id, { quantity: event.target.value })} step="any" type="number" value={observations[item.id]?.quantity ?? ''} /></label>
+                  <label className="checklist-field"><span>Severidade</span><select aria-label={`Severidade: ${item.name}`} onChange={(event) => updateObservation(item.id, { severityLevelId: event.target.value })} value={observations[item.id]?.severityLevelId ?? ''}>
                     <option value="">Selecionar</option>{catalog.severities.map((severity) => <option key={severity.id} value={severity.id}>{severity.name} · {severity.weight.toLocaleString('pt-BR')}</option>)}
-                  </select>
-                  <input aria-label={`Comentário: ${item.name}`} maxLength={2000} onChange={(event) => updateObservation(item.id, { comment: event.target.value })} placeholder="Opcional" value={observations[item.id]?.comment ?? ''} />
+                  </select></label>
+                  <label className="checklist-field"><span>Comentário</span><input aria-label={`Comentário: ${item.name}`} maxLength={2000} onChange={(event) => updateObservation(item.id, { comment: event.target.value })} placeholder="Opcional" value={observations[item.id]?.comment ?? ''} /></label>
                 </div>
               ))}
             </fieldset>
