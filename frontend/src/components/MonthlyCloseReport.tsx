@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Activity, BarChart3, UsersRound } from 'lucide-react'
-import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
+import { Activity, BarChart3, FileDown, UsersRound } from 'lucide-react'
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { apiRequest, type DataConsolidation, type InspectionScope, inspectionScopeQuery } from '../lib/api'
 import { IndicatorResult } from './IndicatorResult'
+import { formatPercent, severityWithPercentages } from '../lib/severityChart'
+import { formatIds } from '../lib/indicatorFormat'
+import { monthlyClosePdf } from '../lib/monthlyClosePdf'
+import { openPrintWindow } from '../lib/pdf'
 
 const severityColors = ['#70a681', '#d2a052', '#bd6963']
 const categoryColors = ['#4472c4', '#ed7d31', '#a5a5a5', '#ffc000', '#5b9bd5', '#70ad47', '#8064a2', '#4bacc6']
@@ -17,10 +21,6 @@ function monthRange(month: string) {
 
 function formatNumber(value: number) {
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
-}
-
-function formatPercent(value: number | null) {
-  return value === null ? '—' : `${(value * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
 }
 
 function companyKey(group: MonthlyGroup) {
@@ -46,6 +46,7 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
   const [selectedCompany, setSelectedCompany] = useState('')
   const [selectedProject, setSelectedProject] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
+  const [exportError, setExportError] = useState('')
   const query = inspectionScopeQuery(scope)
   const requestKey = `${month}:${query}`
 
@@ -116,11 +117,11 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
   const sortedCategoryRows = [...categoryRows.values()].sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'))
   const sortedItemRows = [...itemRows.values()].sort((left, right) =>
     left.category.localeCompare(right.category, 'pt-BR') || left.name.localeCompare(right.name, 'pt-BR'))
-  const severityData = [
+  const severityData = severityWithPercentages([
     { name: 'Baixa', quantity: sumGroups(visibleGroups, group => group.lowSeverityDeviations) },
     { name: 'Média', quantity: sumGroups(visibleGroups, group => group.mediumSeverityDeviations) },
     { name: 'Alta', quantity: sumGroups(visibleGroups, group => group.highSeverityDeviations) },
-  ]
+  ])
   const categoryChartData = [...categoryTotals.values()].filter(item => item.quantity > 0)
   const itemChartData = [...itemTotals.values()].filter(item => item.quantity > 0)
   const scoredEvaluationCount = sumGroups(visibleGroups, group => group.scoredEvaluationCount)
@@ -130,11 +131,36 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
   const evaluationCount = sumGroups(visibleGroups, group => group.evaluationCount)
   const observedPeople = sumGroups(visibleGroups, group => group.observedPeople)
   const totalDeviations = sumGroups(visibleGroups, group => group.totalDeviations)
+  const weightedDeviation = sumGroups(visibleGroups, group => group.weightedDeviationTotal)
   const isLoading = loadedKey !== requestKey
   const error = loadError?.key === requestKey ? loadError.message : ''
 
+  function exportSummary() {
+    setExportError('')
+    const pdf = monthlyClosePdf({
+      month,
+      company: companies.find(([key]) => key === activeCompany)?.[1] ?? 'Todas as empresas',
+      project: projects.find(([key]) => key === activeProject)?.[1] ?? 'Todos os projetos',
+      area: scope.areaName,
+      form: scope.formName,
+      ids: averageIds,
+      evaluations: evaluationCount,
+      observedPeople,
+      deviations: totalDeviations,
+      weightedDeviation,
+      severity: severityData,
+      categories: categoryChartData,
+      selectedCategory: categories.find(([key]) => key === activeCategory)?.[1] ?? 'Sem categoria',
+      items: itemChartData,
+    })
+    if (!openPrintWindow(pdf.title, pdf.content)) {
+      setExportError('O navegador bloqueou o PDF. Permita pop-ups para este site e tente novamente.')
+    }
+  }
+
   return <div className="monthly-close-layout">
     {error && <div className="form-error" role="alert">{error}</div>}
+    {exportError && <div className="form-error" role="alert">{exportError}</div>}
     {isLoading ? <div className="indicator-empty panel" role="status">Carregando fechamento mensal…</div>
       : !groups.length ? <div className="indicator-empty panel">
         <div className="empty-line-icon"><BarChart3 size={22} /></div>
@@ -162,6 +188,7 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
               {projects.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
             </select></label>
             <span className="monthly-close-count"><Activity size={15} />{visibleGroups.length} combinação(ões) empresa/projeto</span>
+            <button type="button" className="outline-button" onClick={exportSummary}><FileDown size={16} />PDF para apresentação</button>
           </section>
 
           <article className="panel data-table-panel monthly-close-table-panel">
@@ -174,8 +201,8 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
               {visibleGroups.map(group => <tr key={`${companyKey(group)}:${projectKey(group)}`}>
                 <td>{group.contractor ?? 'Empresa não informada'}</td>
                 <td>{group.projectOrIsland ?? group.site ?? 'Projeto não informado'}</td>
-                {Array.from({ length: 5 }, (_, index) => <td key={index}><IndicatorResult kind="ids" value={group.weeks.find(week => week.weekNumber === index + 1)?.idsAverage} /></td>)}
-                <td><IndicatorResult kind="ids" value={group.idsAverage} /></td><td>{formatNumber(group.observedPeople)}</td><td>{formatNumber(group.totalDeviations)}</td>
+                {Array.from({ length: 5 }, (_, index) => <td key={index}>{formatIds(group.weeks.find(week => week.weekNumber === index + 1)?.idsAverage)}</td>)}
+                <td>{formatIds(group.idsAverage)}</td><td>{formatNumber(group.observedPeople)}</td><td>{formatNumber(group.totalDeviations)}</td>
                 <td>{formatNumber(group.weightedDeviationTotal)}</td><td>{formatNumber(group.lowSeverityDeviations)}</td>
                 <td>{formatNumber(group.mediumSeverityDeviations)}</td><td>{formatNumber(group.highSeverityDeviations)}</td>
                 <td>{formatPercent(group.totalDeviations ? group.lowSeverityDeviations / group.totalDeviations : null)}</td>
@@ -191,7 +218,14 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
               <div className="monthly-close-donut">
                 {severityData.some(item => item.quantity > 0)
                   ? <ResponsiveContainer width="100%" height="100%"><PieChart>
-                    <Pie data={severityData} dataKey="quantity" nameKey="name" innerRadius="53%" outerRadius="76%" paddingAngle={2}>
+                    <Pie data={severityData} dataKey="quantity" nameKey="name" innerRadius="53%" outerRadius="76%" paddingAngle={2}
+                      isAnimationActive={false} labelLine={false}
+                      label={({ cx, cy, index }) => {
+                        const item = severityData[index]
+                        if (!item || typeof cx !== 'number' || typeof cy !== 'number') return null
+                        return <text x={cx} y={cy + (index - 1) * 17} textAnchor="middle" dominantBaseline="middle"
+                          fill={severityColors[index]} fontSize={11} fontWeight={600}>{item.name}: {item.percentageLabel}</text>
+                      }}>
                       {severityData.map((item, index) => <Cell key={item.name} fill={severityColors[index]} />)}
                     </Pie>
                     <Tooltip formatter={(value) => [formatNumber(Number(value)), 'Desvios']} />
@@ -202,15 +236,17 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
             </article>
             <article className="panel monthly-close-chart-panel">
               <div className="panel-heading"><div><h2>Desvios por categoria</h2><p>Distribuição dos itens observados no mês.</p></div></div>
-              <div className="monthly-close-donut">
+              <div className="monthly-close-category-chart" style={{ height: Math.max(270, categoryChartData.length * 38 + 40) }}>
                 {categoryChartData.length
-                  ? <ResponsiveContainer width="100%" height="100%"><PieChart>
-                    <Pie data={categoryChartData} dataKey="quantity" nameKey="name" innerRadius="48%" outerRadius="75%" paddingAngle={2}>
-                      {categoryChartData.map((item, index) => <Cell key={item.name} fill={categoryColors[index % categoryColors.length]} />)}
-                    </Pie>
+                  ? <ResponsiveContainer width="100%" height="100%"><BarChart data={categoryChartData} layout="vertical" margin={{ top: 8, right: 24, left: 0, bottom: 8 }}>
+                    <CartesianGrid stroke="#e8ece7" strokeDasharray="3 5" horizontal={false} />
+                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#858e87', fontSize: 10 }} />
+                    <YAxis dataKey="name" type="category" width={160} axisLine={false} tickLine={false} tick={{ fill: '#68766d', fontSize: 10 }} />
                     <Tooltip formatter={(value) => [formatNumber(Number(value)), 'Desvios']} />
-                    <Legend />
-                  </PieChart></ResponsiveContainer>
+                    <Bar dataKey="quantity" name="Desvios" radius={[0, 4, 4, 0]}>
+                      {categoryChartData.map((item, index) => <Cell key={item.name} fill={categoryColors[index % categoryColors.length]} />)}
+                    </Bar>
+                  </BarChart></ResponsiveContainer>
                   : <div className="monthly-close-chart-empty">Sem itens por categoria neste recorte.</div>}
               </div>
             </article>
