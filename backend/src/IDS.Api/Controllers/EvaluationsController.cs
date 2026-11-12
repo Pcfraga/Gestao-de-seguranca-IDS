@@ -236,27 +236,30 @@ public sealed class CatalogController(IdsDbContext dbContext) : ControllerBase
 
     [Authorize(Roles = "ADMINISTRADOR,GESTOR")]
     [HttpPut("organizations/{id:guid}")]
-    public async Task<IActionResult> RenameContractor(Guid id, RenameCatalogRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> RenameOrganization(Guid id, RenameCatalogRequest request, CancellationToken cancellationToken)
     {
-        var organization = await dbContext.Organizations.SingleOrDefaultAsync(value => value.Id == id && value.Kind == OrganizationKind.Contractor, cancellationToken);
+        var organization = await dbContext.Organizations.SingleOrDefaultAsync(value => value.Id == id, cancellationToken);
         if (organization is null) return NotFound();
         var name = request.Name.Trim();
-        if (name.Length == 0) return BadRequest(new { message = "Informe o nome da contratada." });
-        if (await dbContext.Organizations.AnyAsync(value => value.Id != id && value.Kind == OrganizationKind.Contractor && value.Name.ToUpper() == name.ToUpper(), cancellationToken))
-            return Conflict(new { message = "Já existe uma contratada com este nome." });
+        if (name.Length == 0) return BadRequest(new { message = "Informe o nome da organização." });
+        if (await dbContext.Organizations.AnyAsync(value => value.Id != id && value.Kind == organization.Kind && value.Name.ToUpper() == name.ToUpper(), cancellationToken))
+            return Conflict(new { message = "Já existe uma organização deste tipo com este nome." });
         organization.Name = name;
-        var compositions = await dbContext.IpfCompositions.Where(value => value.ContractorOrganizationId == id).ToArrayAsync(cancellationToken);
-        foreach (var composition in compositions) composition.ContractorName = name;
-        if (!await SaveCatalog(cancellationToken)) return Conflict(new { message = "Já existe uma contratada com este nome." });
+        if (organization.Kind == OrganizationKind.Contractor)
+        {
+            var compositions = await dbContext.IpfCompositions.Where(value => value.ContractorOrganizationId == id).ToArrayAsync(cancellationToken);
+            foreach (var composition in compositions) composition.ContractorName = name;
+        }
+        if (!await SaveCatalog(cancellationToken)) return Conflict(new { message = "Já existe uma organização deste tipo com este nome." });
         return Ok(new { organization.Id, organization.Name, Kind = organization.Kind.ToString(), organization.IsActive });
     }
 
     [Authorize(Roles = "ADMINISTRADOR,GESTOR")]
     [HttpPut("organizations/{id:guid}/active")]
-    public async Task<IActionResult> SetContractorActive(Guid id, SetInspectionIslandActiveRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> SetOrganizationActive(Guid id, SetInspectionIslandActiveRequest request, CancellationToken cancellationToken)
     {
-        if (!request.IsActive.HasValue) return BadRequest(new { message = "Informe a situação da contratada." });
-        var organization = await dbContext.Organizations.SingleOrDefaultAsync(value => value.Id == id && value.Kind == OrganizationKind.Contractor, cancellationToken);
+        if (!request.IsActive.HasValue) return BadRequest(new { message = "Informe a situação da organização." });
+        var organization = await dbContext.Organizations.SingleOrDefaultAsync(value => value.Id == id, cancellationToken);
         if (organization is null) return NotFound();
         organization.IsActive = request.IsActive.Value;
         await dbContext.SaveChangesAsync(cancellationToken);

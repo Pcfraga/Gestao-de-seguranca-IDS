@@ -181,12 +181,20 @@ export function OperationalCatalog({ canCreateArea }: { canCreateArea: boolean }
   if (!catalog || !areas || !islands) return <div className="form-loading" role="status">Carregando cadastros…</div>
 
   return <div className="operational-catalog-grid">
+    <CreateCard title="Clientes" label="Nome do cliente" placeholder="Ex.: Empresa cliente" maxLength={200}
+      entries={catalog.organizations.filter(org => org.kind === 'Client').map(org => org.name)}
+      onCreate={async name => {
+        const created = await apiRequest<Organization>('/api/catalog/organizations', { method: 'POST', body: JSON.stringify({ name, kind: 'Client' }) })
+        setCatalog(current => current ? { ...current, organizations: [...current.organizations, created].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')) } : current)
+      }} />
     <CreateCard title="Empresas contratadas" label="Nome da contratada" placeholder="Ex.: Empresa contratada" maxLength={200}
       entries={catalog.organizations.filter(org => org.kind === 'Contractor').map(org => org.name)}
       onCreate={async name => {
         const created = await apiRequest<Organization>('/api/catalog/organizations', { method: 'POST', body: JSON.stringify({ name, kind: 'Contractor' }) })
         setCatalog(current => current ? { ...current, organizations: [...current.organizations, created].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')) } : current)
       }} />
+    <ManageCatalog title="Editar clientes" endpoint="/api/catalog/organizations" entries={catalog.organizations.filter(org => org.kind === 'Client')}
+      onChanged={saved => setCatalog(current => current ? { ...current, organizations: current.organizations.map(entry => entry.id === saved.id ? saved : entry) } : current)} />
     <CreateCard title="Locais / projetos" label="Nome do projeto" placeholder="Ex.: Unidade ou obra" maxLength={200}
       entries={catalog.sites.map(site => site.name)}
       onCreate={async name => {

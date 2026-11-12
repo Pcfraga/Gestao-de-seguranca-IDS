@@ -79,6 +79,32 @@ public sealed class OperationalCatalogTests
     }
 
     [Fact]
+    public async Task ClientsCanBeCreatedRenamedAndDeactivatedWithoutLosingEvaluationHistory()
+    {
+        using var factory = new CompanyApiFactory();
+        using var admin = await Administrator(factory, "client-management");
+        using var other = await Administrator(factory, "other-client-management");
+        var createResponse = await admin.PostAsJsonAsync("/api/catalog/organizations", new { name = "Cliente A", kind = "Client" });
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var client = await createResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var clientId = client.GetProperty("id").GetGuid();
+        var request = new CreateEvaluationRequest(new DateOnly(2026, 10, 1), null, null, clientId, null, null,
+            null, null, null, 10, null, null, []);
+        var evaluationResponse = await admin.PostAsJsonAsync("/api/evaluations", request);
+        Assert.Equal(HttpStatusCode.Created, evaluationResponse.StatusCode);
+        var evaluation = (await evaluationResponse.Content.ReadFromJsonAsync<EvaluationDto>())!;
+
+        Assert.Equal(HttpStatusCode.NotFound, (await other.PutAsJsonAsync($"/api/catalog/organizations/{clientId}", new { name = "Outro cliente" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync($"/api/catalog/organizations/{clientId}", new { name = "Cliente B" })).StatusCode);
+        Assert.Equal("Cliente B", (await admin.GetFromJsonAsync<EvaluationDto>($"/api/evaluations/{evaluation.Id}"))!.Client);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync($"/api/catalog/organizations/{clientId}/active", new { isActive = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync("/api/evaluations", request)).StatusCode);
+        Assert.Equal("Cliente B", (await admin.GetFromJsonAsync<EvaluationDto>($"/api/evaluations/{evaluation.Id}"))!.Client);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync($"/api/catalog/organizations/{clientId}/active", new { isActive = true })).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await admin.PostAsJsonAsync("/api/evaluations", request)).StatusCode);
+    }
+
+    [Fact]
     public async Task DefaultAreaCanBeRenamedButNotDeactivated()
     {
         using var factory = new CompanyApiFactory();

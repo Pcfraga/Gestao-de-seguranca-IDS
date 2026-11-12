@@ -76,7 +76,7 @@ const sectionCopy: Record<Section, { title: string; description: string }> = {
   indicators: { title: 'Indicadores', description: 'Resultados de IDS, distribuição de desvios e evolução por período.' },
   reports: { title: 'Relatório IPF', description: 'Dados Relatório Mensal e gráficos do modelo de acompanhamento IPF.' },
   monthlyClose: { title: 'Fechamento mensal', description: 'Consolidação das fórmulas e gráficos por empresa e projeto.' },
-  catalog: { title: 'Cadastros', description: 'Cadastre e consulte contratadas, locais ou projetos e áreas de inspeção.' },
+  catalog: { title: 'Cadastros', description: 'Cadastre e consulte clientes, contratadas, locais ou projetos e áreas de inspeção.' },
   forms: { title: 'Formulários de inspeção', description: 'Crie e edite formulários completos com tópicos e itens, mantendo as regras de cálculo e o histórico das inspeções.' },
   settings: { title: 'Configurações', description: 'Cadastros e parâmetros disponíveis para o seu perfil.' },
   users: { title: 'Usuários e perfis', description: 'Crie usuários, defina perfis e controle o acesso ao sistema.' },
