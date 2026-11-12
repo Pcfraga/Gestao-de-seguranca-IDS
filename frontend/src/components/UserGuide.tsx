@@ -136,11 +136,11 @@ export function UserGuide() {
         <li>Informe o número de <strong>Pessoas observadas</strong>. Esse número é a base da conta do IDS e precisa ser maior que zero para haver uma nota calculável.</li>
         <li>Em <strong>Observações</strong>, informe a quantidade do desvio e a severidade do item. Use o comentário para explicar o que foi visto.</li>
         <li>Preencha pontos fortes e oportunidades de melhoria para contextualizar o resultado.</li>
-        <li>Use <strong>Salvar rascunho</strong> para continuar depois. Revise o modelo, a contratada e os pares de quantidade/severidade antes de enviar.</li>
+        <li>Use <strong>Salvar rascunho</strong> para continuar depois. Para enviar, preencha todos os campos da avaliação; auditor secundário e comentários são opcionais. Quantidade e severidade devem ser preenchidas juntas nos itens iniciados.</li>
         <li>Use a ação de envio para concluir. Depois de enviada, a avaliação fica somente para leitura.</li>
       </ol>
       <p>Na lista de <strong>Avaliações</strong>, localize o registro e use a ação de edição enquanto estiver em rascunho. Uma avaliação salva não pode trocar de modelo ou versão; se escolheu o modelo errado, crie uma nova avaliação.</p>
-      <div className="guide-note"><Info size={18} aria-hidden="true" /><p>Itens incompletos podem ser salvos/enviados com aviso, mas uma quantidade sem severidade válida não contribui para a conta de desvios ponderados. Não interprete uma nota alta como prova de preenchimento completo. Ao trocar o modelo antes de salvar, confirme com cuidado: as observações preenchidas são descartadas.</p></div>
+      <div className="guide-note"><Info size={18} aria-hidden="true" /><p>Rascunhos podem ficar incompletos. O envio é bloqueado enquanto faltarem campos obrigatórios ou quantidade/severidade em um item iniciado; linhas do checklist sem preenchimento e comentários podem ficar em branco. Ao trocar o modelo antes de salvar, confirme com cuidado: as observações preenchidas são descartadas.</p></div>
     </Chapter>
 
     <Chapter id="dados-indicadores">

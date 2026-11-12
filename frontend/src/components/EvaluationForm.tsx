@@ -166,6 +166,32 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
     const shouldSubmit = submitter?.value === 'submit'
     setSubmitError('')
+    if (shouldSubmit) {
+      const missingFields = [
+        !evaluationDate.trim() && 'Data da avaliação',
+        !evaluationTime.trim() && 'Hora',
+        !siteId && 'Local / projeto',
+        !islandId && 'Local / ilha',
+        !clientId && 'Cliente',
+        !contractorId && 'Contratada',
+        !leadAuditorName.trim() && 'Auditor líder',
+        !observedPeople.trim() && 'Pessoas observadas',
+        !companionName.trim() && 'Acompanhante',
+        !strengths.trim() && 'Pontos fortes',
+        !improvementOpportunities.trim() && 'Oportunidades de melhoria',
+      ].filter((field): field is string => Boolean(field))
+      const hasIncompleteObservation = catalog.categories.some(category => category.items.some(item => {
+        const observation = observations[item.id]
+        return Boolean(observation && ((observation.quantity.trim() !== '') !== (observation.severityLevelId !== '')))
+      }))
+      if (missingFields.length > 0 || hasIncompleteObservation) {
+        const errors = []
+        if (missingFields.length > 0) errors.push(`Preencha os campos obrigatórios: ${missingFields.join(', ')}.`)
+        if (hasIncompleteObservation) errors.push('Informe quantidade e severidade juntas nos itens iniciados do checklist.')
+        setSubmitError(errors.join(' '))
+        return
+      }
+    }
     setIsSaving(true)
 
     try {
@@ -267,7 +293,7 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
             <CatalogPicker label="Cliente" placeholder="Selecionar cliente" value={clientId} options={catalog.organizations.filter(organization => organization.kind === 'Client' && (organization.isActive || organization.id === clientId)).map(organization => ({ id: organization.id, label: `${organization.name}${organization.isActive ? '' : ' (desativado)'}` }))} canCreate={canCreateCatalog} onChange={setClientId} createTitle="Novo cliente" onCreate={(name) => createOrganization(name, 'Client')} />
             <label>Contratada<select value={contractorId} onChange={event => setContractorId(event.target.value)}><option value="">Selecionar contratada</option>{catalog.organizations.filter(organization => organization.kind === 'Contractor' && (organization.isActive || organization.id === contractorId)).map(organization => <option key={organization.id} value={organization.id}>{organization.name}{!organization.isActive ? ' (desativada)' : ''}</option>)}</select></label>
             <label>Auditor líder<input onChange={(event) => setLeadAuditorName(event.target.value)} value={leadAuditorName} /></label>
-            <label>Auditor<input onChange={(event) => setAuditorName(event.target.value)} value={auditorName} /></label>
+            <label>Auditor secundário (opcional)<input onChange={(event) => setAuditorName(event.target.value)} value={auditorName} /></label>
             <label>Acompanhante<input onChange={(event) => setCompanionName(event.target.value)} value={companionName} /></label>
           </div>
         </section>
@@ -298,7 +324,7 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
         </section>
 
         {submitError && <div className="form-error" role="alert">{submitError}</div>}
-        <div className="form-submit-row"><span>Itens incompletos podem ser enviados com aviso, como na planilha.</span><div className="evaluation-actions"><button className="outline-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="draft"><Save size={16} />{isSaving ? 'Salvando…' : 'Salvar rascunho'}</button><button className="primary-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="submit"><Check size={16} />{isSaving ? 'Enviando…' : 'Enviar avaliação'}</button></div></div>
+        <div className="form-submit-row"><span>O auditor secundário e comentários são opcionais. Itens do checklist podem ficar em branco, mas quantidade e severidade devem ser preenchidas juntas.</span><div className="evaluation-actions"><button className="outline-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="draft"><Save size={16} />{isSaving ? 'Salvando…' : 'Salvar rascunho'}</button><button className="primary-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="submit"><Check size={16} />{isSaving ? 'Enviando…' : 'Enviar avaliação'}</button></div></div>
       </form>}
     </div>
   )

@@ -259,10 +259,8 @@ public sealed class EvaluationApplicationServiceTests
     {
         var repository = CreateRepository();
         var service = new EvaluationApplicationService(repository);
-        var created = await service.CreateDraftAsync(CreateRequest(
-        [
-            new EvaluationObservationRequest(ItemId, 1m, LowSeverityId, null)
-        ]), CancellationToken.None);
+        var created = await service.CreateDraftAsync(CreateRequest([]), CancellationToken.None);
+        CompleteForSubmission(repository.SavedEvaluation!);
 
         var submitted = await service.SubmitDraftAsync(created.Id, CancellationToken.None);
 
@@ -270,6 +268,39 @@ public sealed class EvaluationApplicationServiceTests
         Assert.Equal("Submitted", submitted.Status);
         await Assert.ThrowsAsync<EvaluationValidationException>(
             () => service.UpdateDraftAsync(created.Id, CreateRequest([]), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SubmissionRejectsMissingRequiredFieldsAndKeepsDraft()
+    {
+        var repository = CreateRepository();
+        var service = new EvaluationApplicationService(repository);
+        var created = await service.CreateDraftAsync(CreateRequest([]), CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<EvaluationValidationException>(
+            () => service.SubmitDraftAsync(created.Id, CancellationToken.None));
+
+        Assert.Contains(exception.Errors, error => error.Contains("Hora", StringComparison.Ordinal));
+        Assert.Equal("Draft", repository.SavedEvaluation!.Status.ToString());
+    }
+
+    [Fact]
+    public async Task SubmissionRequiresQuantityAndSeverityTogetherButNotSecondaryAuditor()
+    {
+        var repository = CreateRepository();
+        var service = new EvaluationApplicationService(repository);
+        var created = await service.CreateDraftAsync(CreateRequest(
+        [
+            new EvaluationObservationRequest(ItemId, 1m, null, null)
+        ]), CancellationToken.None);
+        CompleteForSubmission(repository.SavedEvaluation!);
+
+        var exception = await Assert.ThrowsAsync<EvaluationValidationException>(
+            () => service.SubmitDraftAsync(created.Id, CancellationToken.None));
+
+        Assert.Contains(exception.Errors, error => error.Contains("quantidade e severidade", StringComparison.OrdinalIgnoreCase));
+        Assert.Null(repository.SavedEvaluation!.AuditorName);
+        Assert.Equal("Draft", repository.SavedEvaluation.Status.ToString());
     }
 
     private static CreateEvaluationRequest CreateRequest(IReadOnlyCollection<EvaluationObservationRequest> observations) =>
@@ -287,6 +318,20 @@ public sealed class EvaluationApplicationServiceTests
             null,
             null,
             observations);
+
+    private static void CompleteForSubmission(Evaluation evaluation)
+    {
+        evaluation.EvaluationTime = new TimeOnly(10, 30);
+        evaluation.SiteId = Guid.NewGuid();
+        evaluation.IslandId = Guid.NewGuid();
+        evaluation.ClientOrganizationId = Guid.NewGuid();
+        evaluation.ContractorOrganizationId = Guid.NewGuid();
+        evaluation.LeadAuditorName = "Auditor líder";
+        evaluation.AuditorName = null;
+        evaluation.CompanionName = "Acompanhante";
+        evaluation.Strengths = "Pontos fortes registrados";
+        evaluation.ImprovementOpportunities = "Oportunidades registradas";
+    }
 
     private static FakeEvaluationRepository CreateRepository()
     {

@@ -69,8 +69,33 @@ public sealed class InspectionFormsTests
         var form = await CreateForm(admin, Definition("Antigo", "Tópico antigo", "Item antigo"));
         var item = form.Categories.First().Items.First();
         var request = Evaluation(form.VersionId, [new(item.Id, 2, Low, "Original")]);
+        var siteResponse = await admin.PostAsJsonAsync("/api/catalog/sites", new { name = "Local da avaliação" });
+        Assert.Equal(HttpStatusCode.Created, siteResponse.StatusCode);
+        var siteId = (await siteResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var islandResponse = await admin.PostAsJsonAsync("/api/inspection-islands", new { name = "Ilha da avaliação" });
+        Assert.Equal(HttpStatusCode.Created, islandResponse.StatusCode);
+        var islandId = (await islandResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var clientResponse = await admin.PostAsJsonAsync("/api/catalog/organizations", new { name = "Cliente da avaliação", kind = "Client" });
+        Assert.Equal(HttpStatusCode.Created, clientResponse.StatusCode);
+        var clientId = (await clientResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var contractorResponse = await admin.PostAsJsonAsync("/api/catalog/organizations", new { name = "Contratada da avaliação", kind = "Contractor" });
+        Assert.Equal(HttpStatusCode.Created, contractorResponse.StatusCode);
+        var contractorId = (await contractorResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var submissionRequest = request with
+        {
+            EvaluationTime = new TimeOnly(10, 30),
+            SiteId = siteId,
+            IslandId = islandId,
+            ClientOrganizationId = clientId,
+            ContractorOrganizationId = contractorId,
+            LeadAuditorName = "Auditor líder",
+            CompanionName = "Acompanhante",
+            Strengths = "Pontos fortes registrados",
+            ImprovementOpportunities = "Oportunidades registradas"
+        };
         var draft = (await (await admin.PostAsJsonAsync("/api/evaluations", request)).Content.ReadFromJsonAsync<EvaluationDto>())!;
-        var submitted = (await (await admin.PostAsJsonAsync("/api/evaluations", request)).Content.ReadFromJsonAsync<EvaluationDto>())!;
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsync($"/api/evaluations/{draft.Id}/submit", null)).StatusCode);
+        var submitted = (await (await admin.PostAsJsonAsync("/api/evaluations", submissionRequest)).Content.ReadFromJsonAsync<EvaluationDto>())!;
         Assert.Equal(HttpStatusCode.OK, (await admin.PostAsync($"/api/evaluations/{submitted.Id}/submit", null)).StatusCode);
 
         var update = await admin.PutAsJsonAsync($"/api/inspection-forms/{form.Id}",

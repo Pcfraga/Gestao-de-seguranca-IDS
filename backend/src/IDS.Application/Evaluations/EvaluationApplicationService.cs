@@ -80,6 +80,7 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
             throw new EvaluationValidationException(["A avaliação não está mais em rascunho."]);
         }
 
+        ValidateForSubmission(evaluation);
         evaluation.Status = EvaluationStatus.Submitted;
         await repository.SaveChangesAsync(cancellationToken);
         return ToDto(evaluation, await repository.GetDefaultAreaNameAsync(cancellationToken));
@@ -478,6 +479,30 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
             throw new EvaluationValidationException(["Cada item pode aparecer apenas uma vez na avaliação."]);
         }
 
+    }
+
+    private static void ValidateForSubmission(Evaluation evaluation)
+    {
+        var missingFields = new List<string>();
+        if (evaluation.EvaluationDate == default) missingFields.Add("Data da avaliação");
+        if (!evaluation.EvaluationTime.HasValue) missingFields.Add("Hora");
+        if (!evaluation.SiteId.HasValue) missingFields.Add("Local / projeto");
+        if (!evaluation.IslandId.HasValue) missingFields.Add("Local / ilha");
+        if (!evaluation.ClientOrganizationId.HasValue) missingFields.Add("Cliente");
+        if (!evaluation.ContractorOrganizationId.HasValue) missingFields.Add("Contratada");
+        if (string.IsNullOrWhiteSpace(evaluation.LeadAuditorName)) missingFields.Add("Auditor líder");
+        if (!evaluation.ObservedPeople.HasValue) missingFields.Add("Pessoas observadas");
+        if (string.IsNullOrWhiteSpace(evaluation.CompanionName)) missingFields.Add("Acompanhante");
+        if (string.IsNullOrWhiteSpace(evaluation.Strengths)) missingFields.Add("Pontos fortes");
+        if (string.IsNullOrWhiteSpace(evaluation.ImprovementOpportunities)) missingFields.Add("Oportunidades de melhoria");
+
+        var errors = new List<string>();
+        if (missingFields.Count > 0)
+            errors.Add($"Preencha os campos obrigatórios: {string.Join(", ", missingFields)}.");
+        if (evaluation.Observations.Any(observation => observation.Quantity.HasValue != observation.SeverityLevelId.HasValue))
+            errors.Add("Informe quantidade e severidade juntas nos itens iniciados do checklist.");
+
+        if (errors.Count > 0) throw new EvaluationValidationException(errors);
     }
 
     private static void ValidateActiveReferences(CreateEvaluationRequest request, EvaluationReferenceData references, Evaluation? existing)
