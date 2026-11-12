@@ -297,8 +297,138 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
             weekdays,
             weeklyCategories,
             weeklyItems,
-            metadata);
+            metadata,
+            BuildMonthlyGroups(records));
     }
+
+    private static IReadOnlyCollection<MonthlyCloseGroupDto> BuildMonthlyGroups(
+        IReadOnlyCollection<ConsolidationRecord> records) =>
+        records
+            .GroupBy(record => new
+            {
+                record.ContractorId,
+                record.Contractor,
+                record.SiteId,
+                record.Site,
+                record.ProjectOrIsland
+            })
+            .OrderBy(group => group.Key.Contractor)
+            .ThenBy(group => group.Key.ProjectOrIsland ?? group.Key.Site)
+            .Select(group =>
+            {
+                var groupRecords = group.ToArray();
+                var observations = groupRecords.SelectMany(record => record.Observations).ToArray();
+                var low = SumQuantityForWeight(observations, 0.3m);
+                var medium = SumQuantityForWeight(observations, 1m);
+                var high = SumQuantityForWeight(observations, 3m);
+                var scoredIds = groupRecords
+                    .Select(record => IdsCalculator.Calculate(
+                        record.Observations.Select(observation => new ObservationInput(
+                            observation.Quantity,
+                            observation.SeverityWeight)),
+                        record.ObservedPeople ?? 0m).Score)
+                    .Where(score => score.HasValue)
+                    .Select(score => score.GetValueOrDefault())
+                    .ToArray();
+                var weekdayRecords = groupRecords
+                    .Where(record => record.EvaluationDate.DayOfWeek != DayOfWeek.Sunday)
+                    .ToArray();
+                var weekdays = weekdayRecords
+                    .GroupBy(record => (int)record.EvaluationDate.DayOfWeek)
+                    .ToDictionary(
+                        day => day.Key,
+                        day =>
+                        {
+                            var dayRecords = day.ToArray();
+                            var dayObservations = dayRecords.SelectMany(record => record.Observations).ToArray();
+                            var dayLow = SumQuantityForWeight(dayObservations, 0.3m);
+                            var dayMedium = SumQuantityForWeight(dayObservations, 1m);
+                            var dayHigh = SumQuantityForWeight(dayObservations, 3m);
+                            return new MonthlyCloseWeekdayDto(
+                                day.Key,
+                                dayRecords.Sum(record => record.ObservedPeople ?? 0m),
+                                dayLow + dayMedium + dayHigh);
+                        });
+                var weeks = Enumerable.Range(1, 5)
+                    .Select(weekNumber =>
+                    {
+                        var weekRecords = weekdayRecords
+                            .Where(record => ((record.EvaluationDate.Day - 1) / 7) + 1 == weekNumber)
+                            .ToArray();
+                        var weekObservations = weekRecords.SelectMany(record => record.Observations).ToArray();
+                        var weekLow = SumQuantityForWeight(weekObservations, 0.3m);
+                        var weekMedium = SumQuantityForWeight(weekObservations, 1m);
+                        var weekHigh = SumQuantityForWeight(weekObservations, 3m);
+                        var ids = weekRecords
+                            .Select(record => IdsCalculator.Calculate(
+                                record.Observations.Select(observation => new ObservationInput(
+                                    observation.Quantity,
+                                    observation.SeverityWeight)),
+                                record.ObservedPeople ?? 0m).Score)
+                            .Where(score => score.HasValue)
+                            .Select(score => score.GetValueOrDefault())
+                            .ToArray();
+                        return new MonthlyCloseWeekDto(
+                            weekNumber,
+                            ids.Length == 0 ? null : ids.Average(),
+                            weekRecords.Sum(record => record.ObservedPeople ?? 0m),
+                            weekLow + weekMedium + weekHigh,
+                            (weekLow * 0.3m) + weekMedium + (weekHigh * 3m),
+                            weekLow,
+                            weekMedium,
+                            weekHigh);
+                    })
+                    .ToArray();
+                var groupCategories = observations
+                    .GroupBy(observation => new { observation.CategoryCode, observation.CategoryName })
+                    .Select(items => new ConsolidationCategoryDto(
+                        items.Key.CategoryCode,
+                        items.Key.CategoryName,
+                        items.Sum(item => item.Quantity ?? 0m)))
+                    .OrderBy(category => category.Name)
+                    .ToArray();
+                var groupItems = observations
+                    .GroupBy(observation => new
+                    {
+                        observation.CategoryCode,
+                        observation.CategoryName,
+                        observation.ItemCode,
+                        observation.ItemName
+                    })
+                    .Select(items => new ConsolidationItemDto(
+                        items.Key.CategoryCode,
+                        items.Key.CategoryName,
+                        items.Key.ItemCode,
+                        items.Key.ItemName,
+                        items.Sum(item => item.Quantity ?? 0m)))
+                    .OrderBy(item => item.Category)
+                    .ThenBy(item => item.Name)
+                    .ToArray();
+
+                return new MonthlyCloseGroupDto(
+                    group.Key.ContractorId,
+                    group.Key.Contractor,
+                    group.Key.SiteId,
+                    group.Key.Site,
+                    group.Key.ProjectOrIsland,
+                    groupRecords.Length,
+                    scoredIds.Length,
+                    groupRecords.Sum(record => record.ObservedPeople ?? 0m),
+                    low + medium + high,
+                    (low * 0.3m) + medium + (high * 3m),
+                    low,
+                    medium,
+                    high,
+                    scoredIds.Length == 0 ? null : scoredIds.Average(),
+                    weeks,
+                    Enumerable.Range(1, 6)
+                        .Select(day => weekdays.GetValueOrDefault(day)
+                            ?? new MonthlyCloseWeekdayDto(day, 0m, 0m))
+                        .ToArray(),
+                    groupCategories,
+                    groupItems);
+            })
+            .ToArray();
 
     private static void ValidateReferences(CreateEvaluationRequest request, EvaluationReferenceData references)
     {

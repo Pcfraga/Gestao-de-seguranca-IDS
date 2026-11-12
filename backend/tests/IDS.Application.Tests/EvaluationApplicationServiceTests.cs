@@ -121,6 +121,16 @@ public sealed class EvaluationApplicationServiceTests
         Assert.Equal(2m, data.WeeklyCategories.Single().Quantity);
         Assert.Equal(2m, data.WeeklyItems.Single().Quantity);
         Assert.Equal("Auditor líder", data.Metadata.Evaluators.Single());
+        var monthlyGroup = Assert.Single(data.MonthlyGroups);
+        Assert.Equal(1, monthlyGroup.EvaluationCount);
+        Assert.Equal(1, monthlyGroup.ScoredEvaluationCount);
+        Assert.Equal(2m, monthlyGroup.ObservedPeople);
+        Assert.Equal(2m, monthlyGroup.TotalDeviations);
+        Assert.Equal(0.7m, monthlyGroup.IdsAverage);
+        Assert.Equal(5, monthlyGroup.Weeks.Count);
+        Assert.Equal(0.7m, monthlyGroup.Weeks.Single(week => week.WeekNumber == 1).IdsAverage);
+        Assert.Equal(2m, monthlyGroup.Categories.Single().Quantity);
+        Assert.Equal(2m, monthlyGroup.Items.Single().Quantity);
     }
 
     [Fact]
@@ -140,6 +150,64 @@ public sealed class EvaluationApplicationServiceTests
         Assert.Empty(data.Weekdays);
         Assert.Empty(data.WeeklyCategories);
         Assert.Empty(data.WeeklyItems);
+        Assert.Null(Assert.Single(data.MonthlyGroups).Weeks.First().IdsAverage);
+    }
+
+    [Fact]
+    public async Task ConsolidatesMonthlyCloseByContractorAndProject()
+    {
+        var repository = CreateRepository();
+        var contractorId = Guid.NewGuid();
+        var otherContractorId = Guid.NewGuid();
+        var siteId = Guid.NewGuid();
+        repository.ConsolidationRecords =
+        [
+            new ConsolidationRecord(
+                Guid.NewGuid(),
+                new DateOnly(2026, 10, 6),
+                2m,
+                [new ConsolidationObservationRecord("epi", "EPI", "helmet", "Capacete", 2m, 0.3m)],
+                "Projeto A",
+                "Local A",
+                SiteId: siteId,
+                ContractorId: contractorId,
+                Contractor: "Empresa A"),
+            new ConsolidationRecord(
+                Guid.NewGuid(),
+                new DateOnly(2026, 10, 8),
+                4m,
+                [new ConsolidationObservationRecord("tools", "Ferramentas", "tool", "Ferramenta", 1m, 3m)],
+                "Projeto A",
+                "Local A",
+                SiteId: siteId,
+                ContractorId: contractorId,
+                Contractor: "Empresa A"),
+            new ConsolidationRecord(
+                Guid.NewGuid(),
+                new DateOnly(2026, 10, 9),
+                1m,
+                [new ConsolidationObservationRecord("ppe", "EPI", "gloves", "Luvas", 1m, 1m)],
+                "Projeto B",
+                "Local B",
+                SiteId: Guid.NewGuid(),
+                ContractorId: otherContractorId,
+                Contractor: "Empresa B")
+        ];
+        var service = new EvaluationApplicationService(repository);
+
+        var data = await service.GetDataConsolidationAsync(null, null, null, null, CancellationToken.None);
+
+        Assert.Equal(2, data.MonthlyGroups.Count);
+        var companyProject = data.MonthlyGroups.Single(group => group.ContractorId == contractorId);
+        Assert.Equal("Projeto A", companyProject.ProjectOrIsland);
+        Assert.Equal(2, companyProject.EvaluationCount);
+        Assert.Equal(6m, companyProject.ObservedPeople);
+        Assert.Equal(3m, companyProject.TotalDeviations);
+        Assert.Equal(3.6m, companyProject.WeightedDeviationTotal);
+        Assert.Equal(0.475m, companyProject.IdsAverage);
+        Assert.Equal(0.7m, companyProject.Weeks.Single(week => week.WeekNumber == 1).IdsAverage);
+        Assert.Equal(0.25m, companyProject.Weeks.Single(week => week.WeekNumber == 2).IdsAverage);
+        Assert.Equal(2, companyProject.Items.Count);
     }
 
     [Fact]
@@ -256,6 +324,7 @@ public sealed class EvaluationApplicationServiceTests
     private sealed class FakeEvaluationRepository(EvaluationReferenceData referenceData) : IEvaluationRepository
     {
         public Evaluation? SavedEvaluation { get; private set; }
+        public IReadOnlyCollection<ConsolidationRecord>? ConsolidationRecords { get; set; }
 
         public Task<EvaluationReferenceData> LoadReferenceDataAsync(
             CreateEvaluationRequest request,
@@ -336,6 +405,11 @@ public sealed class EvaluationApplicationServiceTests
             CancellationToken cancellationToken,
             EvaluationScope? scope = null)
         {
+            if (ConsolidationRecords is not null)
+            {
+                return Task.FromResult(ConsolidationRecords);
+            }
+
             if (SavedEvaluation is null)
             {
                 return Task.FromResult<IReadOnlyCollection<ConsolidationRecord>>([]);

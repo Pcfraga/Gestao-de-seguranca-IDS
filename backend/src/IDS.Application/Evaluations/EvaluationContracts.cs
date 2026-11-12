@@ -106,6 +106,41 @@ public sealed record ConsolidationReportMetadataBySiteDto(
     IReadOnlyCollection<string> Clients,
     IReadOnlyCollection<string> Evaluators);
 
+public sealed record MonthlyCloseWeekDto(
+    int WeekNumber,
+    decimal? IdsAverage,
+    decimal ObservedPeople,
+    decimal TotalDeviations,
+    decimal WeightedDeviationTotal,
+    decimal LowSeverityDeviations,
+    decimal MediumSeverityDeviations,
+    decimal HighSeverityDeviations);
+
+public sealed record MonthlyCloseWeekdayDto(
+    int DayOfWeek,
+    decimal ObservedPeople,
+    decimal TotalDeviations);
+
+public sealed record MonthlyCloseGroupDto(
+    Guid? ContractorId,
+    string? Contractor,
+    Guid? SiteId,
+    string? Site,
+    string? ProjectOrIsland,
+    int EvaluationCount,
+    int ScoredEvaluationCount,
+    decimal ObservedPeople,
+    decimal TotalDeviations,
+    decimal WeightedDeviationTotal,
+    decimal LowSeverityDeviations,
+    decimal MediumSeverityDeviations,
+    decimal HighSeverityDeviations,
+    decimal? IdsAverage,
+    IReadOnlyCollection<MonthlyCloseWeekDto> Weeks,
+    IReadOnlyCollection<MonthlyCloseWeekdayDto> Weekdays,
+    IReadOnlyCollection<ConsolidationCategoryDto> Categories,
+    IReadOnlyCollection<ConsolidationItemDto> Items);
+
 public sealed record DataConsolidationDto(
     DateOnly? From,
     DateOnly? To,
@@ -123,7 +158,8 @@ public sealed record DataConsolidationDto(
     IReadOnlyCollection<ConsolidationWeekdayDto> Weekdays,
     IReadOnlyCollection<ConsolidationWeekCategoryDto> WeeklyCategories,
     IReadOnlyCollection<ConsolidationWeekItemDto> WeeklyItems,
-    ConsolidationReportMetadataDto Metadata);
+    ConsolidationReportMetadataDto Metadata,
+    IReadOnlyCollection<MonthlyCloseGroupDto> MonthlyGroups);
 
 public sealed record EvaluationDto(
     Guid Id,

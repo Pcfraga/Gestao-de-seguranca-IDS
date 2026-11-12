@@ -259,7 +259,9 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
             evaluation.Site?.Name,
             evaluation.ClientOrganization?.Name,
             evaluation.LeadAuditorName ?? evaluation.AuditorName,
-            evaluation.SiteId)).ToArray();
+            evaluation.SiteId,
+            evaluation.ContractorOrganizationId,
+            evaluation.ContractorOrganization?.Name)).ToArray();
     }
 
     private IQueryable<Evaluation> ApplyScope(IQueryable<Evaluation> query, EvaluationScope? scope)

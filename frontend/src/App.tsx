@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { calculateMonthlyIpf } from './lib/monthlyIpf'
+import { formatIds, formatIdsNumber, formatIpf } from './lib/indicatorFormat'
+import { indicatorStatus } from './lib/indicatorStatus'
+import { IndicatorResult } from './components/IndicatorResult'
 import {
   AlertTriangle,
   Activity,
@@ -50,10 +53,11 @@ import { clearBranding, defaultPrimaryColor, fetchBranding, loadBranding, readLo
 import './ids.css'
 import { InspectionScopeSelector } from './components/InspectionScopeSelector'
 import { IpfCompositionReport } from './components/IpfCompositionReport'
+import { MonthlyCloseReport } from './components/MonthlyCloseReport'
 import { UserGuide } from './components/UserGuide'
 import { inspectionScopeQuery, type InspectionScope } from './lib/api'
 
-type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'forms' | 'settings' | 'users' | 'account' | 'guide'
+type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'monthlyClose' | 'forms' | 'settings' | 'users' | 'account' | 'guide'
 
 const sections: Array<{ id: Section; label: string; icon: typeof LayoutDashboard }> = [
   { id: 'overview', label: 'Visão geral', icon: LayoutDashboard },
@@ -61,6 +65,7 @@ const sections: Array<{ id: Section; label: string; icon: typeof LayoutDashboard
   { id: 'data', label: 'Dados', icon: Database },
   { id: 'indicators', label: 'Indicadores', icon: Gauge },
   { id: 'reports', label: 'Relatório IPF', icon: FileBarChart },
+  { id: 'monthlyClose', label: 'Fechamento mensal', icon: BarChart3 },
 ]
 
 const sectionCopy: Record<Section, { title: string; description: string }> = {
@@ -69,6 +74,7 @@ const sectionCopy: Record<Section, { title: string; description: string }> = {
   data: { title: 'Dados', description: 'Consolidação das avaliações por data, categoria e item observado.' },
   indicators: { title: 'Indicadores', description: 'Resultados de IDS, distribuição de desvios e evolução por período.' },
   reports: { title: 'Relatório IPF', description: 'Dados Relatório Mensal e gráficos do modelo de acompanhamento IPF.' },
+  monthlyClose: { title: 'Fechamento mensal', description: 'Consolidação das fórmulas e gráficos por empresa e projeto.' },
   forms: { title: 'Formulários de inspeção', description: 'Crie e edite formulários completos com tópicos e itens, mantendo as regras de cálculo e o histórico das inspeções.' },
   settings: { title: 'Configurações', description: 'Cadastros e parâmetros disponíveis para o seu perfil.' },
   users: { title: 'Usuários e perfis', description: 'Crie usuários, defina perfis e controle o acesso ao sistema.' },
@@ -269,11 +275,12 @@ function App() {
             <button type="button" className={reportMode === 'manual' ? 'primary-button' : 'outline-button'} aria-pressed={reportMode === 'manual'} onClick={() => setReportMode('manual')}>IPF manual por formulário</button>
             <button type="button" className={reportMode === 'composition' ? 'primary-button' : 'outline-button'} aria-pressed={reportMode === 'composition'} onClick={() => setReportMode('composition')}>IPF por disciplinas e pesos</button>
           </div>}
-          {['overview', 'evaluations', 'data', 'indicators', 'reports'].includes(activeSection)
+          {['overview', 'evaluations', 'data', 'indicators', 'reports', 'monthlyClose'].includes(activeSection)
             && !(activeSection === 'reports' && reportMode === 'composition') && <InspectionScopeSelector onChange={setInspectionScope} />}
           {inspectionScope && activeSection === 'overview' && <Dashboard key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} onOpenEvaluations={() => setActiveSection('evaluations')} />}
           {inspectionScope && activeSection === 'evaluations' && <Evaluations scopeQuery={scopeQuery} key={`${evaluationRefresh}-${scopeQuery}`} search={search} month={selectedMonth} onCreate={() => { setEditingEvaluationId(null); setShowEvaluationForm(true) }} onEdit={(id) => { setEditingEvaluationId(id); setShowEvaluationForm(true) }} />}
           {inspectionScope && activeSection === 'data' && <DataView key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} />}
+          {inspectionScope && activeSection === 'monthlyClose' && <MonthlyCloseReport key={scopeQuery} scope={inspectionScope} month={selectedMonth} />}
           {inspectionScope && activeSection === 'indicators' && <Indicators key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
           {inspectionScope && activeSection === 'reports' && reportMode === 'manual' && <Reports key={scopeQuery} scope={inspectionScope} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
           {activeSection === 'reports' && reportMode === 'composition' && <IpfCompositionReport month={selectedMonth} initialAreaId={inspectionScope?.areaId} />}
@@ -326,7 +333,7 @@ function Dashboard({ month, monthLabel, onOpenEvaluations, scopeQuery }: { month
   }, [month, scopeQuery])
 
   const metricValues = [
-    summary?.ids === null || summary?.ids === undefined ? '—' : `${(summary.ids * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`,
+    formatIds(summary?.ids),
     summary?.evaluationCount.toLocaleString('pt-BR') ?? '—',
     summary?.observedPeopleTotal?.toLocaleString('pt-BR') ?? '—',
     summary?.totalDeviations.toLocaleString('pt-BR') ?? '—',
@@ -352,7 +359,7 @@ function Dashboard({ month, monthLabel, onOpenEvaluations, scopeQuery }: { month
         {metrics.map(({ label, icon: Icon, note, tone }, index) => (
           <article className="metric-card" key={label}>
             <div className="metric-topline"><span className={`metric-icon ${tone}`}><Icon size={18} strokeWidth={1.9} /></span><span className="metric-index">0{index + 1}</span></div>
-            <p className="metric-label">{label}</p><strong className="metric-value">{isLoadingSummary ? '…' : metricValues[index]}</strong><span className="metric-note">{index === 0 ? 'Consolidação mensal pendente de regra validada' : note}</span>
+            <p className="metric-label">{label}</p><strong className="metric-value">{isLoadingSummary ? '…' : index === 0 ? <IndicatorResult kind="ids" value={summary?.ids} /> : metricValues[index]}</strong><span className="metric-note">{index === 0 ? 'Consolidação mensal pendente de regra validada' : note}</span>
           </article>
         ))}
       </section>
@@ -369,8 +376,8 @@ function Dashboard({ month, monthLabel, onOpenEvaluations, scopeQuery }: { month
                   <defs><linearGradient id="idsFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2f7256" stopOpacity={0.2} /><stop offset="95%" stopColor="#2f7256" stopOpacity={0.01} /></linearGradient></defs>
                   <CartesianGrid stroke="#e8ece7" strokeDasharray="3 5" vertical={false} />
                   <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#858e87', fontSize: 10 }} tickFormatter={(value: string) => new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' }).format(new Date(`${value}T12:00:00`))} />
-                  <YAxis domain={['dataMin', 'dataMax']} axisLine={false} tickLine={false} tick={{ fill: '#858e87', fontSize: 10 }} tickFormatter={(value: number) => `${Math.round(value * 100)}%`} />
-                  <Tooltip labelFormatter={(value) => new Intl.DateTimeFormat('pt-BR').format(new Date(`${String(value)}T12:00:00`))} formatter={(value) => [`${(Number(value) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`, 'IDS']} />
+                  <YAxis domain={['dataMin', 'dataMax']} axisLine={false} tickLine={false} tick={{ fill: '#858e87', fontSize: 10 }} tickFormatter={(value: number) => formatIds(value)} />
+                  <Tooltip labelFormatter={(value) => new Intl.DateTimeFormat('pt-BR').format(new Date(`${String(value)}T12:00:00`))} formatter={(value) => [<IndicatorResult key="ids" kind="ids" value={Number(value)} />, 'IDS']} />
                   <Area type="monotone" dataKey="ids" stroke="#2f7256" strokeWidth={2.5} fill="url(#idsFill)" connectNulls={false} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -494,7 +501,7 @@ function RecentEvaluations({ month, scopeQuery }: { month: string; scopeQuery: s
   if (hasError) return <div className="table-empty"><strong>Não foi possível carregar os registros</strong><span>Verifique a conexão com a API.</span></div>
   if (evaluations.length === 0) return <div className="table-empty"><div className="empty-line-icon"><ListChecks size={20} /></div><strong>Nenhuma avaliação neste período</strong><span>Quando houver registros, eles serão listados aqui.</span></div>
 
-  return <div className="recent-evaluations">{evaluations.map((evaluation) => <div className="recent-evaluation-row" key={evaluation.id}><span className="recent-date">{new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(`${evaluation.evaluationDate}T12:00:00`))}</span><span className="recent-main"><strong>{evaluation.site ?? evaluation.contractor ?? 'Avaliação operacional'}</strong><small>{evaluation.leadAuditorName ?? 'Avaliador não informado'}</small></span><span className="recent-score">{evaluation.indicators.ids === null ? '—' : `${(evaluation.indicators.ids * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}</span></div>)}</div>
+  return <div className="recent-evaluations">{evaluations.map((evaluation) => <div className="recent-evaluation-row" key={evaluation.id}><span className="recent-date">{new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(`${evaluation.evaluationDate}T12:00:00`))}</span><span className="recent-main"><strong>{evaluation.site ?? evaluation.contractor ?? 'Avaliação operacional'}</strong><small>{evaluation.leadAuditorName ?? 'Avaliador não informado'}</small></span><span className="recent-score"><IndicatorResult kind="ids" value={evaluation.indicators.ids} /></span></div>)}</div>
 }
 
 const reportWeekdays = [
@@ -696,7 +703,7 @@ function DataView({ month, scopeQuery }: { month: string; scopeQuery: string }) 
             <tbody>{weeklyIds.map(row => {
               const validValues = row.values.filter((value): value is number => value !== null)
               const average = validValues.length ? validValues.reduce((sum, value) => sum + value, 0) / validValues.length : null
-              return <tr className={row.label === 'Média' ? 'report-history-total' : ''} key={row.label}><td>{row.label}</td>{row.values.map((value, index) => <td key={index}>{formatPercent(value)}</td>)}<td>{formatPercent(average)}</td></tr>
+              return <tr className={row.label === 'Média' ? 'report-history-total' : ''} key={row.label}><td>{row.label}</td>{row.values.map((value, index) => <td key={index}><IndicatorResult kind="ids" value={value} /></td>)}<td><IndicatorResult kind="ids" value={average} /></td></tr>
             })}</tbody>
           </table></div>
         </article>
@@ -807,8 +814,9 @@ function Evaluations({ search, month, onCreate, onEdit, scopeQuery }: { search: 
       ['Avaliador', (evaluation) => evaluation.leadAuditorName],
       ['Pessoas observadas', (evaluation) => evaluation.indicators.observedPeople],
       ['Desvios registrados', (evaluation) => evaluation.indicators.totalDeviations],
-      ['IDS (%)', (evaluation) => evaluation.indicators.ids === null ? null : Number((evaluation.indicators.ids * 100).toFixed(1))],
+      ['IDS (%)', (evaluation) => evaluation.indicators.ids === null ? null : evaluation.indicators.ids * 100],
       ['Estado', (evaluation) => evaluation.status === 'Draft' ? 'Rascunho' : 'Concluída'],
+      ['Classificação IDS', (evaluation) => indicatorStatus('ids', evaluation.indicators.ids)],
     ]
     const csvCell = (value: string | number | null) => {
       const cell = value === null ? '' : String(value)
@@ -817,7 +825,10 @@ function Evaluations({ search, month, onCreate, onEdit, scopeQuery }: { search: 
     }
     const csv = [
       columns.map(([heading]) => csvCell(heading)).join(';'),
-      ...filteredEvaluations.map((evaluation) => columns.map(([, getValue]) => csvCell(getValue(evaluation))).join(';')),
+      ...filteredEvaluations.map((evaluation) => columns.map(([heading, getValue]) => {
+        const value = getValue(evaluation)
+        return heading === 'IDS (%)' && typeof value === 'number' ? `"${value.toFixed(2)}"` : csvCell(value)
+      }).join(';')),
     ].join('\r\n')
     const file = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' })
     const downloadUrl = URL.createObjectURL(file)
@@ -894,7 +905,7 @@ function Evaluations({ search, month, onCreate, onEdit, scopeQuery }: { search: 
       {submitError && <div className="form-error list-error" role="alert">{submitError}</div>}
       {pdfError && <div className="form-error list-error" role="alert">{pdfError}</div>}
       <div className="table-scroll"><table><thead><tr><th>Data</th><th>Local / projeto</th><th>Contratada</th><th>Avaliador</th><th>Pessoas</th><th>IDS</th><th>Estado</th><th aria-label="Ações" /></tr></thead><tbody>
-        {isLoading ? <tr><td colSpan={8}><div className="table-empty evaluations-empty">Carregando avaliações…</div></td></tr> : filteredEvaluations.length === 0 ? <tr><td colSpan={8}><div className="table-empty evaluations-empty"><div className="empty-line-icon"><ClipboardCheck size={21} /></div><strong>{query ? `Nenhuma avaliação encontrada para “${query}”` : 'Nenhuma avaliação encontrada'}</strong><span>Ajuste os filtros ou registre a primeira avaliação.</span></div></td></tr> : filteredEvaluations.map((evaluation) => <tr className="evaluation-result-row" key={evaluation.id}><td>{new Intl.DateTimeFormat('pt-BR').format(new Date(`${evaluation.evaluationDate}T12:00:00`))}</td><td>{evaluation.site ?? '—'}</td><td>{evaluation.contractor ?? '—'}</td><td>{evaluation.leadAuditorName ?? '—'}</td><td>{evaluation.indicators.observedPeople ?? '—'}</td><td>{evaluation.indicators.ids === null ? '—' : `${(evaluation.indicators.ids * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}</td><td><span className="draft-status">{evaluation.status === 'Draft' ? 'Rascunho' : 'Concluída'}</span></td><td><div className="row-actions"><button className="row-action" type="button" aria-label="Gerar PDF da avaliação" title="Gerar PDF da avaliação" disabled={exportingEvaluationId === evaluation.id} onClick={() => void exportEvaluation(evaluation.id)}><FileDown size={16} /></button>{evaluation.status === 'Draft' && <><button className="row-action" type="button" aria-label="Editar avaliação" title="Editar rascunho" onClick={() => onEdit(evaluation.id)}><Pencil size={15} /></button><button className="row-action submit-row-action" type="button" aria-label="Enviar avaliação" title="Enviar avaliação" onClick={() => { setSubmitError(''); setPendingSubmission(evaluation) }}><Send size={15} /></button></>}</div></td></tr>)}
+        {isLoading ? <tr><td colSpan={8}><div className="table-empty evaluations-empty">Carregando avaliações…</div></td></tr> : filteredEvaluations.length === 0 ? <tr><td colSpan={8}><div className="table-empty evaluations-empty"><div className="empty-line-icon"><ClipboardCheck size={21} /></div><strong>{query ? `Nenhuma avaliação encontrada para “${query}”` : 'Nenhuma avaliação encontrada'}</strong><span>Ajuste os filtros ou registre a primeira avaliação.</span></div></td></tr> : filteredEvaluations.map((evaluation) => <tr className="evaluation-result-row" key={evaluation.id}><td>{new Intl.DateTimeFormat('pt-BR').format(new Date(`${evaluation.evaluationDate}T12:00:00`))}</td><td>{evaluation.site ?? '—'}</td><td>{evaluation.contractor ?? '—'}</td><td>{evaluation.leadAuditorName ?? '—'}</td><td>{evaluation.indicators.observedPeople ?? '—'}</td><td><IndicatorResult kind="ids" value={evaluation.indicators.ids} /></td><td><span className="draft-status">{evaluation.status === 'Draft' ? 'Rascunho' : 'Concluída'}</span></td><td><div className="row-actions"><button className="row-action" type="button" aria-label="Gerar PDF da avaliação" title="Gerar PDF da avaliação" disabled={exportingEvaluationId === evaluation.id} onClick={() => void exportEvaluation(evaluation.id)}><FileDown size={16} /></button>{evaluation.status === 'Draft' && <><button className="row-action" type="button" aria-label="Editar avaliação" title="Editar rascunho" onClick={() => onEdit(evaluation.id)}><Pencil size={15} /></button><button className="row-action submit-row-action" type="button" aria-label="Enviar avaliação" title="Enviar avaliação" onClick={() => { setSubmitError(''); setPendingSubmission(evaluation) }}><Send size={15} /></button></>}</div></td></tr>)}
       </tbody></table></div>
       <div className="list-footer"><span>{filteredEvaluations.length} de {evaluations.length} avaliações</span><span>{formatMonth(month)}</span></div>
     </section>
@@ -906,10 +917,6 @@ function Evaluations({ search, month, onCreate, onEdit, scopeQuery }: { search: 
 function monthRange(month: string) {
   const finalDay = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()
   return { from: `${month}-01`, to: `${month}-${String(finalDay).padStart(2, '0')}` }
-}
-
-function formatPercent(value: number | null | undefined) {
-  return value == null ? '—' : `${(value * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
 }
 
 function previousMonth(month: string) {
@@ -943,7 +950,7 @@ function Delta({ current, previous, inverse = false, percentagePoints = false }:
   if (difference === 0) return <span className="indicator-delta neutral">Igual ao mês anterior</span>
   const good = inverse ? difference < 0 : difference > 0
   const formatted = percentagePoints
-    ? `${difference > 0 ? '+' : ''}${(difference * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} p.p.`
+    ? `${difference > 0 ? '+' : ''}${formatIdsNumber(difference * 100)} p.p.`
     : `${difference > 0 ? '+' : ''}${difference.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}`
   return <span className={`indicator-delta ${good ? 'good' : 'bad'}`}>{difference > 0 ? '▲' : '▼'} {formatted} vs. mês anterior</span>
 }
@@ -1026,15 +1033,15 @@ function Indicators({ month, monthLabel, scopeQuery }: { month: string; monthLab
       : !hasData ? <div className="indicator-empty panel"><div className="empty-line-icon"><Gauge size={22} /></div><strong>Aguardando avaliações</strong><span>Não há avaliações de janeiro até {monthLabel} para analisar.</span></div>
         : <>
           <section className="metric-grid" aria-label="Comparativo do mês">
-            <article className="metric-card"><p className="metric-label">IDS do mês</p><strong className="metric-value">{formatPercent(current?.ids)}</strong><Delta current={current?.ids ?? null} previous={before?.ids ?? null} percentagePoints /></article>
-            <article className="metric-card"><p className="metric-label">IDS acumulado no ano</p><strong className="metric-value">{formatPercent(ytdIds)}</strong><span className="metric-note">Janeiro a {monthLong(month)}</span></article>
+            <article className="metric-card"><p className="metric-label">IDS do mês</p><strong className="metric-value"><IndicatorResult kind="ids" value={current?.ids} /></strong><Delta current={current?.ids ?? null} previous={before?.ids ?? null} percentagePoints /></article>
+            <article className="metric-card"><p className="metric-label">IDS acumulado no ano</p><strong className="metric-value"><IndicatorResult kind="ids" value={ytdIds} /></strong><span className="metric-note">Janeiro a {monthLong(month)}</span></article>
             <article className="metric-card"><p className="metric-label">Desvios por pessoa observada</p><strong className="metric-value">{deviationsPerPerson(currentData)?.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) ?? '—'}</strong><Delta current={deviationsPerPerson(currentData)} previous={deviationsPerPerson(previousData)} inverse /></article>
             <article className="metric-card"><p className="metric-label">Avaliações no mês</p><strong className="metric-value">{current?.count ?? 0}</strong><Delta current={current?.count ?? 0} previous={before?.count ?? null} />{draftCount > 0 && <span className="metric-note">{draftCount} ainda em rascunho</span>}</article>
           </section>
 
           <section className="indicator-insights" aria-label="Destaques">
-            <div><span>Melhor mês</span><strong>{best ? `${monthLong(best.key)} · ${formatPercent(best.ids)}` : '—'}</strong></div>
-            <div><span>Mês de maior atenção</span><strong>{worst ? `${monthLong(worst.key)} · ${formatPercent(worst.ids)}` : '—'}</strong></div>
+            <div><span>Melhor mês</span><strong>{best ? <>{monthLong(best.key)} · <IndicatorResult kind="ids" value={best.ids} /></> : '—'}</strong></div>
+            <div><span>Mês de maior atenção</span><strong>{worst ? <>{monthLong(worst.key)} · <IndicatorResult kind="ids" value={worst.ids} /></> : '—'}</strong></div>
             <div><span>Desvios de severidade alta no mês</span><strong>{(current?.high ?? 0).toLocaleString('pt-BR')}</strong></div>
           </section>
 
@@ -1045,8 +1052,8 @@ function Indicators({ month, monthLabel, scopeQuery }: { month: string; monthLab
                 <defs><linearGradient id="idsMonthlyFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2f7256" stopOpacity={0.22} /><stop offset="95%" stopColor="#2f7256" stopOpacity={0.01} /></linearGradient></defs>
                 <CartesianGrid stroke="#e8ece7" strokeDasharray="3 5" vertical={false} />
                 <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#59675d', fontSize: 11 }} />
-                <YAxis domain={['auto', 'auto']} axisLine={false} tickLine={false} tick={{ fill: '#59675d', fontSize: 11 }} tickFormatter={(value: number) => `${Math.round(value * 100)}%`} />
-                <Tooltip formatter={(value) => [formatPercent(value as number | null), 'IDS']} />
+                <YAxis domain={['auto', 'auto']} axisLine={false} tickLine={false} tick={{ fill: '#59675d', fontSize: 11 }} tickFormatter={(value: number) => formatIds(value)} />
+                <Tooltip formatter={(value) => [<IndicatorResult key="ids" kind="ids" value={typeof value === 'number' ? value : null} />, 'IDS']} />
                 <Area type="monotone" dataKey="ids" stroke="#2f7256" strokeWidth={2.5} fill="url(#idsMonthlyFill)" connectNulls />
               </AreaChart></ResponsiveContainer></div>
             </article>
@@ -1097,7 +1104,7 @@ function RankingTable({ title, subtitle, rows }: { title: string; subtitle: stri
     <div className="table-scroll"><table><thead><tr><th>#</th><th>Nome</th><th>IDS</th><th>Aval.</th><th>Desvios</th></tr></thead><tbody>
       {rows.length === 0 ? <tr><td colSpan={5}><div className="table-empty">Sem avaliações no mês.</div></td></tr> : rows.map((row, index) => <tr key={row.name}>
         <td>{index + 1}</td><td>{row.name}</td>
-        <td><div className="rank-bar"><div className="rank-bar-fill" style={{ width: `${Math.max(0, Math.min(100, (row.ids ?? 0) * 100))}%` }} /><span>{formatPercent(row.ids)}</span></div></td>
+        <td><div className="rank-bar"><div className="rank-bar-fill" style={{ width: `${Math.max(0, Math.min(100, (row.ids ?? 0) * 100))}%` }} /><span><IndicatorResult kind="ids" value={row.ids} /></span></div></td>
         <td>{row.count}</td><td>{row.deviations.toLocaleString('pt-BR')}</td>
       </tr>)}
     </tbody></table></div>
@@ -1415,8 +1422,9 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
           <input
             readOnly
             type="text"
-            value={monthlyIdsAverage === null ? '' : (monthlyIdsAverage * 100).toLocaleString('pt-BR', { maximumFractionDigits: 4 })}
+            value={monthlyIdsAverage === null ? '' : formatIdsNumber(monthlyIdsAverage * 100)}
           />
+          {indicatorStatus('ids', monthlyIdsAverage) && <IndicatorResult kind="ids" value={monthlyIdsAverage} />}
           <small>Média das avaliações válidas do mês e recorte selecionados.</small>
         </label>
         <label>
@@ -1447,8 +1455,9 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
         </label>
         <label>
           Valor do IPF
-          <input aria-describedby="report-ipf-help" readOnly type="text" value={enteredIpf?.toLocaleString('pt-BR', { maximumFractionDigits: 4 }) ?? ''} />
-          <small id="report-ipf-help">((Média do IDS (%) × 60 × fator) / 100 + parcela adicional) / 10.</small>
+          <input aria-describedby="report-ipf-help" readOnly type="text" value={formatIpf(enteredIpf, '')} />
+          {indicatorStatus('ipf', enteredIpf) && <IndicatorResult kind="ipf" value={enteredIpf} />}
+          <small id="report-ipf-help">((Média do IDS (%) × 60 × fator) / 100 + parcela adicional) / 10. A classificação usa o valor completo, antes do arredondamento.</small>
           {savedIpf !== null && !isFormulaDirty && <small>IPF salvo preservado. Altere os campos ou salve para recalcular com a média atual.</small>}
           {suggestion && <small className="report-suggestion-note">
             {monthlyIdsAverage !== null
@@ -1475,7 +1484,7 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
           <div className="report-summary-strip">
             <div><span>Contratada</span><strong>{history.contractor}</strong></div>
             <div><span>Período</span><strong>Janeiro a {monthLabel}</strong></div>
-            <div><span>Média do período</span><strong>{periodAverage?.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) ?? '—'}</strong></div>
+            <div><span>Média do período</span><strong><IndicatorResult kind="ipf" value={periodAverage} /></strong></div>
             <div><span>Meses registrados</span><strong>{periodMonths.length} de {monthNumber}</strong></div>
           </div>
           {reportTab === 'monthly-data' && <article id="monthly-data-panel" role="tabpanel" aria-labelledby="monthly-data-tab" className="panel report-data-sheet">
@@ -1494,14 +1503,14 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
             <div className="report-history-grid">
               <h3 className="monthly-results-band">Resultados</h3>
               <div className="table-scroll"><table><thead><tr><th colSpan={2}>Resultados de IPF Anteriores</th></tr><tr><th>Mês</th><th>Média</th></tr></thead><tbody>
-                {reportIpfMonths.map(record => <tr key={record.month}><td>{new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date(Date.UTC(year, record.month - 1, 15)))}</td><td>{record.value?.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) ?? '—'}</td></tr>)}
-                <tr className="report-history-total"><th>Resultado do Mês de Referência</th><td>{enteredIpf?.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) ?? '—'}</td></tr>
-                <tr className="report-history-total"><th>Média Anual</th><td>{ipfReportAverage?.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) ?? '—'}</td></tr>
+                {reportIpfMonths.map(record => <tr key={record.month}><td>{new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date(Date.UTC(year, record.month - 1, 15)))}</td><td><IndicatorResult kind="ipf" value={record.value} /></td></tr>)}
+                <tr className="report-history-total"><th>Resultado do Mês de Referência</th><td><IndicatorResult kind="ipf" value={enteredIpf} /></td></tr>
+                <tr className="report-history-total"><th>Média Anual</th><td><IndicatorResult kind="ipf" value={ipfReportAverage} /></td></tr>
               </tbody></table></div>
               <div className="table-scroll"><table><thead><tr><th colSpan={2}>Resultados de IDS</th></tr><tr><th>Mês</th><th>Média</th></tr></thead><tbody>
-                {monthIds.map(record => <tr key={record.month}><td>{new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date(Date.UTC(year, record.month - 1, 15)))}</td><td>{formatPercent(record.value)}</td></tr>)}
-                <tr className="report-history-total"><th>Resultado do Mês de Referência</th><td>{formatPercent(monthIds[monthNumber - 1]?.value ?? null)}</td></tr>
-                <tr className="report-history-total"><th>Média Anual</th><td>{formatPercent(idsAnnualAverage)}</td></tr>
+                {monthIds.map(record => <tr key={record.month}><td>{new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date(Date.UTC(year, record.month - 1, 15)))}</td><td><IndicatorResult kind="ids" value={record.value} /></td></tr>)}
+                <tr className="report-history-total"><th>Resultado do Mês de Referência</th><td><IndicatorResult kind="ids" value={monthIds[monthNumber - 1]?.value} /></td></tr>
+                <tr className="report-history-total"><th>Média Anual</th><td><IndicatorResult kind="ids" value={idsAnnualAverage} /></td></tr>
               </tbody></table></div>
             </div>
           </article>}

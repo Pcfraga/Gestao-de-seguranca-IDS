@@ -36,7 +36,9 @@ public sealed record ConsolidationRecord(
     string? Site = null,
     string? Client = null,
     string? Evaluator = null,
-    Guid? SiteId = null);
+    Guid? SiteId = null,
+    Guid? ContractorId = null,
+    string? Contractor = null);
 
 public sealed record ConsolidationObservationRecord(
     string CategoryCode,

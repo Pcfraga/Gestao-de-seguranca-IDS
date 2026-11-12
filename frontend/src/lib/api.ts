@@ -257,6 +257,39 @@ export interface DataConsolidation {
       evaluators: string[]
     }>
   }
+  monthlyGroups: Array<{
+    contractorId: string | null
+    contractor: string | null
+    siteId: string | null
+    site: string | null
+    projectOrIsland: string | null
+    evaluationCount: number
+    scoredEvaluationCount: number
+    observedPeople: number
+    totalDeviations: number
+    weightedDeviationTotal: number
+    lowSeverityDeviations: number
+    mediumSeverityDeviations: number
+    highSeverityDeviations: number
+    idsAverage: number | null
+    weeks: Array<{
+      weekNumber: number
+      idsAverage: number | null
+      observedPeople: number
+      totalDeviations: number
+      weightedDeviationTotal: number
+      lowSeverityDeviations: number
+      mediumSeverityDeviations: number
+      highSeverityDeviations: number
+    }>
+    weekdays: Array<{
+      dayOfWeek: number
+      observedPeople: number
+      totalDeviations: number
+    }>
+    categories: Array<{ code: string; name: string; quantity: number }>
+    items: Array<{ categoryCode: string; category: string; code: string; name: string; quantity: number }>
+  }>
 }
 
 export interface IpfAnnualHistory {

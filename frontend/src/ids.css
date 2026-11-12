@@ -510,6 +510,9 @@ th { color: #445449; font-size: 11px; }
 .rank-bar { position: relative; min-width: 120px; height: 26px; background: #eef2ee; border-radius: 6px; overflow: hidden; }
 .rank-bar-fill { position: absolute; inset: 0 auto 0 0; background: #b9d8c4; }
 .rank-bar span { position: relative; display: block; padding: 4px 8px; font-weight: 600; color: #17271d; }
+.rank-bar .indicator-result, .rank-bar .indicator-result-status { display: inline; padding: 0; color: inherit; }
+.indicator-result { white-space: normal; }
+.indicator-result-status { font-size: .75em; }
 
 @media (max-width: 760px) {
   .inspection-observations .checklist-row {
@@ -757,4 +760,31 @@ th { color: #445449; font-size: 11px; }
 }
 @media (max-width: 430px) {
   .report-data-fields > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+.monthly-close-layout { display: flex; flex-direction: column; gap: 12px; }
+.monthly-close-filters { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto; align-items: end; gap: 12px; padding: 13px 15px; }
+.monthly-close-filters label, .monthly-close-category-select { display: flex; flex-direction: column; gap: 5px; color: #657168; font-size: 10px; font-weight: 600; }
+.monthly-close-filters select, .monthly-close-category-select select { height: 35px; min-width: 0; padding: 0 9px; color: #35443a; background: #fcfdfc; border: 1px solid #e1e7e1; border-radius: 4px; font-size: 11px; }
+.monthly-close-count { display: inline-flex; align-items: center; gap: 7px; padding: 0 2px 9px; color: #78847b; font-size: 10px; white-space: nowrap; }
+.monthly-close-count svg, .monthly-close-footnote svg { color: #54755e; flex: 0 0 auto; }
+.monthly-close-table-panel { min-width: 0; padding: 15px; }
+.monthly-close-table-panel table { min-width: 1160px; }
+.monthly-close-table-panel td:nth-child(n+3) { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+.monthly-close-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.monthly-close-chart-panel { min-width: 0; padding: 15px; }
+.monthly-close-chart-panel .panel-heading { margin-bottom: 5px; }
+.monthly-close-chart-panel .monthly-close-category-select { max-width: 320px; margin: 10px 0 0; }
+.monthly-close-donut { height: 300px; margin-top: 5px; }
+.monthly-close-chart-empty { display: grid; height: 100%; place-items: center; color: #919c94; text-align: center; font-size: 11px; }
+.monthly-close-footnote { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; color: #738078; background: #fff; border: 1px solid #e5eae5; border-radius: 5px; font-size: 10px; line-height: 1.5; }
+.monthly-close-details { display: flex; flex-direction: column; gap: 10px; }
+.monthly-close-detail { min-width: 0; padding: 13px 15px; }
+.monthly-close-detail summary { color: #35493b; cursor: pointer; font-size: 11px; font-weight: 600; }
+.monthly-close-detail .table-scroll { margin-top: 12px; }
+.monthly-close-detail table { min-width: 740px; }
+.monthly-close-detail-empty { margin: 12px 0 0; color: #919c94; font-size: 11px; }
+@media (max-width: 760px) {
+  .monthly-close-filters, .monthly-close-charts { grid-template-columns: minmax(0, 1fr); }
+  .monthly-close-count { padding-bottom: 0; }
+  .monthly-close-donut { height: 270px; }
 }

@@ -1,4 +1,6 @@
 import type { DataConsolidation } from './api'
+import { formatIds, formatIpf } from './indicatorFormat.ts'
+import { indicatorColor, indicatorStatus, type IndicatorKind } from './indicatorStatus.ts'
 
 export interface WorkbookChartSeries {
   name: string
@@ -171,7 +173,7 @@ export function buildWorkbookCharts(input: WorkbookChartInput): WorkbookChart[] 
       threeDimensional: true, legendRight: true,
     },
     {
-      id: 'ids', title: 'IDS', labels: ['Média', ...weeks], stacked: true, percentage: true,
+      id: 'ids', title: 'IDS', labels: ['Média', ...weeks], percentage: true,
       series: input.weeklyIds.map((row, index) => ({
         name: row.label === 'Média' ? 'Média' : row.label.toLocaleLowerCase('pt-BR'),
         color: seriesColor(index),
@@ -202,6 +204,28 @@ export function escapeReportHtml(value: string) {
   })[character] ?? character)
 }
 
+function formatChartValue(chart: WorkbookChart, value: number | null) {
+  if (chart.id === 'ipf') return formatIpf(value)
+  if (chart.id === 'ids' || chart.id === 'ids-history') return formatIds(value)
+  if (value === null) return '—'
+  return chart.percentage
+    ? `${(value * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`
+    : value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+}
+
+function chartIndicatorKind(chart: WorkbookChart): IndicatorKind | null {
+  if (chart.id === 'ipf') return 'ipf'
+  if (chart.id === 'ids' || chart.id === 'ids-history') return 'ids'
+  return null
+}
+
+function chartResult(chart: WorkbookChart, value: number | null) {
+  const formatted = formatChartValue(chart, value)
+  const kind = chartIndicatorKind(chart)
+  const status = kind ? indicatorStatus(kind, value) : null
+  return status ? `${formatted} · ${status}` : formatted
+}
+
 export function workbookChartSvg(chart: WorkbookChart) {
   const width = 1000
   const plot = { x: 90, y: 25, width: chart.legendRight ? 680 : 870, height: 245 }
@@ -216,15 +240,15 @@ export function workbookChartSvg(chart: WorkbookChart) {
   const rawMin = Math.min(...limits, 0)
   const magnitude = 10 ** Math.floor(Math.log10(Math.max(rawMax - rawMin, 0.01)))
   const step = Math.ceil((rawMax - rawMin || 1) / magnitude / 5) * magnitude
-  const maximum = chart.maximum ?? Math.max(step, Math.ceil(rawMax / step) * step)
-  const minimum = Math.floor(rawMin / step) * step
+  const fixedMaximum = chart.id === 'ipf' ? 10 : chart.id === 'ids-history' || chart.id === 'ids' ? 1 : null
+  const maximum = fixedMaximum ?? chart.maximum ?? Math.max(step, Math.ceil(rawMax / step) * step)
+  const minimum = fixedMaximum !== null ? 0 : Math.floor(rawMin / step) * step
   const y = (value: number) => endY - (value - minimum) / (maximum - minimum) * plot.height
-  const format = (value: number) => chart.percentage
-    ? `${(value * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`
-    : value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+  const format = (value: number) => formatChartValue(chart, value)
   const svg: string[] = []
-  for (let index = 0; index <= 5; index++) {
-    const value = minimum + (maximum - minimum) * index / 5
+  const divisions = chart.id === 'ipf' ? 10 : 5
+  for (let index = 0; index <= divisions; index++) {
+    const value = minimum + (maximum - minimum) * index / divisions
     svg.push(`<line x1="${plot.x}" x2="${plot.x + plot.width}" y1="${y(value)}" y2="${y(value)}" stroke="#D9D9D9"/>`,
       `<text x="${plot.x - 12}" y="${y(value) + 4}" text-anchor="end" fill="#595959">${format(value)}</text>`)
   }
@@ -246,10 +270,13 @@ export function workbookChartSvg(chart: WorkbookChart) {
         else negative += value
       }
       const x = center - groupWidth * 0.36 + (chart.stacked ? 0 : seriesIndex * barWidth)
-      const top = Math.min(y(start), y(start + value))
-      const height = Math.abs(y(start + value) - y(start))
+      const end = fixedMaximum !== null ? Math.max(minimum, Math.min(maximum, start + value)) : start + value
+      const top = Math.min(y(start), y(end))
+      const height = Math.abs(y(end) - y(start))
       const color = series.color
-      const title = `${series.name} · ${label || chart.title}: ${format(value)}`
+      const kind = chartIndicatorKind(chart)
+      const resultColor = kind ? indicatorColor(kind, value) : null
+      const title = `${series.name} · ${label || chart.title}: ${chartResult(chart, value)}`
       svg.push(`<g><title>${escapeReportHtml(title)}</title><rect x="${x}" y="${top}" width="${barWidth * 0.92}" height="${height}" fill="${color}"/>`)
       if (chart.threeDimensional && height > 0) {
         const right = x + barWidth * 0.92
@@ -257,7 +284,9 @@ export function workbookChartSvg(chart: WorkbookChart) {
         svg.push(`<path d="M${x},${top} l${depth},-${depth} h${barWidth * 0.92} l-${depth},${depth} Z" fill="${luminance(color, 0.7, 0.3)}"/>`,
           `<path d="M${right},${top} l${depth},-${depth} v${height} l-${depth},${depth} Z" fill="${luminance(color, 0.7)}"/>`)
       }
-      if (chart.showValues) svg.push(`<text x="${x + barWidth / 2}" y="${top - 12}" text-anchor="middle" fill="#000000">${format(value)}</text>`)
+      const overflow = fixedMaximum !== null ? value < minimum ? ' ↓' : value > maximum ? ' ↑' : '' : ''
+      if (chart.showValues) svg.push(`<text x="${x + barWidth / 2}" y="${top - 12}" text-anchor="middle" fill="${resultColor ?? '#000000'}">${format(value)}${overflow}</text>`)
+      else if (overflow) svg.push(`<text x="${x + barWidth / 2}" y="${top - 5}" text-anchor="middle" fill="${resultColor ?? '#000000'}">${overflow.trim()}</text>`)
       svg.push('</g>')
     })
   })
@@ -310,11 +339,18 @@ export const workbookReportStyles = `
 `
 
 export function workbookChartHtml(chart: WorkbookChart) {
-  const number = (value: number | null) => value === null ? '—'
-    : chart.percentage ? `${(value * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`
-      : value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+  const number = (value: number | null) => {
+    const kind = chartIndicatorKind(chart)
+    const color = kind ? indicatorColor(kind, value) : null
+    const result = chartResult(chart, value)
+    return color ? `<span style="color:${color}">${result}</span>` : result
+  }
+  const scaleMaximum = chart.id === 'ipf' ? 10 : chart.id === 'ids-history' || chart.id === 'ids' ? 1 : null
+  const outsideScale = scaleMaximum !== null && chart.series.some(series =>
+    series.values.some(value => value !== null && (value < 0 || value > scaleMaximum)))
   return `<article class="workbook-chart" data-chart-id="${escapeReportHtml(chart.id)}">
     <h3>${escapeReportHtml(chart.title)}</h3>${workbookChartSvg(chart)}
+    ${outsideScale ? `<p class="workbook-note">Setas indicam valores fora da escala de ${chart.id === 'ipf' ? '0 a 10' : '0% a 100%'}; os valores reais constam na tabela de dados.</p>` : ''}
     <details><summary>Consultar dados de ${escapeReportHtml(chart.title)}</summary><div class="workbook-values"><table>
       <thead><tr><th>Série</th>${chart.labels.map(label => `<th>${escapeReportHtml(label || 'Resultado')}</th>`).join('')}</tr></thead>
       <tbody>${chart.series.map(series => `<tr><th>${escapeReportHtml(series.name)}</th>${series.values.map(value => `<td>${number(value)}</td>`).join('')}</tr>`).join('')}</tbody>

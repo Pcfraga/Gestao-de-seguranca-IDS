@@ -12,6 +12,7 @@ O projeto começa a substituir o preenchimento manual da planilha IDS por um sis
 - Cadastro, consulta, edição e envio explícito de avaliações; rascunhos continuam editáveis, avaliações enviadas ficam somente leitura. A lista pode ser filtrada por status, contratada e local e exportada em CSV; cada avaliação também pode ser gerada em PDF.
 - Dashboard com totais mensais, proporções por severidade e evolução do IDS por avaliação; a média semanal/mensal continua desabilitada até validar o calendário da planilha.
 - Aba **Dados** com consolidação completa por data, categoria, item e severidade e matrizes S1–S5 (dias 1–7, 8–14, 15–21, 22–28 e 29–31, sem domingos).
+- Aba **Fechamento mensal** com IDS por semana, pessoas e desvios por empresa/projeto, severidade, categorias e itens, alimentada pelas avaliações e filtros de área/formulário do sistema.
 - Aba **Relatório IPF**, com **Dados Relatório Mensal** e os 14 gráficos do modelo: históricos de IPF/IDS, IDS semanal, pessoas, desvios, severidades em quantidade/percentual, categorias e seis detalhamentos por itens. A tela e o PDF compartilham o mesmo gerador SVG, com ordem, séries e paleta extraídas da planilha. O IPF salvo tem prioridade sobre a sugestão de IDS; contratada, local, área e formulário filtram os dados das avaliações.
 - Composição opcional de IPF pelas médias de IDS de até quatro disciplinas com pesos percentuais. Cada modalidade mantém seu próprio histórico mensal e exportação PDF; a composição não substitui a regra manual da planilha.
 - Testes HTTP da API para autorização por padrão, health check sem banco e CORS local; teste de aplicação para média anual e gravação mensal de IPF.
@@ -63,14 +64,24 @@ npm run dev
 
 Acesse `http://localhost:5173`. O Vite encaminha `/api` para `http://localhost:5141`. O endpoint anônimo de prontidão é `GET /api/health/ready`; retorna `503` se o PostgreSQL não estiver acessível.
 
+Para usar o frontend local com a API publicada e os mesmos usuários do ambiente de produção, crie `frontend/.env.development.local` com `IDS_API_PROXY_TARGET=https://ids-api-ya5l.onrender.com` e reinicie o Vite. O proxy mantém as requisições no mesmo endereço local, sem exigir CORS do navegador. **Atenção:** alterações feitas nessa configuração afetam os dados reais. Remova a variável e reinicie o Vite para voltar à API local; mantenha frontend e API compatíveis.
+
 Os botões **Gerar PDF** abrem a janela de impressão do navegador. Selecione **Salvar como PDF** como destino para baixar ou salvar o documento.
 
 O Relatório IPF preserva as faixas verdes `#00B050` e as cores dos gráficos do modelo, independentemente da cor configurada para os demais PDFs. Nome e logo da empresa continuam no cabeçalho. As tabelas recolhíveis abaixo dos gráficos permitem conferir as séries sem entrar na impressão.
+O gráfico de resultados do IPF usa escala fixa de 0 a 10, com intervalos de 1. Valores fora dessa faixa mantêm o número original e são sinalizados por setas; as barras ficam limitadas à escala.
+O gráfico de resultados de IDS usa escala de 0% a 100%, com intervalos de 20%. Valores fora da faixa são indicados por setas, com os valores reais disponíveis na tabela de dados.
+No gráfico de IDS semanal, as barras dos dias e da média ficam lado a lado, pois esses percentuais não devem ser somados. Ele usa a mesma escala de 0% a 100% e sinaliza resultados fora da faixa.
 
-Testes direcionados da fórmula do IPF e dos 14 gráficos (Node.js 24, sem dependências adicionais):
+Os resultados de IDS são exibidos com duas casas decimais e os de IPF com uma, nas telas e nos relatórios. Na composição por disciplinas, as médias continuam na escala original do IDS. A formatação não altera a precisão dos valores usados nos cálculos ou armazenados; por isso, o resultado calculado pode diferir de um recálculo feito com os números arredondados da tela.
+
+A classificação usa o valor real, antes da formatação: IDS abaixo de 85% ou IPF abaixo de 7 é **Não atingiu a meta** em vermelho; a partir desses limites é **Meta alcançada** em verde. Um valor exibido arredondado como 7,0 ou 85,00% ainda pode estar abaixo do limite. Valores ausentes não são classificados. No IPF por disciplinas, aplica-se o limite 7 literalmente à escala original, sem conversão; assim, resultados de 0 a 1 não atingem a meta.
+O CSV de avaliações inclui uma coluna de classificação do IDS; o formato CSV não contém cores.
+
+Testes direcionados da fórmula do IPF, classificação, formatação e dos 14 gráficos (Node.js 24 e dependências do frontend):
 
 ```powershell
-node --experimental-strip-types --test frontend\src\lib\monthlyIpf.test.mjs frontend\src\lib\workbookReport.test.mjs
+node --experimental-strip-types --test frontend\src\lib\monthlyIpf.test.mjs frontend\src\lib\indicatorFormat.test.mjs frontend\src\lib\indicatorStatus.test.mjs frontend\src\lib\workbookReport.test.mjs frontend\src\lib\pdf.test.mjs
 ```
 
 No primeiro acesso, escolha **Sou gestor: cadastrar minha empresa**, informe o nome da empresa, seu nome, e-mail e senha. O sistema cria uma empresa independente e sua conta de `ADMINISTRADOR`; não exige chave do Render. A senha deve ter pelo menos 8 caracteres, sem exigência de composição. O login usa `POST /api/auth/login`; cada e-mail identifica uma conta única no sistema e não pode ser reutilizado em outra empresa.

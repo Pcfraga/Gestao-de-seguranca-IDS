@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import { env } from 'node:process'
 
 const legacyFaviconRedirect: Plugin = {
@@ -20,14 +20,17 @@ const legacyFaviconRedirect: Plugin = {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), tailwindcss(), legacyFaviconRedirect],
-  server: {
-    proxy: {
-      '/api': {
-        target: env.IDS_API_PROXY_TARGET ?? 'http://localhost:5141',
-        changeOrigin: true,
+export default defineConfig(({ mode }) => {
+  const localEnv = loadEnv(mode, process.cwd(), 'IDS_API_')
+  return {
+    plugins: [react(), tailwindcss(), legacyFaviconRedirect],
+    server: {
+      proxy: {
+        '/api': {
+          target: env.IDS_API_PROXY_TARGET ?? localEnv.IDS_API_PROXY_TARGET ?? 'http://localhost:5141',
+          changeOrigin: true,
+        },
       },
     },
-  },
+  }
 })
