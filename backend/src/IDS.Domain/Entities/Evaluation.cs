@@ -14,6 +14,10 @@ public sealed class Evaluation : TenantEntity
 
     public Site? Site { get; set; }
 
+    public Guid? IslandId { get; set; }
+
+    public InspectionIsland? Island { get; set; }
+
     public Guid? ClientOrganizationId { get; set; }
 
     public Organization? ClientOrganization { get; set; }

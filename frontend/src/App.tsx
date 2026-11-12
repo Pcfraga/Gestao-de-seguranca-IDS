@@ -281,7 +281,7 @@ function App() {
             <button type="button" className={reportMode === 'composition' ? 'primary-button' : 'outline-button'} aria-pressed={reportMode === 'composition'} onClick={() => setReportMode('composition')}>IPF por disciplinas e pesos</button>
           </div>}
           {['overview', 'evaluations', 'data', 'indicators', 'reports', 'monthlyClose'].includes(activeSection)
-            && !(activeSection === 'reports' && reportMode === 'composition') && <InspectionScopeSelector onChange={setInspectionScope} />}
+            && !(activeSection === 'reports' && reportMode === 'composition') && <InspectionScopeSelector key={activeSection} onChange={setInspectionScope} includeOrganizationFilters={activeSection === 'overview' || activeSection === 'indicators'} />}
           {inspectionScope && activeSection === 'overview' && <Dashboard key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} onOpenEvaluations={() => setActiveSection('evaluations')} />}
           {inspectionScope && activeSection === 'evaluations' && <Evaluations scopeQuery={scopeQuery} key={`${evaluationRefresh}-${scopeQuery}`} search={search} month={selectedMonth} onCreate={() => { setEditingEvaluationId(null); setShowEvaluationForm(true) }} onEdit={(id) => { setEditingEvaluationId(id); setShowEvaluationForm(true) }} />}
           {inspectionScope && activeSection === 'data' && <DataView key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} />}
@@ -538,6 +538,7 @@ function reportWeekIndex(date: string) {
 function DataView({ month, scopeQuery }: { month: string; scopeQuery: string }) {
   const [catalog, setCatalog] = useState<ChecklistCatalog | null>(null)
   const [contractorId, setContractorId] = useState('')
+  const [siteId, setSiteId] = useState('')
   const [data, setData] = useState<DataConsolidation | null>(null)
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true)
   const [isLoadingData, setIsLoadingData] = useState(false)
@@ -564,6 +565,7 @@ function DataView({ month, scopeQuery }: { month: string; scopeQuery: string }) 
       to: `${month}-${String(endDay).padStart(2, '0')}`,
       contractorId,
     })
+    if (siteId) query.set('siteId', siteId)
     setIsLoadingData(true)
     setError('')
     apiRequest<DataConsolidation>(`/api/dashboard/data?${query}&${scopeQuery}`)
@@ -574,7 +576,7 @@ function DataView({ month, scopeQuery }: { month: string; scopeQuery: string }) 
       .catch((loadError: unknown) => { if (isCurrent) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar os dados consolidados.') })
       .finally(() => { if (isCurrent) setIsLoadingData(false) })
     return () => { isCurrent = false }
-  }, [contractorId, month, scopeQuery])
+  }, [contractorId, siteId, month, scopeQuery])
 
   const weekdays = data?.weekdays ?? []
   const weekdayIds = reportWeekdays.map(({ index, label }) => ({
@@ -679,6 +681,7 @@ function DataView({ month, scopeQuery }: { month: string; scopeQuery: string }) 
     <div className="data-view">
       <div className="data-filter-row">
         <label>Contratada<select disabled={isLoadingCatalog} onChange={(event) => setContractorId(event.target.value)} value={contractorId}><option value="">Selecionar contratada</option>{catalog?.organizations.filter((organization) => organization.kind === 'Contractor').map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>
+        <label>Local / projeto<select disabled={isLoadingCatalog} value={siteId} onChange={event => setSiteId(event.target.value)}><option value="">Todos os projetos</option>{catalog?.sites.map(site => <option key={site.id} value={site.id}>{site.name}{!site.isActive ? ' (desativado)' : ''}</option>)}</select></label>
         <span className="data-period-label">Período: {formatMonth(month)}</span>
       </div>
       {error && <div className="form-error" role="alert">{error}</div>}
@@ -1118,7 +1121,8 @@ function RankingTable({ title, subtitle, rows }: { title: string; subtitle: stri
 }
 
 function Reports({ month, monthLabel, scope }: { month: string; monthLabel: string; scope: InspectionScope }) {
-  const scopeQuery = inspectionScopeQuery(scope)
+  const scopeQuery = inspectionScopeQuery({ ...scope, islandId: undefined })
+  const dataScopeQuery = inspectionScopeQuery(scope)
   const [reportTab, setReportTab] = useState<'monthly-data' | 'ipf-report'>('monthly-data')
   const [catalog, setCatalog] = useState<ChecklistCatalog | null>(null)
   const [contractorId, setContractorId] = useState('')
@@ -1126,6 +1130,7 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
   const [history, setHistory] = useState<IpfAnnualHistory | null>(null)
   const [suggestion, setSuggestion] = useState<IpfMonthlySuggestion | null>(null)
   const [yearSummary, setYearSummary] = useState<DashboardSummary | null>(null)
+  const [generalYearSummary, setGeneralYearSummary] = useState<DashboardSummary | null>(null)
   const [monthlyData, setMonthlyData] = useState<DataConsolidation | null>(null)
   const [reportIssuedAt, setReportIssuedAt] = useState<Date | null>(null)
   const [multiplicationFactor, setMultiplicationFactor] = useState('0.8')
@@ -1156,6 +1161,7 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
       setHistory(null)
       setSuggestion(null)
       setYearSummary(null)
+      setGeneralYearSummary(null)
       setMultiplicationFactor('0.8')
       setAdditionalScore('20')
       setIsFormulaDirty(false)
@@ -1168,6 +1174,7 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
     setHistory(null)
     setSuggestion(null)
     setYearSummary(null)
+    setGeneralYearSummary(null)
     setMultiplicationFactor('0.8')
     setAdditionalScore('20')
     setIsFormulaDirty(false)
@@ -1184,21 +1191,22 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
       apiRequest<IpfAnnualHistory>(`/api/reports/ipf/${year}?contractorId=${contractorId}&${scopeQuery}`),
       apiRequest<IpfMonthlySuggestion>(`/api/reports/ipf/${year}/${monthNumber}/suggestion?contractorId=${contractorId}&${scopeQuery}`),
       apiRequest<DashboardSummary>(`/api/dashboard/summary?${evaluationQuery}&${scopeQuery}`),
+      scope.islandId ? apiRequest<DashboardSummary>(`/api/dashboard/summary?${evaluationQuery}&${dataScopeQuery}`) : Promise.resolve(null),
     ])
-      .then(([result, monthlySuggestion, summary]) => {
+      .then(([result, monthlySuggestion, summary, filteredSummary]) => {
         if (!isCurrent) return
         setHistory(result)
         setSuggestion(monthlySuggestion)
-        setYearSummary(summary)
+        setGeneralYearSummary(summary)
+        setYearSummary(filteredSummary ?? summary)
         const currentValue = result.months.find(record => record.month === monthNumber)
         setMultiplicationFactor((currentValue?.multiplicationFactor ?? 0.8).toString())
         setAdditionalScore((currentValue?.additionalScore ?? 20).toString())
-        setSiteId(currentValue?.siteId ?? '')
       })
       .catch((loadError: unknown) => { if (isCurrent) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar o histórico IPF.') })
       .finally(() => { if (isCurrent) setIsHistoryLoading(false) })
     return () => { isCurrent = false }
-  }, [contractorId, month, monthNumber, year, scopeQuery])
+  }, [contractorId, month, monthNumber, year, scopeQuery, dataScopeQuery, scope.islandId])
 
   useEffect(() => {
     let active = true
@@ -1216,14 +1224,14 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
     })
     if (siteId) query.set('siteId', siteId)
     setIsReportDataLoading(true)
-    apiRequest<DataConsolidation>(`/api/dashboard/data?${query}&${scopeQuery}`)
+    apiRequest<DataConsolidation>(`/api/dashboard/data?${query}&${dataScopeQuery}`)
       .then(data => { if (active) setMonthlyData(data) })
       .catch((loadError: unknown) => {
         if (active) setReportDataError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar os gráficos do relatório.')
       })
       .finally(() => { if (active) setIsReportDataLoading(false) })
     return () => { active = false }
-  }, [contractorId, siteId, month, year, monthNumber, scopeQuery])
+  }, [contractorId, siteId, month, year, monthNumber, dataScopeQuery])
 
   async function saveIpf() {
     if (!contractorId) {
@@ -1246,7 +1254,7 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
       const savedRecord = await apiRequest<IpfAnnualHistory['months'][number]>(`/api/reports/ipf/${year}/${monthNumber}`, {
         method: 'PUT',
         body: JSON.stringify({
-          contractorOrganizationId: contractorId, siteId: siteId || null, value,
+          contractorOrganizationId: contractorId, siteId: null, value,
           areaId: scope.areaId, formId: scope.formId,
           multiplicationFactor: Number(multiplicationFactor), additionalScore: Number(additionalScore),
         }),
@@ -1270,7 +1278,6 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
       })
       setIsFormulaDirty(false)
       setSaveConfirmation('IPF salvo com sucesso.')
-      setSiteId(savedRecord.siteId ?? '')
     } catch (saveError) {
       setError(saveError instanceof ApiError && saveError.status === 403
         ? 'Seu perfil não tem permissão para registrar IPF. Solicite acesso de ADMINISTRADOR ou GESTOR.'
@@ -1327,9 +1334,10 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
       })(),
     },
   ]
-  const monthlyIdsAverage = monthIds[monthNumber - 1]?.value ?? null
+  const monthlyIdsAverage = averageTrendIds((generalYearSummary?.trend ?? []).filter(point => point.date.startsWith(month)))
   const calculatedIpf = calculateMonthlyIpf(monthlyIdsAverage, multiplicationFactor, additionalScore)
   const savedIpf = history?.months.find(record => record.month === monthNumber)?.value ?? null
+  const legacyIpfMonths = history?.months.filter(record => record.siteId !== null).map(record => record.month) ?? []
   const enteredIpf = isFormulaDirty ? calculatedIpf : savedIpf ?? calculatedIpf
   const reportIpfMonths = Array.from({ length: 12 }, (_, index) => {
     const reportMonth = index + 1
@@ -1352,6 +1360,7 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
       site: catalog?.sites.find(site => site.id === siteId)?.name ?? reportMetadata('sites'),
       client: reportMetadata('clients'),
       discipline: scope.areaName,
+      legacyIpfMonths,
       evaluatedBy: reportMetadata('evaluators'),
       issuedAt: reportIssuedAt.toISOString(),
       ipfValue: enteredIpf,
@@ -1381,6 +1390,8 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
   }
 
   return <section className="report-layout">
+    {scope.islandId && <div className="form-error" role="status">A ilha filtra os dados de apoio. O IPF continua geral da contratada, em todos os projetos e ilhas.</div>}
+    {legacyIpfMonths.length > 0 && <div className="form-error" role="status">O histórico contém IPFs antigos associados a projeto nos meses {legacyIpfMonths.join(', ')}. Eles são preservados até serem recalculados e salvos novamente como IPF geral da contratada.</div>}
     <div className="report-intro">
       <div>
         <span className="summary-kicker"><FileBarChart size={16} /> {reportTab === 'monthly-data' ? 'DADOS DO RELATÓRIO MENSAL' : 'RELATÓRIO IPF'}</span>
@@ -1415,11 +1426,11 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
         </label>
         <label>
           Local / site <span className="report-optional">(opcional)</span>
-          <select disabled={!contractorId || isHistoryLoading || isSaving} onChange={(event) => { setSiteId(event.target.value); setIsFormulaDirty(true); setSaveConfirmation(''); setError('') }} value={siteId}>
+          <select disabled={!contractorId || isHistoryLoading || isSaving} onChange={(event) => { setSiteId(event.target.value); setSaveConfirmation(''); setError('') }} value={siteId}>
             <option value="">Sem local específico</option>
             {catalog?.sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
           </select>
-          <small>Associe o registro a um local, se necessário.</small>
+          <small>Filtra os gráficos e dados de apoio, sem alterar o cálculo do IPF.</small>
         </label>
       </div>
       <div className="report-controls report-formula-controls">
@@ -1431,7 +1442,7 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
             value={monthlyIdsAverage === null ? '' : formatIdsNumber(monthlyIdsAverage * 100)}
           />
           {indicatorStatus('ids', monthlyIdsAverage) && <IndicatorResult kind="ids" value={monthlyIdsAverage} />}
-          <small>Média das avaliações válidas do mês e recorte selecionados.</small>
+          <small>Média das avaliações válidas da contratada no mês, em todos os projetos e ilhas.</small>
         </label>
         <label>
           Fator multiplicador

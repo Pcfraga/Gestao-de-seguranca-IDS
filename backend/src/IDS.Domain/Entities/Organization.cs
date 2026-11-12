@@ -5,6 +5,8 @@ public sealed class Organization : TenantEntity
     public required string Name { get; set; }
 
     public required OrganizationKind Kind { get; set; }
+
+    public bool IsActive { get; set; } = true;
 }
 
 public enum OrganizationKind

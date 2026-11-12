@@ -82,7 +82,7 @@ export function InspectionFormsEditor() {
         name: category.name,
         items: category.items.map((item) => ({ key: crypto.randomUUID(), name: item.name })),
       })),
-    } : { id: null, expectedVersion: 0, name: '', areaId: filterAreaId || defaultInspectionId, categories: [emptyTopic()] })
+    } : { id: null, expectedVersion: 0, name: '', areaId: areas.some(area => area.id === filterAreaId && area.isActive) ? filterAreaId : defaultInspectionId, categories: [emptyTopic()] })
   }
 
   function changeDraft(update: Partial<FormDraft>) {
@@ -153,7 +153,7 @@ export function InspectionFormsEditor() {
         <fieldset disabled={isSaving} className="inspection-template-fields">
           <label>Área do formulário
             <select value={draft.areaId} disabled={draft.id !== null} onChange={event => changeDraft({ areaId: event.target.value })}>
-              {areas.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
+              {areas.filter(area => area.isActive || area.id === draft.areaId && draft.id !== null).map(area => <option key={area.id} value={area.id}>{area.name}{!area.isActive ? ' (desativada)' : ''}</option>)}
             </select>
           </label>
           {draft.id !== null && <p>A área permanece fixa para não misturar o histórico. Para usar outra área, duplique o formulário.</p>}

@@ -134,10 +134,8 @@ public sealed class MonthlyIpfApplicationServiceTests
         var repository = new FakeMonthlyIpfRepository();
         repository.MonthlyEvaluationScores.AddRange([average, null, average]);
         var service = new MonthlyIpfApplicationService(repository);
-        var siteId = Guid.NewGuid();
-
         var saved = await service.UpsertAsync(2026, 10,
-            new UpsertMonthlyIpfRequest(ContractorId, siteId, 999m,
+            new UpsertMonthlyIpfRequest(ContractorId, null, 999m,
                 MultiplicationFactor: factor, AdditionalScore: additional), CancellationToken.None);
         var reloaded = Assert.Single((await service.GetYearAsync(2026, ContractorId, CancellationToken.None)).Months);
 
@@ -146,7 +144,7 @@ public sealed class MonthlyIpfApplicationServiceTests
         Assert.Equal(factor, reloaded.MultiplicationFactor);
         Assert.Equal(additional, reloaded.AdditionalScore);
         Assert.Equal("Formula", saved.Source);
-        Assert.Equal(siteId, repository.RequestedSiteId);
+        Assert.Null(repository.RequestedSiteId);
     }
 
     [Fact]

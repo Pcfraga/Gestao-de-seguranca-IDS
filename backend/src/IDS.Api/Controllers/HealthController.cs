@@ -37,7 +37,8 @@ public sealed class HealthController(IdsDbContext dbContext, ILogger<HealthContr
             {
                 status = "ready",
                 database = "available",
-                schema = "current"
+                schema = "current",
+                operationalCatalog = true
             });
         }
         catch (Exception exception)

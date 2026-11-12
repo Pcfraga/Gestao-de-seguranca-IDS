@@ -18,6 +18,8 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
 
     public DbSet<Site> Sites => Set<Site>();
 
+    public DbSet<InspectionIsland> InspectionIslands => Set<InspectionIsland>();
+
     public DbSet<Evaluation> Evaluations => Set<Evaluation>();
 
     public DbSet<InspectionForm> InspectionForms => Set<InspectionForm>();
@@ -66,6 +68,7 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
         {
             entity.ToTable("tenants");
             entity.Property(value => value.Name).HasMaxLength(120).IsRequired();
+            entity.Property(value => value.DefaultAreaName).HasMaxLength(150).HasDefaultValue(InspectionArea.DefaultName).IsRequired();
         });
         builder.Entity<IdsUser>().HasOne<Tenant>().WithMany()
             .HasForeignKey(user => user.TenantId).OnDelete(DeleteBehavior.Restrict);
@@ -74,6 +77,7 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
         ConfigureTenant<EvaluationObservation>(builder);
         ConfigureTenant<Organization>(builder);
         ConfigureTenant<Site>(builder);
+        ConfigureTenant<InspectionIsland>(builder);
         ConfigureTenant<MonthlyIpfRecord>(builder);
         ConfigureTenant<IpfComposition>(builder);
         ConfigureTenant<IpfCompositionArea>(builder);
@@ -98,7 +102,16 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
             entity.ToTable("sites");
             entity.Property(value => value.Name).HasMaxLength(200).IsRequired();
             entity.Property(value => value.ProjectOrIsland).HasMaxLength(200);
+            entity.HasOne(value => value.CanonicalSite).WithMany().HasForeignKey(value => value.CanonicalSiteId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(value => new { value.TenantId, value.Name, value.ProjectOrIsland }).IsUnique();
+            entity.ConfigureAuditFields();
+        });
+
+        builder.Entity<InspectionIsland>(entity =>
+        {
+            entity.ToTable("inspection_islands");
+            entity.Property(value => value.Name).HasMaxLength(200).IsRequired();
+            entity.HasIndex(value => new { value.TenantId, value.Name }).IsUnique();
             entity.ConfigureAuditFields();
         });
 
@@ -143,6 +156,8 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
             entity.HasIndex(value => new { value.SiteId, value.EvaluationDate });
             entity.HasOne(value => value.FormVersion).WithMany().HasForeignKey(value => value.FormVersionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.Site).WithMany().HasForeignKey(value => value.SiteId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(value => value.Island).WithMany().HasForeignKey(value => value.IslandId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(value => new { value.IslandId, value.EvaluationDate });
             entity.HasOne(value => value.ClientOrganization).WithMany().HasForeignKey(value => value.ClientOrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.ContractorOrganization).WithMany().HasForeignKey(value => value.ContractorOrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.SubcontractorOrganization).WithMany().HasForeignKey(value => value.SubcontractorOrganizationId).OnDelete(DeleteBehavior.Restrict);

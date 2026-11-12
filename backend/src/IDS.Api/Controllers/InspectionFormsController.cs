@@ -50,12 +50,14 @@ public sealed class InspectionFormsController(IdsDbContext dbContext, ICurrentUs
         var forms = versions.Select(ToDto).ToList();
         if (!versions.Any(version => version.Form.IsDefault))
         {
+            var defaultName = await dbContext.Tenants.Where(tenant => tenant.Id == userScope.TenantId)
+                .Select(tenant => tenant.DefaultAreaName).SingleAsync(cancellationToken);
             var categories = await dbContext.ObservationCategories.AsNoTracking()
                 .Include(category => category.Items)
                 .Where(category => category.FormVersionId == null)
                 .OrderBy(category => category.SortOrder).ToArrayAsync(cancellationToken);
             forms.Insert(0, new InspectionFormDto(
-                Guid.Empty, null, 0, "Formulário padrão", true, Topics(categories)));
+                Guid.Empty, null, 0, "Formulário padrão", true, Topics(categories), AreaName: defaultName));
         }
 
         return Ok(forms);
@@ -87,6 +89,8 @@ public sealed class InspectionFormsController(IdsDbContext dbContext, ICurrentUs
             : null;
         if (areaId.HasValue && area is null)
             return BadRequest(new { message = "Área não encontrada para esta empresa." });
+        if (area is { IsActive: false } && id is null)
+            return BadRequest(new { message = "A área selecionada está desativada." });
 
         if (id == Guid.Empty)
         {
@@ -124,6 +128,8 @@ public sealed class InspectionFormsController(IdsDbContext dbContext, ICurrentUs
             return BadRequest(new { message = "O formulário padrão pertence a Saúde e Segurança do Trabalho. Duplique-o para outra área." });
 
         form.CurrentVersion++;
+        var defaultAreaName = await dbContext.Tenants.Where(tenant => tenant.Id == userScope.TenantId)
+            .Select(tenant => tenant.DefaultAreaName).SingleAsync(cancellationToken);
         var revision = new InspectionFormVersion
         {
             Form = form,
@@ -131,7 +137,7 @@ public sealed class InspectionFormsController(IdsDbContext dbContext, ICurrentUs
             Version = form.CurrentVersion,
             Name = request.Name.Trim(),
             AreaId = areaId,
-            AreaName = area?.Name ?? InspectionArea.DefaultName,
+            AreaName = area?.Name ?? defaultAreaName,
             CreatedByUserId = userScope.UserId
         };
         for (var categoryIndex = 0; categoryIndex < request.Categories.Count; categoryIndex++)

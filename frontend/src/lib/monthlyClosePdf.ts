@@ -11,6 +11,7 @@ export interface MonthlyClosePdfData {
   month: string
   company: string | null
   project: string | null
+  island: string | null
   area: string
   form: string
   ids: number | null
@@ -28,7 +29,7 @@ const safe = escapeReportHtml
 const translations = {
   pt: {
     locale: 'pt-BR', title: 'Fechamento mensal', company: 'Empresa', project: 'Projeto / local',
-    allCompanies: 'Todas as empresas', allProjects: 'Todos os projetos', area: 'Área', form: 'Formulário',
+    allCompanies: 'Todas as empresas', allProjects: 'Todos os projetos', island: 'Ilha', allIslands: 'Todas as ilhas', area: 'Área', form: 'Formulário',
     ids: 'IDS médio', evaluations: 'Avaliações', people: 'Pessoas observadas', deviations: 'Desvios registrados',
     risk: 'Risco ponderado', severity: 'Severidade dos desvios', severitySubtitle: 'Percentual sobre desvios com severidade informada',
     low: 'Baixa', medium: 'Média', high: 'Alta', categories: 'Desvios por categoria',
@@ -39,7 +40,7 @@ const translations = {
   },
   en: {
     locale: 'en-US', title: 'Monthly close', company: 'Company', project: 'Project / site',
-    allCompanies: 'All companies', allProjects: 'All projects', area: 'Area', form: 'Form',
+    allCompanies: 'All companies', allProjects: 'All projects', island: 'Island', allIslands: 'All islands', area: 'Area', form: 'Form',
     ids: 'Average IDS', evaluations: 'Evaluations', people: 'People observed', deviations: 'Recorded deviations',
     risk: 'Weighted risk', severity: 'Deviation severity', severitySubtitle: 'Share of deviations with recorded severity',
     low: 'Low', medium: 'Medium', high: 'High', categories: 'Deviations by category',
@@ -104,7 +105,7 @@ export function monthlyClosePdf(data: MonthlyClosePdfData, options: MonthlyClose
     .slide header { display:flex; justify-content:space-between; align-items:center; gap:12px; min-height:20mm; border-bottom:2px solid #3b8054; padding-bottom:3mm; }
     .slide header > div { min-width:0; }
     .slide h1 { font-size:23px; margin:0 0 4px; color:#254a33; }
-    .slide header p { margin:0; color:#52665a; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .slide header p { margin:0; color:#52665a; font-size:12px; overflow-wrap:anywhere; }
     .slide header img { max-width:110px; max-height:50px; object-fit:contain; }
     .slide .cards { display:grid; grid-template-columns:repeat(5,1fr); gap:3mm; }
     .slide .card { background:#edf6ef; border-left:4px solid #4d9d65; padding:3mm; min-width:0; }
@@ -130,6 +131,7 @@ export function monthlyClosePdf(data: MonthlyClosePdfData, options: MonthlyClose
   </style><main class="slide">
     <header><div><h1>${labels.title} · ${safe(monthLabel)}</h1>
       <p>${labels.company}: ${safe(data.company ?? labels.allCompanies)} · ${labels.project}: ${safe(data.project ?? labels.allProjects)}</p>
+      <p>${labels.island}: ${safe(data.island ?? labels.allIslands)}</p>
       <p>${labels.area}: ${safe(data.area)} · ${labels.form}: ${safe(data.form)}</p></div>
       ${branding.logoDataUrl ? `<img src="${safe(branding.logoDataUrl)}" alt="${labels.logo}">` : ''}
     </header>

@@ -3,14 +3,15 @@ using IDS.Domain.Entities;
 
 namespace IDS.Application.Evaluations;
 
-public sealed record EvaluationScope(Guid? AreaId = null, Guid? FormId = null);
+public sealed record EvaluationScope(Guid? AreaId = null, Guid? FormId = null, Guid? IslandId = null);
 
 public sealed record EvaluationReferenceData(
     IReadOnlyDictionary<Guid, ChecklistItem> Items,
     IReadOnlyDictionary<Guid, SeverityLevel> Severities,
     IReadOnlyDictionary<Guid, Site> Sites,
     IReadOnlyDictionary<Guid, Organization> Organizations,
-    InspectionFormVersion? FormVersion = null);
+    InspectionFormVersion? FormVersion = null,
+    InspectionIsland? Island = null);
 
 public sealed record EvaluationPeriodTotals(
     int EvaluationCount,
@@ -50,6 +51,9 @@ public sealed record ConsolidationObservationRecord(
 
 public interface IEvaluationRepository
 {
+    Task<string> GetDefaultAreaNameAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(InspectionArea.DefaultName);
+
     Task<EvaluationReferenceData> LoadReferenceDataAsync(
         CreateEvaluationRequest request,
         CancellationToken cancellationToken);

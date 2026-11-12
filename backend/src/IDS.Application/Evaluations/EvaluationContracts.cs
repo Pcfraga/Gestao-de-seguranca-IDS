@@ -20,7 +20,8 @@ public sealed record CreateEvaluationRequest(
     string? Strengths,
     string? ImprovementOpportunities,
     IReadOnlyCollection<EvaluationObservationRequest> Observations,
-    Guid? FormVersionId = null);
+    Guid? FormVersionId = null,
+    Guid? IslandId = null);
 
 public sealed record EvaluationObservationDto(
     Guid ChecklistItemId,
@@ -189,7 +190,9 @@ public sealed record EvaluationDto(
     int FormVersion = 0,
     Guid AreaId = default,
     string AreaName = IDS.Domain.Entities.InspectionArea.DefaultName,
-    Guid FormId = default);
+    Guid FormId = default,
+    Guid? IslandId = null,
+    string? Island = null);
 
 public sealed class EvaluationValidationException(IReadOnlyCollection<string> errors)
     : Exception("A avaliação contém dados inválidos.")

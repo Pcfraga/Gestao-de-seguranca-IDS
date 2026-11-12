@@ -527,6 +527,9 @@ namespace IDS.Infrastructure.Persistence.Migrations
                     b.Property<string>("ImprovementOpportunities")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("IslandId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("LeadAuditorName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -572,6 +575,8 @@ namespace IDS.Infrastructure.Persistence.Migrations
                     b.HasIndex("SubcontractorOrganizationId");
 
                     b.HasIndex("TenantId");
+
+                    b.HasIndex("IslandId", "EvaluationDate");
 
                     b.HasIndex("SiteId", "EvaluationDate");
 
@@ -644,6 +649,9 @@ namespace IDS.Infrastructure.Persistence.Migrations
                     b.Property<string>("CreatedByUserId")
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -761,6 +769,45 @@ namespace IDS.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("inspection_form_versions", (string)null);
+                });
+
+            modelBuilder.Entity("IDS.Domain.Entities.InspectionIsland", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("inspection_islands", (string)null);
                 });
 
             modelBuilder.Entity("IDS.Domain.Entities.IpfComposition", b =>
@@ -1104,6 +1151,9 @@ namespace IDS.Infrastructure.Persistence.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("Kind")
                         .HasColumnType("integer");
 
@@ -1257,12 +1307,18 @@ namespace IDS.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("CanonicalSiteId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("CreatedByUserId")
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1285,6 +1341,8 @@ namespace IDS.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CanonicalSiteId");
+
                     b.HasIndex("TenantId", "Name", "ProjectOrIsland")
                         .IsUnique();
 
@@ -1296,6 +1354,13 @@ namespace IDS.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("DefaultAreaName")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasDefaultValue("Saúde e Segurança do Trabalho");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1578,6 +1643,11 @@ namespace IDS.Infrastructure.Persistence.Migrations
                         .HasForeignKey("FormVersionId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("IDS.Domain.Entities.InspectionIsland", "Island")
+                        .WithMany()
+                        .HasForeignKey("IslandId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("IDS.Domain.Entities.Site", "Site")
                         .WithMany()
                         .HasForeignKey("SiteId")
@@ -1599,6 +1669,8 @@ namespace IDS.Infrastructure.Persistence.Migrations
                     b.Navigation("ContractorOrganization");
 
                     b.Navigation("FormVersion");
+
+                    b.Navigation("Island");
 
                     b.Navigation("Site");
 
@@ -1677,6 +1749,15 @@ namespace IDS.Infrastructure.Persistence.Migrations
                     b.Navigation("Area");
 
                     b.Navigation("Form");
+                });
+
+            modelBuilder.Entity("IDS.Domain.Entities.InspectionIsland", b =>
+                {
+                    b.HasOne("IDS.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("IDS.Domain.Entities.IpfComposition", b =>
@@ -1782,11 +1863,18 @@ namespace IDS.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("IDS.Domain.Entities.Site", b =>
                 {
+                    b.HasOne("IDS.Domain.Entities.Site", "CanonicalSite")
+                        .WithMany()
+                        .HasForeignKey("CanonicalSiteId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("IDS.Domain.Entities.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("CanonicalSite");
                 });
 
             modelBuilder.Entity("IDS.Infrastructure.Identity.IdsUser", b =>

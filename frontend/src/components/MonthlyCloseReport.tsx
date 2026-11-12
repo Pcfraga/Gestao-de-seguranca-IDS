@@ -45,7 +45,7 @@ function companyKey(group: MonthlyGroup) {
 }
 
 function projectKey(group: MonthlyGroup) {
-  return `${group.siteId ?? 'unknown-site'}:${group.projectOrIsland ?? ''}:${group.site ?? ''}`
+  return group.siteId ?? 'unknown-site'
 }
 
 function sumGroups(groups: MonthlyGroup[], pick: (group: MonthlyGroup) => number) {
@@ -53,7 +53,11 @@ function sumGroups(groups: MonthlyGroup[], pick: (group: MonthlyGroup) => number
 }
 
 function groupIdentity(group: MonthlyGroup) {
-  return `${companyKey(group)}|${projectKey(group)}`
+  return `${companyKey(group)}|${projectKey(group)}|${group.projectOrIsland ?? ''}`
+}
+
+function groupLabel(group: MonthlyGroup) {
+  return `${group.site ?? 'Projeto não informado'} · ${group.projectOrIsland ?? 'Ilha não informada'}`
 }
 
 export function MonthlyCloseReport({ month, scope }: { month: string; scope: InspectionScope }) {
@@ -95,7 +99,7 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
     .sort((left, right) => left[1].localeCompare(right[1], 'pt-BR'))
   const activeCompany = companies.some(([key]) => key === selectedCompany) ? selectedCompany : ''
   const companyGroups = activeCompany ? groups.filter(group => companyKey(group) === activeCompany) : groups
-  const projects = [...new Map(companyGroups.map(group => [projectKey(group), group.projectOrIsland ?? group.site ?? 'Projeto não informado'])).entries()]
+  const projects = [...new Map(companyGroups.map(group => [projectKey(group), group.site ?? 'Projeto não informado'])).entries()]
     .sort((left, right) => left[1].localeCompare(right[1], 'pt-BR'))
   const activeProject = projects.some(([key]) => key === selectedProject) ? selectedProject : ''
   const visibleGroups = companyGroups.filter(group => !activeProject || projectKey(group) === activeProject)
@@ -167,7 +171,8 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
     const pdf = monthlyClosePdf({
       month,
       company: activeCompany ? visibleGroups[0]?.contractor ?? (pdfSettings.options.language === 'en' ? 'Company not specified' : 'Empresa não informada') : null,
-      project: activeProject ? visibleGroups[0]?.projectOrIsland ?? visibleGroups[0]?.site ?? (pdfSettings.options.language === 'en' ? 'Project not specified' : 'Projeto não informado') : null,
+      project: activeProject ? visibleGroups[0]?.site ?? (pdfSettings.options.language === 'en' ? 'Project not specified' : 'Projeto não informado') : null,
+      island: scope.islandName ?? null,
       area: scope.areaName,
       form: scope.formName,
       ids: averageIds,
@@ -240,13 +245,13 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
           <article className="panel data-table-panel monthly-close-table-panel">
             <div className="panel-heading"><div><h2>Fechamento por empresa e projeto</h2><p>IDS semanal e indicadores consolidados do mês selecionado.</p></div></div>
             <div className="table-scroll"><table><thead><tr>
-              <th>Empresa</th><th>Projeto / local</th>{Array.from({ length: 5 }, (_, index) => <th key={index}>IDS S{index + 1}</th>)}
+              <th>Empresa</th><th>Projeto / local</th><th>Ilha</th>{Array.from({ length: 5 }, (_, index) => <th key={index}>IDS S{index + 1}</th>)}
               <th>IDS médio</th><th>Pessoas</th><th>Desvios</th><th>Risco ponderado</th><th>Baixa</th><th>Média</th><th>Alta</th>
               <th>Baixa (%)</th><th>Média (%)</th><th>Alta (%)</th>
             </tr></thead><tbody>
-              {visibleGroups.map(group => <tr key={`${companyKey(group)}:${projectKey(group)}`}>
+              {visibleGroups.map(group => <tr key={groupIdentity(group)}>
                 <td>{group.contractor ?? 'Empresa não informada'}</td>
-                <td>{group.projectOrIsland ?? group.site ?? 'Projeto não informado'}</td>
+                <td>{group.site ?? 'Projeto não informado'}</td><td>{group.projectOrIsland ?? 'Não informada'}</td>
                 {Array.from({ length: 5 }, (_, index) => <td key={index}>{formatIds(group.weeks.find(week => week.weekNumber === index + 1)?.idsAverage)}</td>)}
                 <td>{formatIds(group.idsAverage)}</td><td>{formatNumber(group.observedPeople)}</td><td>{formatNumber(group.totalDeviations)}</td>
                 <td>{formatNumber(group.weightedDeviationTotal)}</td><td>{formatNumber(group.lowSeverityDeviations)}</td>
@@ -319,7 +324,7 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
             <details className="panel monthly-close-detail">
               <summary>Pessoas observadas por dia da semana</summary>
               <div className="table-scroll"><table><thead><tr><th>Empresa</th><th>Projeto / local</th>{weekdayLabels.map(day => <th key={day}>{day}</th>)}<th>Total</th></tr></thead><tbody>
-                {visibleGroups.map(group => <tr key={groupIdentity(group)}><td>{group.contractor ?? 'Empresa não informada'}</td><td>{group.projectOrIsland ?? group.site ?? 'Projeto não informado'}</td>
+                {visibleGroups.map(group => <tr key={groupIdentity(group)}><td>{group.contractor ?? 'Empresa não informada'}</td><td>{groupLabel(group)}</td>
                   {group.weekdays.map(day => <td key={day.dayOfWeek}>{formatNumber(day.observedPeople)}</td>)}
                   <td>{formatNumber(group.weekdays.reduce((sum, day) => sum + day.observedPeople, 0))}</td>
                 </tr>)}
@@ -328,7 +333,7 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
             <details className="panel monthly-close-detail">
               <summary>Desvios observados por dia da semana</summary>
               <div className="table-scroll"><table><thead><tr><th>Empresa</th><th>Projeto / local</th>{weekdayLabels.map(day => <th key={day}>{day}</th>)}<th>Total</th></tr></thead><tbody>
-                {visibleGroups.map(group => <tr key={groupIdentity(group)}><td>{group.contractor ?? 'Empresa não informada'}</td><td>{group.projectOrIsland ?? group.site ?? 'Projeto não informado'}</td>
+                {visibleGroups.map(group => <tr key={groupIdentity(group)}><td>{group.contractor ?? 'Empresa não informada'}</td><td>{groupLabel(group)}</td>
                   {group.weekdays.map(day => <td key={day.dayOfWeek}>{formatNumber(day.totalDeviations)}</td>)}
                   <td>{formatNumber(group.weekdays.reduce((sum, day) => sum + day.totalDeviations, 0))}</td>
                 </tr>)}
@@ -337,7 +342,7 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
             <details className="panel monthly-close-detail">
               <summary>Quantidade por categoria e empresa/projeto</summary>
               {sortedCategoryRows.length
-                ? <div className="table-scroll"><table><thead><tr><th>Categoria</th>{visibleGroups.map(group => <th key={groupIdentity(group)}>{group.contractor ?? 'Empresa não informada'} · {group.projectOrIsland ?? group.site ?? 'Projeto não informado'}</th>)}<th>Total</th></tr></thead><tbody>
+                ? <div className="table-scroll"><table><thead><tr><th>Categoria</th>{visibleGroups.map(group => <th key={groupIdentity(group)}>{group.contractor ?? 'Empresa não informada'} · {groupLabel(group)}</th>)}<th>Total</th></tr></thead><tbody>
                   {sortedCategoryRows.map(row => <tr key={row.name}><td>{row.name}</td>{visibleGroups.map(group => <td key={groupIdentity(group)}>{formatNumber(row.values.get(groupIdentity(group)) ?? 0)}</td>)}<td>{formatNumber([...row.values.values()].reduce((sum, value) => sum + value, 0))}</td></tr>)}
                 </tbody></table></div>
                 : <p className="monthly-close-detail-empty">Sem desvios categorizados neste recorte.</p>}
@@ -345,7 +350,7 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
             <details className="panel monthly-close-detail">
               <summary>Quantidade por item e empresa/projeto</summary>
               {sortedItemRows.length
-                ? <div className="table-scroll"><table><thead><tr><th>Categoria</th><th>Item observado</th>{visibleGroups.map(group => <th key={groupIdentity(group)}>{group.contractor ?? 'Empresa não informada'} · {group.projectOrIsland ?? group.site ?? 'Projeto não informado'}</th>)}<th>Total</th></tr></thead><tbody>
+                ? <div className="table-scroll"><table><thead><tr><th>Categoria</th><th>Item observado</th>{visibleGroups.map(group => <th key={groupIdentity(group)}>{group.contractor ?? 'Empresa não informada'} · {groupLabel(group)}</th>)}<th>Total</th></tr></thead><tbody>
                   {sortedItemRows.map(row => <tr key={`${row.category}:${row.name}`}><td>{row.category}</td><td>{row.name}</td>{visibleGroups.map(group => <td key={groupIdentity(group)}>{formatNumber(row.values.get(groupIdentity(group)) ?? 0)}</td>)}<td>{formatNumber([...row.values.values()].reduce((sum, value) => sum + value, 0))}</td></tr>)}
                 </tbody></table></div>
                 : <p className="monthly-close-detail-empty">Sem itens observados neste recorte.</p>}

@@ -11,6 +11,51 @@ namespace IDS.Api.Tests;
 public sealed class CompanyMigrationTests
 {
     [Fact]
+    public async Task IslandMigrationGroupsLegacyNamesPerCompanyAndPreservesCatalogs()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<IdsDbContext>().UseSqlite(connection)
+            .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)).Options;
+        await using var db = new IdsDbContext(options);
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261112174705_AddInspectionIslands");
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO "tenants" ("Id", "Name")
+            VALUES ('52000000-0000-0000-0000-000000000001', 'Company B');
+            INSERT INTO "sites" ("Id", "TenantId", "Name", "ProjectOrIsland", "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES
+                ('52000000-0000-0000-0000-000000000011', '40000000-0000-0000-0000-000000000001', 'Project A', ' Ilha A ', '2026-10-01', '2026-10-01'),
+                ('52000000-0000-0000-0000-000000000012', '40000000-0000-0000-0000-000000000001', 'Project B', 'ilha a', '2026-10-01', '2026-10-01'),
+                ('52000000-0000-0000-0000-000000000013', '52000000-0000-0000-0000-000000000001', 'Project A', 'Ilha A', '2026-10-01', '2026-10-01'),
+                ('52000000-0000-0000-0000-000000000014', '40000000-0000-0000-0000-000000000001', ' project a ', 'Ilha B', '2026-10-01', '2026-10-01');
+            INSERT INTO "evaluations" ("Id", "TenantId", "SiteId", "EvaluationDate", "Status", "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES
+                ('52000000-0000-0000-0000-000000000021', '40000000-0000-0000-0000-000000000001', '52000000-0000-0000-0000-000000000011', '2026-10-01', 'Submitted', '2026-10-01', '2026-10-01'),
+                ('52000000-0000-0000-0000-000000000022', '40000000-0000-0000-0000-000000000001', '52000000-0000-0000-0000-000000000012', '2026-10-01', 'Submitted', '2026-10-01', '2026-10-01'),
+                ('52000000-0000-0000-0000-000000000023', '52000000-0000-0000-0000-000000000001', '52000000-0000-0000-0000-000000000013', '2026-10-01', 'Submitted', '2026-10-01', '2026-10-01'),
+                ('52000000-0000-0000-0000-000000000024', '40000000-0000-0000-0000-000000000001', '52000000-0000-0000-0000-000000000014', '2026-10-01', 'Submitted', '2026-10-01', '2026-10-01');
+            """);
+
+        await migrator.MigrateAsync();
+        var islands = await db.InspectionIslands.IgnoreQueryFilters().ToArrayAsync();
+        var evaluations = await db.Evaluations.IgnoreQueryFilters().OrderBy(value => value.Id).ToArrayAsync();
+        Assert.Equal(3, islands.Length);
+        Assert.All(islands, island => Assert.True(island.IsActive));
+        Assert.Equal(evaluations[0].IslandId, evaluations[1].IslandId);
+        Assert.NotEqual(evaluations[0].IslandId, evaluations[2].IslandId);
+        Assert.All(evaluations, evaluation => Assert.Contains(islands, island => island.Id == evaluation.IslandId && island.TenantId == evaluation.TenantId));
+        var sites = await db.Sites.IgnoreQueryFilters().ToArrayAsync();
+        Assert.All(sites, site => Assert.True(site.IsActive));
+        var canonical = sites.Single(site => site.Id == Guid.Parse("52000000-0000-0000-0000-000000000011"));
+        var alias = sites.Single(site => site.Id == Guid.Parse("52000000-0000-0000-0000-000000000014"));
+        Assert.Equal(canonical.Id, alias.CanonicalSiteId);
+        Assert.Null(sites.Single(site => site.Id == Guid.Parse("52000000-0000-0000-0000-000000000013")).CanonicalSiteId);
+        Assert.Equal(alias.Id, evaluations[3].SiteId);
+        Assert.NotEqual(evaluations[0].IslandId, evaluations[3].IslandId);
+    }
+
+    [Fact]
     public async Task AreaMigrationPreservesLegacyEvaluationsFormVersionsAndManualIpf()
     {
         using var connection = new SqliteConnection("Data Source=:memory:");

@@ -10,6 +10,8 @@ export interface EvaluationSummary {
   evaluationTime?: string | null
   status: string
   siteId?: string | null
+  islandId?: string | null
+  island?: string | null
   clientOrganizationId?: string | null
   contractorOrganizationId?: string | null
   subcontractorOrganizationId?: string | null
@@ -119,8 +121,8 @@ export interface ChecklistCatalog {
     items: Array<{ id: string; code: string; name: string; isCustom: boolean }>
   }>
   severities: Array<{ id: string; name: string; weight: number }>
-  sites: Array<{ id: string; name: string; projectOrIsland: string | null }>
-  organizations: Array<{ id: string; name: string; kind: 'Client' | 'Contractor' | 'Subcontractor' }>
+  sites: Array<{ id: string; name: string; projectOrIsland: string | null; isActive: boolean }>
+  organizations: Array<{ id: string; name: string; kind: 'Client' | 'Contractor' | 'Subcontractor'; isActive: boolean }>
 }
 
 export const defaultInspectionId = '00000000-0000-0000-0000-000000000000'
@@ -128,6 +130,13 @@ export const defaultInspectionId = '00000000-0000-0000-0000-000000000000'
 export interface InspectionArea {
   id: string
   name: string
+  isActive: boolean
+}
+
+export interface InspectionIsland {
+  id: string
+  name: string
+  isActive: boolean
 }
 
 export interface InspectionScope {
@@ -135,10 +144,18 @@ export interface InspectionScope {
   areaName: string
   formId: string
   formName: string
+  islandId?: string
+  islandName?: string
+  siteId?: string
+  contractorId?: string
 }
 
 export function inspectionScopeQuery(scope: InspectionScope) {
-  return new URLSearchParams({ areaId: scope.areaId, formId: scope.formId }).toString()
+  const query = new URLSearchParams({ areaId: scope.areaId, formId: scope.formId })
+  if (scope.islandId) query.set('islandId', scope.islandId)
+  if (scope.siteId) query.set('siteId', scope.siteId)
+  if (scope.contractorId) query.set('contractorId', scope.contractorId)
+  return query.toString()
 }
 
 export interface InspectionFormTemplate {

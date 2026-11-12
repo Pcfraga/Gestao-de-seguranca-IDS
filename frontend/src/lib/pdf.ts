@@ -222,6 +222,7 @@ export interface MonthlyIpfReportData {
   site: string | null
   client: string | null
   discipline: string
+  legacyIpfMonths?: number[]
   evaluatedBy: string | null
   issuedAt: string
   ipfValue: number | null
@@ -258,6 +259,8 @@ export function monthlyIpfReportPdf(report: MonthlyIpfReportData) {
       ${identification.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${text(value)}</td></tr>`).join('')}
     </tbody></table>
     <h2 class="workbook-band">IPF DE HSE</h2>
+    <p class="workbook-note">Os dados de apoio seguem os filtros selecionados; os novos IPFs são gerais da contratada, por área e formulário.</p>
+    ${report.legacyIpfMonths?.length ? `<p class="workbook-note">O histórico contém IPFs antigos associados a projeto nos meses ${report.legacyIpfMonths.join(', ')}.</p>` : ''}
     <p class="workbook-note">A nota mínima para atingir a meta do IPF mensal é 7 (sete).</p>
     <p class="workbook-note">Quando o IPF for menor do que 7 (sete) deverá ser apresentado um plano de ação pela contratada.</p>
     <div class="workbook-score"><span>IPF</span><strong>${indicatorHtml('ipf', report.ipfValue)}</strong></div>

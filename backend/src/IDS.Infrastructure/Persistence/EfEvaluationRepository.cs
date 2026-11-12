@@ -6,6 +6,10 @@ namespace IDS.Infrastructure.Persistence;
 
 public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserScope userScope) : IEvaluationRepository
 {
+    public Task<string> GetDefaultAreaNameAsync(CancellationToken cancellationToken) =>
+        dbContext.Tenants.Where(tenant => tenant.Id == userScope.TenantId)
+            .Select(tenant => tenant.DefaultAreaName).SingleAsync(cancellationToken);
+
     private IQueryable<Evaluation> Visible(IQueryable<Evaluation> query)
     {
         if (userScope.IsAdministrator)
@@ -43,7 +47,7 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
             .Where(severity => severityIds.Contains(severity.Id))
             .ToDictionaryAsync(severity => severity.Id, cancellationToken);
         var sites = request.SiteId is Guid siteId
-            ? await dbContext.Sites.Where(site => site.Id == siteId).ToDictionaryAsync(site => site.Id, cancellationToken)
+            ? await dbContext.Sites.Where(site => site.Id == siteId && site.CanonicalSiteId == null).ToDictionaryAsync(site => site.Id, cancellationToken)
             : new Dictionary<Guid, Site>();
         var organizations = organizationIds.Length == 0
             ? new Dictionary<Guid, Organization>()
@@ -52,10 +56,14 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
                 .ToDictionaryAsync(organization => organization.Id, cancellationToken);
 
         var formVersion = request.FormVersionId is Guid versionId
-            ? await dbContext.InspectionFormVersions.SingleOrDefaultAsync(version => version.Id == versionId, cancellationToken)
+            ? await dbContext.InspectionFormVersions.Include(version => version.Area)
+                .SingleOrDefaultAsync(version => version.Id == versionId, cancellationToken)
             : null;
 
-        return new EvaluationReferenceData(items, severities, sites, organizations, formVersion);
+        var island = request.IslandId is Guid islandId
+            ? await dbContext.InspectionIslands.SingleOrDefaultAsync(value => value.Id == islandId, cancellationToken)
+            : null;
+        return new EvaluationReferenceData(items, severities, sites, organizations, formVersion, island);
     }
 
     public async Task AddAsync(Evaluation evaluation, CancellationToken cancellationToken)
@@ -103,7 +111,7 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
 
         if (siteId.HasValue)
         {
-            query = query.Where(evaluation => evaluation.SiteId == siteId.Value);
+            query = query.Where(evaluation => evaluation.SiteId == siteId.Value || evaluation.Site != null && evaluation.Site.CanonicalSiteId == siteId.Value);
         }
 
         if (contractorId.HasValue)
@@ -139,7 +147,7 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
 
         if (siteId.HasValue)
         {
-            evaluations = evaluations.Where(evaluation => evaluation.SiteId == siteId.Value);
+            evaluations = evaluations.Where(evaluation => evaluation.SiteId == siteId.Value || evaluation.Site != null && evaluation.Site.CanonicalSiteId == siteId.Value);
         }
 
         if (contractorId.HasValue)
@@ -202,7 +210,7 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
 
         if (siteId.HasValue)
         {
-            query = query.Where(evaluation => evaluation.SiteId == siteId.Value);
+            query = query.Where(evaluation => evaluation.SiteId == siteId.Value || evaluation.Site != null && evaluation.Site.CanonicalSiteId == siteId.Value);
         }
 
         if (contractorId.HasValue)
@@ -222,7 +230,7 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
             evaluation.Observations.Select(observation => new IDS.Domain.Calculations.ObservationInput(
                 observation.Quantity,
                 observation.SeverityLevel?.Weight)).ToArray(),
-            evaluation.SiteId)).ToArray();
+            evaluation.Site?.CanonicalSiteId ?? evaluation.SiteId)).ToArray();
     }
 
     public async Task<IReadOnlyCollection<ConsolidationRecord>> GetConsolidationRecordsAsync(
@@ -236,7 +244,7 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
         var query = ApplyScope(QueryDetails(), scope);
         if (from.HasValue) query = query.Where(evaluation => evaluation.EvaluationDate >= from.Value);
         if (to.HasValue) query = query.Where(evaluation => evaluation.EvaluationDate <= to.Value);
-        if (siteId.HasValue) query = query.Where(evaluation => evaluation.SiteId == siteId.Value);
+        if (siteId.HasValue) query = query.Where(evaluation => evaluation.SiteId == siteId.Value || evaluation.Site != null && evaluation.Site.CanonicalSiteId == siteId.Value);
         if (contractorId.HasValue) query = query.Where(evaluation => evaluation.ContractorOrganizationId == contractorId.Value);
 
         var evaluations = await query
@@ -255,17 +263,19 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
                 observation.ChecklistItem.Name,
                 observation.Quantity,
                 observation.SeverityLevel?.Weight)).ToArray(),
-            evaluation.Site?.ProjectOrIsland,
-            evaluation.Site?.Name,
+            evaluation.Island?.Name,
+            evaluation.Site?.CanonicalSite?.Name ?? evaluation.Site?.Name,
             evaluation.ClientOrganization?.Name,
             evaluation.LeadAuditorName ?? evaluation.AuditorName,
-            evaluation.SiteId,
+            evaluation.Site?.CanonicalSiteId ?? evaluation.SiteId,
             evaluation.ContractorOrganizationId,
             evaluation.ContractorOrganization?.Name)).ToArray();
     }
 
     private IQueryable<Evaluation> ApplyScope(IQueryable<Evaluation> query, EvaluationScope? scope)
     {
+        if (scope?.IslandId is Guid islandId)
+            query = query.Where(evaluation => evaluation.IslandId == islandId);
         if (scope?.AreaId is Guid areaId)
             query = areaId == Guid.Empty
                 ? query.Where(evaluation => evaluation.FormVersion == null || evaluation.FormVersion.AreaId == null)
@@ -284,6 +294,8 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
         return Visible(query)
         .Include(evaluation => evaluation.FormVersion)
         .Include(evaluation => evaluation.Site)
+            .ThenInclude(site => site!.CanonicalSite)
+        .Include(evaluation => evaluation.Island)
         .Include(evaluation => evaluation.ClientOrganization)
         .Include(evaluation => evaluation.ContractorOrganization)
         .Include(evaluation => evaluation.SubcontractorOrganization)

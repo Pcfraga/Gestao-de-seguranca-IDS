@@ -14,7 +14,7 @@ test('builds a 16:9 presentation summary from the selected data without inventin
     const { monthlyClosePdf } = await server.ssrLoadModule('/src/lib/monthlyClosePdf.ts')
     const { writePrintWindow } = await server.ssrLoadModule('/src/lib/pdf.ts')
     const data = {
-      month: '2026-10', company: '<Empresa>', project: 'Projeto A', area: 'Segurança', form: 'Padrão',
+      month: '2026-10', company: '<Empresa>', project: 'Projeto A', island: '<Ilha A>', area: 'Segurança', form: 'Padrão',
       ids: 0.849, evaluations: 2, observedPeople: 12, deviations: 10, weightedDeviation: 7.6,
       severity: [{ name: 'Baixa', quantity: 6 }, { name: 'Média', quantity: 3 }, { name: 'Alta', quantity: 1 }],
       categories: Array.from({ length: 7 }, (_, index) => ({ name: `Categoria ${index + 1}`, quantity: 7 - index })),
@@ -26,6 +26,7 @@ test('builds a 16:9 presentation summary from the selected data without inventin
     assert.match(report.content, /&lt;Empresa&gt;/)
     assert.doesNotMatch(report.content, /<Empresa>/)
     assert.match(report.content, /Projeto A/)
+    assert.match(report.content, /Ilha: &lt;Ilha A&gt;/)
     assert.match(report.content, /84,90%/)
     assert.match(report.content, /Risco ponderado<\/span><strong>7,6/)
     assert.match(report.content, /Baixa <strong>60%/)
@@ -38,9 +39,10 @@ test('builds a 16:9 presentation summary from the selected data without inventin
     const options = { language: 'en', colors: {
       low: '#112233', medium: '#445566', high: '#778899', categories: '#abcdef', items: '#123456',
     } }
-    const english = monthlyClosePdf({ ...data, company: null, project: null, selectedCategory: null }, options)
+    const english = monthlyClosePdf({ ...data, company: null, project: null, island: null, selectedCategory: null }, options)
     assert.match(english.title, /Monthly close - October 2026/)
     assert.match(english.content, /Company: All companies · Project \/ site: All projects/)
+    assert.match(english.content, /Island: All islands/)
     assert.match(english.content, /Average IDS<\/span><strong>84\.90%/)
     assert.match(english.content, /Weighted risk<\/span><strong>7\.6/)
     assert.match(english.content, /Low <strong>60%/)

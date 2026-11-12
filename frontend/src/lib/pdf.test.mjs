@@ -39,10 +39,12 @@ test('formats IDS and IPF in printable reports without changing other precision'
 
     const monthly = monthlyIpfReportPdf({
       year: 2026, month: 1, monthLabel: 'Janeiro', contractor: 'Empresa',
-      issuedAt: '2026-01-15T12:00:00Z', ipfValue: 7.04, idsAverage: 0.8, charts: [],
+      issuedAt: '2026-01-15T12:00:00Z', ipfValue: 7.04, idsAverage: 0.8, charts: [], legacyIpfMonths: [1, 3],
     })
     assert.match(monthly.content, /<strong><span style="color:#18743a">7,0 · Meta alcançada<\/span><\/strong>/)
     assert.match(monthly.content, /<strong><span style="color:#c62828">80,00% · Não atingiu a meta<\/span><\/strong>/)
+    assert.match(monthly.content, /dados de apoio seguem os filtros selecionados/)
+    assert.match(monthly.content, /IPFs antigos associados a projeto nos meses 1, 3/)
 
     const composition = ipfCompositionPdf({
       year: 2026, month: 1, contractor: 'Empresa', value: 0.8762,

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { AlertTriangle, ArrowLeft, Check, Save, X } from 'lucide-react'
 import { CatalogPicker, type CatalogChoice } from './CatalogPicker'
-import { apiRequest, defaultInspectionId, type InspectionScope, type ChecklistCatalog, type EvaluationResult, type InspectionFormTemplate } from '../lib/api'
+import { apiRequest, defaultInspectionId, type InspectionScope, type ChecklistCatalog, type EvaluationResult, type InspectionFormTemplate, type InspectionIsland, type InspectionArea } from '../lib/api'
 
 interface EvaluationFormProps {
   evaluationId?: string
@@ -24,6 +24,8 @@ function today() {
 export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, onClose, onCreated }: EvaluationFormProps) {
   const [catalog, setCatalog] = useState<ChecklistCatalog | null>(null)
   const [templates, setTemplates] = useState<InspectionFormTemplate[]>([])
+  const [islands, setIslands] = useState<InspectionIsland[]>([])
+  const [islandId, setIslandId] = useState(initialScope?.islandId ?? '')
   const [formVersionId, setFormVersionId] = useState<string | null>(null)
   const [formName, setFormName] = useState('Formulário padrão')
   const [formVersion, setFormVersion] = useState(0)
@@ -54,8 +56,11 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
     Promise.all([
       apiRequest<InspectionFormTemplate[]>('/api/inspection-forms'),
       evaluationId ? apiRequest<EvaluationResult>(`/api/evaluations/${evaluationId}`) : Promise.resolve(null),
+      apiRequest<InspectionIsland[]>('/api/inspection-islands'),
+      apiRequest<InspectionArea[]>('/api/inspection-areas'),
     ])
-      .then(async ([loadedTemplates, existing]) => {
+      .then(async ([allTemplates, existing, loadedIslands, loadedAreas]) => {
+        const loadedTemplates = existing ? allTemplates : allTemplates.filter(template => loadedAreas.some(area => area.id === template.areaId && area.isActive))
         const selected = loadedTemplates.find(template => initialScope && template.areaId === initialScope.areaId
           && (template.isDefault ? defaultInspectionId : template.id) === initialScope.formId)
           ?? loadedTemplates.find((template) => template.isDefault) ?? loadedTemplates[0]
@@ -66,6 +71,9 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
         )
         if (!active) return
         setCatalog(loadedCatalog)
+        setIslands(loadedIslands)
+        if (!existing && initialScope?.islandId && !loadedIslands.some(island => island.id === initialScope.islandId && island.isActive))
+          setIslandId('')
         setTemplates(loadedTemplates)
         setFormVersionId(versionId)
         setFormName(existing ? existing.formName : selected.name)
@@ -77,6 +85,7 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
         setEvaluationDate(existing.evaluationDate)
         setEvaluationTime(existing.evaluationTime?.slice(0, 5) ?? '')
         setSiteId(existing.siteId ?? '')
+        setIslandId(existing.islandId ?? '')
         setClientId(existing.clientOrganizationId ?? '')
         setContractorId(existing.contractorOrganizationId ?? '')
         setSubcontractorId(existing.subcontractorOrganizationId ?? '')
@@ -140,7 +149,7 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
   }
 
   async function createOrganization(name: string, kind: 'Client' | 'Contractor' | 'Subcontractor'): Promise<CatalogChoice> {
-    const created = await apiRequest<{ id: string; name: string }>('/api/catalog/organizations', {
+    const created = await apiRequest<{ id: string; name: string; isActive: boolean }>('/api/catalog/organizations', {
       method: 'POST',
       body: JSON.stringify({ name, kind }),
     })
@@ -165,6 +174,7 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
         evaluationDate,
         evaluationTime: evaluationTime || null,
         siteId: siteId || null,
+        islandId: islandId || null,
         clientOrganizationId: clientId || null,
         contractorOrganizationId: contractorId || null,
         subcontractorOrganizationId: subcontractorId || null,
@@ -252,9 +262,10 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
             <label>Data da avaliação<input onChange={(event) => setEvaluationDate(event.target.value)} required type="date" value={evaluationDate} /></label>
             <label>Hora<input onChange={(event) => setEvaluationTime(event.target.value)} type="time" value={evaluationTime} /></label>
             <label>Pessoas observadas<input onChange={(event) => setObservedPeople(event.target.value)} step="any" type="number" value={observedPeople} /></label>
-            <label>Local / projeto<select value={siteId} onChange={event => setSiteId(event.target.value)}><option value="">Selecionar local</option>{catalog.sites.map(site => <option key={site.id} value={site.id}>{site.projectOrIsland ? `${site.name} · ${site.projectOrIsland}` : site.name}</option>)}</select></label>
+            <label>Local / projeto<select value={siteId} onChange={event => setSiteId(event.target.value)}><option value="">Selecionar projeto</option>{catalog.sites.filter(site => site.isActive || site.id === siteId).map(site => <option key={site.id} value={site.id}>{site.name}{!site.isActive ? ' (desativado)' : ''}</option>)}</select></label>
+            <label>Local / ilha<select value={islandId} onChange={event => setIslandId(event.target.value)}><option value="">Selecionar ilha</option>{islands.filter(island => island.isActive || island.id === islandId).map(island => <option key={island.id} value={island.id}>{island.name}{!island.isActive ? ' (desativada)' : ''}</option>)}</select></label>
             <CatalogPicker label="Cliente" placeholder="Selecionar cliente" value={clientId} options={catalog.organizations.filter((organization) => organization.kind === 'Client').map((organization) => ({ id: organization.id, label: organization.name }))} canCreate={canCreateCatalog} onChange={setClientId} createTitle="Novo cliente" onCreate={(name) => createOrganization(name, 'Client')} />
-            <label>Contratada<select value={contractorId} onChange={event => setContractorId(event.target.value)}><option value="">Selecionar contratada</option>{catalog.organizations.filter(organization => organization.kind === 'Contractor').map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>
+            <label>Contratada<select value={contractorId} onChange={event => setContractorId(event.target.value)}><option value="">Selecionar contratada</option>{catalog.organizations.filter(organization => organization.kind === 'Contractor' && (organization.isActive || organization.id === contractorId)).map(organization => <option key={organization.id} value={organization.id}>{organization.name}{!organization.isActive ? ' (desativada)' : ''}</option>)}</select></label>
             <label>Auditor líder<input onChange={(event) => setLeadAuditorName(event.target.value)} value={leadAuditorName} /></label>
             <label>Auditor<input onChange={(event) => setAuditorName(event.target.value)} value={auditorName} /></label>
             <label>Acompanhante<input onChange={(event) => setCompanionName(event.target.value)} value={companionName} /></label>

@@ -116,14 +116,16 @@ export function UserGuide() {
       <dl>
         <dt>Cliente</dt><dd>Organização para a qual o serviço ou projeto é realizado.</dd>
         <dt>Contratada</dt><dd>Empresa executante que será vinculada à inspeção. É a referência usada para consultar e registrar o IPF.</dd>
-        <dt>Subcontratada</dt><dd>Empresa vinculada à execução por meio de outra contratada, quando aplicável.</dd>
-        <dt>Local / projeto</dt><dd>Onde a inspeção ocorreu. O cadastro permite informar também um projeto ou ilha, opcionalmente.</dd>
+        <dt>Local / projeto</dt><dd>Projeto ou unidade onde a inspeção ocorreu.</dd>
+        <dt>Local / ilha</dt><dd>Local ou ilha selecionado independentemente do projeto.</dd>
       </dl>
       <ol>
-        <li>Abra <strong>Cadastros</strong> para consultar e cadastrar contratadas e locais/projetos. Procure primeiro na lista para evitar duplicações.</li>
-        <li>Informe o nome e salve. Para locais, o nome do projeto ou ilha é opcional. Esses cadastros exigem Administrador ou GESTOR.</li>
+        <li>Abra <strong>Cadastros</strong> para consultar e cadastrar contratadas, projetos, ilhas e áreas. Procure primeiro na lista para evitar duplicações.</li>
+        <li>Informe o nome de cada cadastro e salve. Administradores e gestores gerenciam contratadas, projetos e ilhas; somente administradores gerenciam áreas.</li>
+        <li>Use <strong>Editar</strong> para corrigir o nome nos registros existentes ou <strong>Desativar</strong> para impedir novos usos mantendo o histórico. A área padrão não pode ser desativada.</li>
         <li>Em <strong>Nova avaliação → Identificação</strong>, selecione os registros. Clientes continuam podendo ser cadastrados pelo botão ao lado do campo.</li>
       </ol>
+      <p>O mês de referência é selecionado no topo. No IPF manual, projeto e ilha filtram os dados de apoio, mas o cálculo e o registro são gerais da contratada no mês, área e formulário. Registros anteriormente salvos são preservados até uma nova gravação.</p>
       <div className="guide-note"><Info size={18} aria-hidden="true" /><p>Vincule a <strong>contratada correta</strong> em todas as inspeções que devem entrar no IPF dela. Um registro sem contratada não entra na média de uma contratada escolhida no relatório. Nome parecido não é suficiente: o vínculo selecionado é o que vale.</p></div>
     </Chapter>
 

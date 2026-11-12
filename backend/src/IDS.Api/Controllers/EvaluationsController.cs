@@ -5,6 +5,8 @@ using IDS.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+using Npgsql;
 
 namespace IDS.Api.Controllers;
 
@@ -20,11 +22,12 @@ public sealed class EvaluationsController(EvaluationApplicationService evaluatio
         [FromQuery] Guid? contractorId,
         [FromQuery] Guid? areaId,
         [FromQuery] Guid? formId,
+        [FromQuery] Guid? islandId,
         CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await evaluationService.ListAsync(from, to, siteId, contractorId, cancellationToken, new(areaId, formId)));
+            return Ok(await evaluationService.ListAsync(from, to, siteId, contractorId, cancellationToken, new(areaId, formId, islandId)));
         }
         catch (EvaluationValidationException exception)
         {
@@ -136,13 +139,14 @@ public sealed class CatalogController(IdsDbContext dbContext) : ControllerBase
             .ToArrayAsync(cancellationToken);
         var sites = await dbContext.Sites
             .AsNoTracking()
+            .Where(site => site.CanonicalSiteId == null)
             .OrderBy(site => site.Name)
-            .Select(site => new { site.Id, site.Name, site.ProjectOrIsland })
+            .Select(site => new { site.Id, site.Name, site.ProjectOrIsland, site.IsActive })
             .ToArrayAsync(cancellationToken);
         var organizations = await dbContext.Organizations
             .AsNoTracking()
             .OrderBy(organization => organization.Name)
-            .Select(organization => new { organization.Id, organization.Name, Kind = organization.Kind.ToString() })
+            .Select(organization => new { organization.Id, organization.Name, Kind = organization.Kind.ToString(), organization.IsActive })
             .ToArrayAsync(cancellationToken);
 
         return Ok(new { categories, severities, sites, organizations });
@@ -162,14 +166,22 @@ public sealed class CatalogController(IdsDbContext dbContext) : ControllerBase
     [HttpPost("sites")]
     public async Task<IActionResult> CreateSite(CreateSiteRequest request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 200)
+            return BadRequest(new { message = "Informe um nome de projeto com até 200 caracteres." });
+        var name = request.Name.Trim();
+        var projectOrIsland = string.IsNullOrWhiteSpace(request.ProjectOrIsland) ? null : request.ProjectOrIsland.Trim();
+        if (projectOrIsland?.Length > 200)
+            return BadRequest(new { message = "O nome da ilha deve ter até 200 caracteres." });
+        if (await dbContext.Sites.AnyAsync(value => value.CanonicalSiteId == null && value.Name.Trim().ToUpper() == name.ToUpper(), cancellationToken))
+            return Conflict(new { message = "Já existe um projeto com este nome." });
         var site = new Site
         {
-            Name = request.Name.Trim(),
-            ProjectOrIsland = string.IsNullOrWhiteSpace(request.ProjectOrIsland) ? null : request.ProjectOrIsland.Trim()
+            Name = name,
+            ProjectOrIsland = projectOrIsland
         };
         dbContext.Sites.Add(site);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return Created("/api/catalog", new { site.Id, site.Name, site.ProjectOrIsland });
+        if (!await SaveCatalog(cancellationToken)) return Conflict(new { message = "Já existe um projeto com este nome." });
+        return Created("/api/catalog", new { site.Id, site.Name, site.ProjectOrIsland, site.IsActive });
     }
 
     [Authorize(Roles = "ADMINISTRADOR,GESTOR")]
@@ -178,18 +190,88 @@ public sealed class CatalogController(IdsDbContext dbContext) : ControllerBase
         CreateOrganizationRequest request,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 200)
+            return BadRequest(new { message = "Informe um nome com até 200 caracteres." });
         if (!Enum.TryParse<OrganizationKind>(request.Kind, true, out var kind))
         {
             return BadRequest(new { message = "Tipo deve ser Client, Contractor ou Subcontractor." });
         }
+        var name = request.Name.Trim();
+        if (await dbContext.Organizations.AnyAsync(value => value.Kind == kind && value.Name.ToUpper() == name.ToUpper(), cancellationToken))
+            return Conflict(new { message = "Já existe uma organização com este nome e tipo." });
 
-        var organization = new Organization { Name = request.Name.Trim(), Kind = kind };
+        var organization = new Organization { Name = name, Kind = kind };
         dbContext.Organizations.Add(organization);
+        if (!await SaveCatalog(cancellationToken)) return Conflict(new { message = "Já existe uma organização com este nome e tipo." });
+        return Created("/api/catalog", new { organization.Id, organization.Name, Kind = organization.Kind.ToString(), organization.IsActive });
+    }
+
+    [Authorize(Roles = "ADMINISTRADOR,GESTOR")]
+    [HttpPut("sites/{id:guid}")]
+    public async Task<IActionResult> RenameSite(Guid id, RenameCatalogRequest request, CancellationToken cancellationToken)
+    {
+        var site = await dbContext.Sites.SingleOrDefaultAsync(value => value.Id == id && value.CanonicalSiteId == null, cancellationToken);
+        if (site is null) return NotFound();
+        var name = request.Name.Trim();
+        if (name.Length == 0) return BadRequest(new { message = "Informe o nome do projeto." });
+        if (await dbContext.Sites.AnyAsync(value => value.Id != id && value.CanonicalSiteId == null
+            && value.Name.Trim().ToUpper() == name.ToUpper(), cancellationToken))
+            return Conflict(new { message = "Já existe um projeto com este nome." });
+        site.Name = name;
+        if (!await SaveCatalog(cancellationToken)) return Conflict(new { message = "Já existe um projeto com este nome." });
+        return Ok(new { site.Id, site.Name, site.ProjectOrIsland, site.IsActive });
+    }
+
+    [Authorize(Roles = "ADMINISTRADOR,GESTOR")]
+    [HttpPut("sites/{id:guid}/active")]
+    public async Task<IActionResult> SetSiteActive(Guid id, SetInspectionIslandActiveRequest request, CancellationToken cancellationToken)
+    {
+        if (!request.IsActive.HasValue) return BadRequest(new { message = "Informe a situação do projeto." });
+        var site = await dbContext.Sites.SingleOrDefaultAsync(value => value.Id == id && value.CanonicalSiteId == null, cancellationToken);
+        if (site is null) return NotFound();
+        site.IsActive = request.IsActive.Value;
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Created("/api/catalog", new { organization.Id, organization.Name, Kind = organization.Kind.ToString() });
+        return Ok(new { site.Id, site.Name, site.ProjectOrIsland, site.IsActive });
+    }
+
+    [Authorize(Roles = "ADMINISTRADOR,GESTOR")]
+    [HttpPut("organizations/{id:guid}")]
+    public async Task<IActionResult> RenameContractor(Guid id, RenameCatalogRequest request, CancellationToken cancellationToken)
+    {
+        var organization = await dbContext.Organizations.SingleOrDefaultAsync(value => value.Id == id && value.Kind == OrganizationKind.Contractor, cancellationToken);
+        if (organization is null) return NotFound();
+        var name = request.Name.Trim();
+        if (name.Length == 0) return BadRequest(new { message = "Informe o nome da contratada." });
+        if (await dbContext.Organizations.AnyAsync(value => value.Id != id && value.Kind == OrganizationKind.Contractor && value.Name.ToUpper() == name.ToUpper(), cancellationToken))
+            return Conflict(new { message = "Já existe uma contratada com este nome." });
+        organization.Name = name;
+        var compositions = await dbContext.IpfCompositions.Where(value => value.ContractorOrganizationId == id).ToArrayAsync(cancellationToken);
+        foreach (var composition in compositions) composition.ContractorName = name;
+        if (!await SaveCatalog(cancellationToken)) return Conflict(new { message = "Já existe uma contratada com este nome." });
+        return Ok(new { organization.Id, organization.Name, Kind = organization.Kind.ToString(), organization.IsActive });
+    }
+
+    [Authorize(Roles = "ADMINISTRADOR,GESTOR")]
+    [HttpPut("organizations/{id:guid}/active")]
+    public async Task<IActionResult> SetContractorActive(Guid id, SetInspectionIslandActiveRequest request, CancellationToken cancellationToken)
+    {
+        if (!request.IsActive.HasValue) return BadRequest(new { message = "Informe a situação da contratada." });
+        var organization = await dbContext.Organizations.SingleOrDefaultAsync(value => value.Id == id && value.Kind == OrganizationKind.Contractor, cancellationToken);
+        if (organization is null) return NotFound();
+        organization.IsActive = request.IsActive.Value;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { organization.Id, organization.Name, Kind = organization.Kind.ToString(), organization.IsActive });
+    }
+
+    private async Task<bool> SaveCatalog(CancellationToken cancellationToken)
+    {
+        try { await dbContext.SaveChangesAsync(cancellationToken); return true; }
+        catch (DbUpdateException exception) when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        { return false; }
     }
 }
 
+public sealed record RenameCatalogRequest([Required, StringLength(200)] string Name);
 public sealed record CreateSiteRequest(string Name, string? ProjectOrIsland);
 
 public sealed record CreateOrganizationRequest(string Name, string Kind);
@@ -206,11 +288,12 @@ public sealed class DashboardController(EvaluationApplicationService evaluationS
         [FromQuery] Guid? contractorId,
         [FromQuery] Guid? areaId,
         [FromQuery] Guid? formId,
+        [FromQuery] Guid? islandId,
         CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await evaluationService.GetDataConsolidationAsync(from, to, siteId, contractorId, cancellationToken, new(areaId, formId)));
+            return Ok(await evaluationService.GetDataConsolidationAsync(from, to, siteId, contractorId, cancellationToken, new(areaId, formId, islandId)));
         }
         catch (EvaluationValidationException exception)
         {
@@ -226,11 +309,12 @@ public sealed class DashboardController(EvaluationApplicationService evaluationS
         [FromQuery] Guid? contractorId,
         [FromQuery] Guid? areaId,
         [FromQuery] Guid? formId,
+        [FromQuery] Guid? islandId,
         CancellationToken cancellationToken)
     {
         try
         {
-            var totals = await evaluationService.GetPeriodTotalsAsync(from, to, siteId, contractorId, cancellationToken, new(areaId, formId));
+            var totals = await evaluationService.GetPeriodTotalsAsync(from, to, siteId, contractorId, cancellationToken, new(areaId, formId, islandId));
             return Ok(totals);
         }
         catch (EvaluationValidationException exception)

@@ -21,6 +21,9 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
 
         var references = await repository.LoadReferenceDataAsync(request, cancellationToken);
         ValidateReferences(request, references);
+        ValidateActiveReferences(request, references, null);
+        if (references.Island is { IsActive: false })
+            throw new EvaluationValidationException(["A ilha selecionada está desativada."]);
 
         var evaluation = new Evaluation
         {
@@ -29,7 +32,7 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
 
         ApplyRequest(evaluation, request, references);
         await repository.AddAsync(evaluation, cancellationToken);
-        return ToDto(evaluation);
+        return ToDto(evaluation, await repository.GetDefaultAreaNameAsync(cancellationToken));
     }
 
     public async Task<EvaluationDto?> UpdateDraftAsync(
@@ -56,9 +59,12 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         ValidateNoDuplicateItems(request);
         var references = await repository.LoadReferenceDataAsync(request, cancellationToken);
         ValidateReferences(request, references);
+        ValidateActiveReferences(request, references, evaluation);
+        if (references.Island is { IsActive: false } && request.IslandId != evaluation.IslandId)
+            throw new EvaluationValidationException(["A ilha selecionada está desativada."]);
         ApplyRequest(evaluation, request, references);
         await repository.SaveChangesAsync(cancellationToken);
-        return ToDto(evaluation);
+        return ToDto(evaluation, await repository.GetDefaultAreaNameAsync(cancellationToken));
     }
 
     public async Task<EvaluationDto?> SubmitDraftAsync(Guid id, CancellationToken cancellationToken)
@@ -76,13 +82,13 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
 
         evaluation.Status = EvaluationStatus.Submitted;
         await repository.SaveChangesAsync(cancellationToken);
-        return ToDto(evaluation);
+        return ToDto(evaluation, await repository.GetDefaultAreaNameAsync(cancellationToken));
     }
 
     public async Task<EvaluationDto?> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         var evaluation = await repository.GetByIdAsync(id, cancellationToken);
-        return evaluation is null ? null : ToDto(evaluation);
+        return evaluation is null ? null : ToDto(evaluation, await repository.GetDefaultAreaNameAsync(cancellationToken));
     }
 
     public async Task<IReadOnlyCollection<EvaluationDto>> ListAsync(
@@ -99,7 +105,8 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         }
 
         var evaluations = await repository.GetManyAsync(from, to, siteId, contractorId, cancellationToken, scope);
-        return evaluations.Select(ToDto).ToArray();
+        var defaultAreaName = await repository.GetDefaultAreaNameAsync(cancellationToken);
+        return evaluations.Select(evaluation => ToDto(evaluation, defaultAreaName)).ToArray();
     }
 
     public async Task<DashboardSummaryDto> GetPeriodTotalsAsync(
@@ -452,6 +459,8 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         }
 
         ValidateOptionalReference(request.SiteId, references.Sites, "Local", errors);
+        if (request.IslandId.HasValue && references.Island is null)
+            errors.Add("Ilha inexistente.");
         ValidateOrganization(request.ClientOrganizationId, references.Organizations, OrganizationKind.Client, "Cliente", errors);
         ValidateOrganization(request.ContractorOrganizationId, references.Organizations, OrganizationKind.Contractor, "Contratada", errors);
         ValidateOrganization(request.SubcontractorOrganizationId, references.Organizations, OrganizationKind.Subcontractor, "Subcontratada", errors);
@@ -468,6 +477,22 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         {
             throw new EvaluationValidationException(["Cada item pode aparecer apenas uma vez na avaliação."]);
         }
+
+    }
+
+    private static void ValidateActiveReferences(CreateEvaluationRequest request, EvaluationReferenceData references, Evaluation? existing)
+    {
+        var errors = new List<string>();
+        if (request.SiteId is Guid siteId && references.Sites.TryGetValue(siteId, out var site)
+            && !site.IsActive && (existing?.Site?.CanonicalSiteId ?? existing?.SiteId) != siteId)
+            errors.Add("O projeto selecionado está desativado.");
+        if (request.ContractorOrganizationId is Guid contractorId
+            && references.Organizations.TryGetValue(contractorId, out var contractor)
+            && !contractor.IsActive && existing?.ContractorOrganizationId != contractorId)
+            errors.Add("A contratada selecionada está desativada.");
+        if (existing is null && references.FormVersion?.Area is { IsActive: false })
+            errors.Add("A área selecionada está desativada.");
+        if (errors.Count > 0) throw new EvaluationValidationException(errors);
     }
 
     private static decimal SumQuantityForWeight(
@@ -495,6 +520,8 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         evaluation.EvaluationTime = request.EvaluationTime;
         evaluation.SiteId = request.SiteId;
         evaluation.Site = request.SiteId is Guid siteId ? references.Sites[siteId] : null;
+        evaluation.IslandId = request.IslandId;
+        evaluation.Island = references.Island;
         evaluation.ClientOrganizationId = request.ClientOrganizationId;
         evaluation.ClientOrganization = request.ClientOrganizationId is Guid clientId ? references.Organizations[clientId] : null;
         evaluation.ContractorOrganizationId = request.ContractorOrganizationId;
@@ -570,7 +597,7 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         }
     }
 
-    private static EvaluationDto ToDto(Evaluation evaluation)
+    private static EvaluationDto ToDto(Evaluation evaluation, string defaultAreaName)
     {
         var calculation = IdsCalculator.Calculate(
             evaluation.Observations.Select(observation => new ObservationInput(
@@ -583,12 +610,12 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
             evaluation.EvaluationDate,
             evaluation.EvaluationTime,
             evaluation.Status.ToString(),
-            evaluation.SiteId,
+            evaluation.Site?.CanonicalSiteId ?? evaluation.SiteId,
             evaluation.ClientOrganizationId,
             evaluation.ContractorOrganizationId,
             evaluation.SubcontractorOrganizationId,
-            evaluation.Site?.Name,
-            evaluation.Site?.ProjectOrIsland,
+            evaluation.Site?.CanonicalSite?.Name ?? evaluation.Site?.Name,
+            evaluation.Island?.Name,
             evaluation.ClientOrganization?.Name,
             evaluation.ContractorOrganization?.Name,
             evaluation.SubcontractorOrganization?.Name,
@@ -626,8 +653,10 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
             evaluation.FormVersion?.Name ?? "Formulário padrão",
             evaluation.FormVersion?.Version ?? 0,
             evaluation.FormVersion?.AreaId ?? Guid.Empty,
-            evaluation.FormVersion?.AreaName ?? InspectionArea.DefaultName,
-            evaluation.FormVersion?.FormId ?? Guid.Empty);
+            evaluation.FormVersion?.AreaName ?? defaultAreaName,
+            evaluation.FormVersion?.FormId ?? Guid.Empty,
+            evaluation.IslandId,
+            evaluation.Island?.Name);
     }
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

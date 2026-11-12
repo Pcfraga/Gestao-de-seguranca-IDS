@@ -14,7 +14,8 @@ public sealed class EfIpfCompositionRepository(IdsDbContext dbContext, ICurrentU
     {
         var names = await dbContext.InspectionAreas.AsNoTracking()
             .ToDictionaryAsync(area => area.Id, area => area.Name, cancellationToken);
-        names[Guid.Empty] = InspectionArea.DefaultName;
+        names[Guid.Empty] = await dbContext.Tenants.Where(tenant => tenant.Id == userScope.TenantId)
+            .Select(tenant => tenant.DefaultAreaName).SingleAsync(cancellationToken);
         return names;
     }
 

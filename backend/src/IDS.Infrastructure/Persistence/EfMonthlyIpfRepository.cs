@@ -27,6 +27,7 @@ public sealed class EfMonthlyIpfRepository(IdsDbContext dbContext, ICurrentUserS
             .AsNoTracking()
             .Include(record => record.ContractorOrganization)
             .Include(record => record.Site)
+                .ThenInclude(site => site!.CanonicalSite)
             .Where(record => record.Year == year
                 && record.ContractorOrganizationId == contractorId
                 && record.AreaId == areaId
@@ -82,7 +83,8 @@ public sealed class EfMonthlyIpfRepository(IdsDbContext dbContext, ICurrentUserS
         areaId = Canonicalize(areaId);
         formId = Canonicalize(formId);
 
-        var areaName = InspectionArea.DefaultName;
+        var areaName = await dbContext.Tenants.Where(tenant => tenant.Id == userScope.TenantId)
+            .Select(tenant => tenant.DefaultAreaName).SingleAsync(cancellationToken);
         if (areaId.HasValue && !await dbContext.InspectionAreas
             .AnyAsync(area => area.Id == areaId, cancellationToken))
         {

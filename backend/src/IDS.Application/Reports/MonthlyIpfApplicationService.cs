@@ -84,9 +84,9 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
             throw new IpfReportValidationException(["A organização selecionada não é uma contratada."]);
         }
 
-        if (request.SiteId is Guid siteId && !await repository.SiteExistsAsync(siteId, cancellationToken))
+        if (request.SiteId.HasValue)
         {
-            throw new IpfReportValidationException(["Local não encontrado."]);
+            throw new IpfReportValidationException(["O IPF é geral da contratada e não pode ser salvo por projeto."]);
         }
 
         if (request.MultiplicationFactor.HasValue != request.AdditionalScore.HasValue)
@@ -97,7 +97,7 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
         if (request.MultiplicationFactor is decimal factor && request.AdditionalScore is decimal additionalScore)
         {
             var scores = await repository.GetMonthlyEvaluationScoresAsync(
-                year, month, request.ContractorOrganizationId, cancellationToken, areaId, formId, request.SiteId);
+                year, month, request.ContractorOrganizationId, cancellationToken, areaId, formId);
             var validScores = scores.Where(score => score.HasValue).Select(score => score!.Value).ToArray();
             if (validScores.Length == 0)
             {
@@ -139,8 +139,8 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
         record.Month,
         record.ContractorOrganizationId,
         record.ContractorOrganization.Name,
-        record.SiteId,
-        record.Site?.Name,
+        record.Site?.CanonicalSiteId ?? record.SiteId,
+        record.Site?.CanonicalSite?.Name ?? record.Site?.Name,
         record.Value,
         record.Source,
         record.UpdatedAtUtc,

@@ -14,6 +14,16 @@ jobs:
       - run: cd frontend && npm ci && npm run build
         env:
           VITE_API_BASE_URL: https://ids-api-ya5l.onrender.com
+      - name: Aguardar API e migrations compatíveis
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error --max-time 15 https://ids-api-ya5l.onrender.com/api/health/ready | jq -e '.status == "ready" and .operationalCatalog == true' > /dev/null; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "A API compatível não ficou pronta; o frontend não será publicado."
+          exit 1
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}

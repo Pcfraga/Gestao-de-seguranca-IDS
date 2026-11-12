@@ -83,11 +83,11 @@ public sealed class CompanyIsolationTests
         Assert.Equal(HttpStatusCode.BadRequest, (await adminB.PostAsJsonAsync("/api/evaluations", EvaluationRequest(siteId))).StatusCode);
 
         Assert.Equal(HttpStatusCode.OK, (await adminA.PutAsJsonAsync("/api/reports/ipf/2026/10",
-            new { contractorOrganizationId = orgId, siteId, value = 90m })).StatusCode);
+            new { contractorOrganizationId = orgId, value = 90m })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await adminB.GetAsync($"/api/reports/ipf/2026?contractorId={orgId}")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await adminB.GetAsync($"/api/reports/ipf/2026/10/suggestion?contractorId={orgId}")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await adminB.PutAsJsonAsync("/api/reports/ipf/2026/10",
-            new { contractorOrganizationId = orgId, siteId, value = 20m })).StatusCode);
+            new { contractorOrganizationId = orgId, value = 20m })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await adminA.PutAsJsonAsync("/api/settings/report",
             new { companyName = "Brand A", tagline = "", logoDataUrl = (string?)null, primaryColor = "#123456" })).StatusCode);
         Assert.Equal("Brand A", (await adminA.GetFromJsonAsync<JsonElement>("/api/settings/report")).GetProperty("companyName").GetString());
