@@ -121,21 +121,21 @@ function notesTable(title: string, entries: Array<[string, string | null | undef
   </table>`
 }
 
-function documentHtml(title: string, content: string) {
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>${printStyles(loadBranding().primaryColor)}</style></head><body>${content}<script>window.addEventListener('load', () => window.setTimeout(() => window.print(), 250))</script></body></html>`
+function documentHtml(title: string, content: string, language: 'pt-BR' | 'en') {
+  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>${printStyles(loadBranding().primaryColor)}</style></head><body>${content}<script>window.addEventListener('load', () => window.setTimeout(() => window.print(), 250))</script></body></html>`
 }
 
-export function writePrintWindow(printWindow: Window, title: string, content: string) {
+export function writePrintWindow(printWindow: Window, title: string, content: string, language: 'pt-BR' | 'en' = 'pt-BR') {
   printWindow.document.open()
-  printWindow.document.write(documentHtml(title, content))
+  printWindow.document.write(documentHtml(title, content, language))
   printWindow.document.close()
 }
 
-export function openPrintWindow(title: string, content: string) {
+export function openPrintWindow(title: string, content: string, language: 'pt-BR' | 'en' = 'pt-BR') {
   const printWindow = window.open('', '_blank')
   if (!printWindow) return false
 
-  writePrintWindow(printWindow, title, content)
+  writePrintWindow(printWindow, title, content, language)
   return true
 }
 

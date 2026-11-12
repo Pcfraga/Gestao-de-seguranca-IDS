@@ -7,12 +7,29 @@ import { formatPercent, severityWithPercentages } from '../lib/severityChart'
 import { formatIds } from '../lib/indicatorFormat'
 import { monthlyClosePdf } from '../lib/monthlyClosePdf'
 import { openPrintWindow } from '../lib/pdf'
+import { defaultPdfOptions, parsePdfOptions, pdfOptionsStorageKey, type MonthlyClosePdfOptions, type PdfColorKey } from '../lib/monthlyClosePdfOptions'
 
 const severityColors = ['#70a681', '#d2a052', '#bd6963']
 const categoryColors = ['#4472c4', '#ed7d31', '#a5a5a5', '#ffc000', '#5b9bd5', '#70ad47', '#8064a2', '#4bacc6']
 const weekdayLabels = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 
 type MonthlyGroup = DataConsolidation['monthlyGroups'][number]
+const pdfColorFields: Array<{ key: PdfColorKey; label: string }> = [
+  { key: 'low', label: 'Severidade baixa' },
+  { key: 'medium', label: 'Severidade média' },
+  { key: 'high', label: 'Severidade alta' },
+  { key: 'categories', label: 'Barras de categorias' },
+  { key: 'items', label: 'Barras de itens' },
+]
+
+function readPdfOptions(): { options: MonthlyClosePdfOptions; error: string } {
+  try {
+    const stored = localStorage.getItem(pdfOptionsStorageKey)
+    return { options: stored ? parsePdfOptions(stored) : defaultPdfOptions, error: '' }
+  } catch {
+    return { options: defaultPdfOptions, error: 'Não foi possível carregar as opções salvas do PDF. Confira as configurações do navegador.' }
+  }
+}
 
 function monthRange(month: string) {
   const finalDay = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()
@@ -47,6 +64,7 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
   const [selectedProject, setSelectedProject] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
   const [exportError, setExportError] = useState('')
+  const [pdfSettings, setPdfSettings] = useState(readPdfOptions)
   const query = inspectionScopeQuery(scope)
   const requestKey = `${month}:${query}`
 
@@ -135,12 +153,21 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
   const isLoading = loadedKey !== requestKey
   const error = loadError?.key === requestKey ? loadError.message : ''
 
+  function updatePdfOptions(options: MonthlyClosePdfOptions) {
+    try {
+      localStorage.setItem(pdfOptionsStorageKey, JSON.stringify(options))
+      setPdfSettings({ options, error: '' })
+    } catch {
+      setPdfSettings({ options, error: 'Não foi possível salvar as opções do PDF neste navegador; elas valerão apenas nesta sessão.' })
+    }
+  }
+
   function exportSummary() {
     setExportError('')
     const pdf = monthlyClosePdf({
       month,
-      company: companies.find(([key]) => key === activeCompany)?.[1] ?? 'Todas as empresas',
-      project: projects.find(([key]) => key === activeProject)?.[1] ?? 'Todos os projetos',
+      company: activeCompany ? visibleGroups[0]?.contractor ?? (pdfSettings.options.language === 'en' ? 'Company not specified' : 'Empresa não informada') : null,
+      project: activeProject ? visibleGroups[0]?.projectOrIsland ?? visibleGroups[0]?.site ?? (pdfSettings.options.language === 'en' ? 'Project not specified' : 'Projeto não informado') : null,
       area: scope.areaName,
       form: scope.formName,
       ids: averageIds,
@@ -150,10 +177,10 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
       weightedDeviation,
       severity: severityData,
       categories: categoryChartData,
-      selectedCategory: categories.find(([key]) => key === activeCategory)?.[1] ?? 'Sem categoria',
+      selectedCategory: categories.find(([key]) => key === activeCategory)?.[1] ?? null,
       items: itemChartData,
-    })
-    if (!openPrintWindow(pdf.title, pdf.content)) {
+    }, pdfSettings.options)
+    if (!openPrintWindow(pdf.title, pdf.content, pdfSettings.options.language === 'en' ? 'en' : 'pt-BR')) {
       setExportError('O navegador bloqueou o PDF. Permita pop-ups para este site e tente novamente.')
     }
   }
@@ -190,6 +217,25 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
             <span className="monthly-close-count"><Activity size={15} />{visibleGroups.length} combinação(ões) empresa/projeto</span>
             <button type="button" className="outline-button" onClick={exportSummary}><FileDown size={16} />PDF para apresentação</button>
           </section>
+
+          <details className="panel monthly-close-pdf-options">
+            <summary>Idioma e cores do PDF para apresentação</summary>
+            <p>As opções valem apenas para o PDF e ficam salvas neste navegador. Nomes cadastrados não são traduzidos.</p>
+            {pdfSettings.error && <div className="form-error" role="alert">{pdfSettings.error}</div>}
+            <div className="monthly-close-pdf-controls">
+              <label>Idioma
+                <select value={pdfSettings.options.language} onChange={event => {
+                  const language = event.target.value
+                  if (language === 'pt' || language === 'en') updatePdfOptions({ ...pdfSettings.options, language })
+                }}><option value="pt">Português</option><option value="en">Inglês</option></select>
+              </label>
+              {pdfColorFields.map(({ key, label }) => <label key={key}>{label}
+                <input type="color" value={pdfSettings.options.colors[key]} onChange={event =>
+                  updatePdfOptions({ ...pdfSettings.options, colors: { ...pdfSettings.options.colors, [key]: event.target.value } })} />
+              </label>)}
+              <button type="button" className="outline-button" onClick={() => updatePdfOptions(defaultPdfOptions)}>Restaurar padrão</button>
+            </div>
+          </details>
 
           <article className="panel data-table-panel monthly-close-table-panel">
             <div className="panel-heading"><div><h2>Fechamento por empresa e projeto</h2><p>IDS semanal e indicadores consolidados do mês selecionado.</p></div></div>

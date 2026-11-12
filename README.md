@@ -73,6 +73,7 @@ O gráfico de resultados do IPF usa escala fixa de 0 a 10, com intervalos de 1. 
 No fechamento mensal, o centro do gráfico de severidade mostra o percentual de cada nível sobre o total com severidade informada, conforme os filtros de empresa e projeto. Na tabela por empresa e projeto, os valores de IDS são exibidos sem a classificação de meta.
 O gráfico de desvios por categoria apresenta as quantidades em barras horizontais.
 Em **Fechamento mensal**, o botão **PDF para apresentação** abre a impressão de um resumo horizontal 16:9 com os filtros atuais de mês, empresa, projeto, área e formulário. Inclui os totais, IDS médio, severidade, categorias e itens da categoria selecionada. Os gráficos de barras mostram até cinco itens e agrupam os demais em “Outros”. Escolha **Salvar como PDF** no navegador; o arquivo pode ser inserido em uma apresentação. Indicadores ausentes do sistema não são incluídos.
+Em **Idioma e cores do PDF para apresentação**, escolha português ou inglês e as cores para cada severidade e para os dois gráficos de barras. As escolhas ficam salvas apenas no navegador e não alteram os gráficos da tela. A tradução cobre os textos fixos e níveis de severidade; nomes cadastrados de empresas, projetos, áreas, formulários, categorias e itens permanecem no idioma original.
 O gráfico de resultados de IDS usa escala de 0% a 100%, com intervalos de 20%. Valores fora da faixa são indicados por setas, com os valores reais disponíveis na tabela de dados.
 No gráfico de IDS semanal, as barras dos dias e da média ficam lado a lado, pois esses percentuais não devem ser somados. Ele usa a mesma escala de 0% a 100% e sinaliza resultados fora da faixa.
 
@@ -84,7 +85,7 @@ O CSV de avaliações inclui uma coluna de classificação do IDS; o formato CSV
 Testes direcionados da fórmula do IPF, classificação, formatação e dos 14 gráficos (Node.js 24 e dependências do frontend):
 
 ```powershell
-node --experimental-strip-types --test frontend\src\lib\monthlyIpf.test.mjs frontend\src\lib\indicatorFormat.test.mjs frontend\src\lib\indicatorStatus.test.mjs frontend\src\lib\severityChart.test.mjs frontend\src\lib\workbookReport.test.mjs frontend\src\lib\pdf.test.mjs frontend\src\lib\monthlyClosePdf.test.mjs
+node --experimental-strip-types --test frontend\src\lib\monthlyIpf.test.mjs frontend\src\lib\indicatorFormat.test.mjs frontend\src\lib\indicatorStatus.test.mjs frontend\src\lib\severityChart.test.mjs frontend\src\lib\workbookReport.test.mjs frontend\src\lib\pdf.test.mjs frontend\src\lib\monthlyClosePdf.test.mjs frontend\src\lib\monthlyClosePdfOptions.test.mjs
 ```
 
 No primeiro acesso, escolha **Sou gestor: cadastrar minha empresa**, informe o nome da empresa, seu nome, e-mail e senha. O sistema cria uma empresa independente e sua conta de `ADMINISTRADOR`; não exige chave do Render. A senha deve ter pelo menos 8 caracteres, sem exigência de composição. O login usa `POST /api/auth/login`; cada e-mail identifica uma conta única no sistema e não pode ser reutilizado em outra empresa.

@@ -768,6 +768,13 @@ th { color: #445449; font-size: 11px; }
 .monthly-close-filters select, .monthly-close-category-select select { height: 35px; min-width: 0; padding: 0 9px; color: #35443a; background: #fcfdfc; border: 1px solid #e1e7e1; border-radius: 4px; font-size: 11px; }
 .monthly-close-count { display: inline-flex; align-items: center; gap: 7px; padding: 0 2px 9px; color: #78847b; font-size: 10px; white-space: nowrap; }
 .monthly-close-count svg, .monthly-close-footnote svg { color: #54755e; flex: 0 0 auto; }
+.monthly-close-pdf-options { padding: 12px 15px; }
+.monthly-close-pdf-options summary { cursor: pointer; color: #35493b; font-size: 12px; font-weight: 600; }
+.monthly-close-pdf-options p { color: #657168; font-size: 11px; }
+.monthly-close-pdf-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.monthly-close-pdf-controls label { display: flex; flex-direction: column; gap: 4px; color: #46564b; font-size: 11px; }
+.monthly-close-pdf-controls input[type="color"] { width: 52px; height: 34px; padding: 2px; cursor: pointer; }
+.monthly-close-pdf-controls select { height: 34px; }
 .monthly-close-table-panel { min-width: 0; padding: 15px; }
 .monthly-close-table-panel table { min-width: 1160px; }
 .monthly-close-table-panel td:nth-child(n+3) { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
