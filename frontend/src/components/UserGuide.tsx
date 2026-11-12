@@ -131,7 +131,7 @@ export function UserGuide() {
 
     <Chapter id="avaliacoes">
       <ol>
-        <li>Clique em <strong>Nova avaliação</strong>. Escolha a área e o modelo; somente os formulários da área selecionada aparecem.</li>
+        <li>Em <strong>Avaliações</strong> ou <strong>Formulários de inspeção</strong>, clique em <strong>Nova avaliação</strong>. Escolha a área e o modelo; somente os formulários da área selecionada aparecem.</li>
         <li>Confira data, hora, local, cliente, contratada e responsáveis, conforme o registro.</li>
         <li>Informe o número de <strong>Pessoas observadas</strong>. Esse número é a base da conta do IDS e precisa ser maior que zero para haver uma nota calculável.</li>
         <li>Em <strong>Observações</strong>, informe a quantidade do desvio e a severidade do item. Use o comentário para explicar o que foi visto.</li>

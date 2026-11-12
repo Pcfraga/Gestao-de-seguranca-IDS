@@ -45,15 +45,17 @@
 .profile-button { gap: 7px; padding: 0 8px 0 5px; }
 .profile-initial { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #eadfd4; color: #71533b; font-size: 10px; font-weight: 700; }
 .page-content { width: min(100%, 1480px); margin: 0 auto; padding: 29px 34px 18px; }
-.page-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; margin-bottom: 20px; }
+.page-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 20px; margin-bottom: 20px; }
 .eyebrow { color: #86948a; font-size: 9px; font-weight: 700; letter-spacing: 1.25px; margin: 0 0 7px; }
 h1, h2, p { margin-top: 0; }
 h1 { color: #1d3025; font-size: 25px; font-weight: 600; line-height: 1.2; margin-bottom: 5px; }
 .page-description { color: #77837b; font-size: 12px; margin: 0; }
-.heading-actions { display: flex; align-items: center; gap: 8px; }
+.heading-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
 .period-control { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; color: #66746b; background: #fff; border: 1px solid #e0e7e1; border-radius: 5px; }
+.period-control:focus-within { outline: 2px solid #4d9d65; outline-offset: 2px; }
+.period-control svg { flex: 0 0 auto; }
 .period-control span { white-space: nowrap; font-size: 12px; }
-.period-control input { border: 0; background: transparent; width: 113px; color: #3d4b42; font-size: 11px; outline: 0; }
+.period-control input { border: 0; background: transparent; width: 190px; flex: 0 0 190px; color: #3d4b42; font-size: 11px; outline: 0; }
 .primary-button, .secondary-button, .outline-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; border-radius: 5px; font-size: 11px; font-weight: 600; padding: 0 12px; transition: background .16s ease, border .16s ease; white-space: nowrap; }
 .primary-button { color: #fff; background: var(--forest); border: 1px solid var(--forest); }
 .primary-button:hover { background: var(--forest-dark); }
@@ -441,9 +443,9 @@ th { color: #445449; font-size: 11px; }
   .search-field { width: clamp(120px, 38vw, 185px); }
   .page-content { min-width: 0; padding: 20px 15px 16px; }
   .page-heading { gap: 12px; }
-  .heading-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .heading-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .period-control, .heading-actions .secondary-button { min-height: 44px; }
-  .period-control input { min-width: 0; font-size: 16px; }
+  .period-control input { min-width: 0; flex: 1 1 190px; font-size: 16px; }
   .period-ribbon { flex-wrap: wrap; gap: 8px; padding: 10px 12px; white-space: normal; }
   .period-separator { display: none; }
   .period-state { flex-basis: 100%; margin-left: 25px; }
@@ -484,6 +486,8 @@ th { color: #445449; font-size: 11px; }
   .icon-button { min-width: 40px; min-height: 40px; }
   .page-content { padding-inline: 12px; }
   .heading-actions { grid-template-columns: minmax(0, 1fr); }
+  .period-control { height: auto; flex-wrap: wrap; padding-block: 8px; }
+  .period-control input { flex-basis: 100%; }
   .heading-actions .secondary-button { width: 100%; }
   .metric-card { min-height: 145px; padding: 11px; }
   .metric-label { font-size: 12px; }

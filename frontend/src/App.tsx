@@ -272,7 +272,7 @@ function App() {
             <div><p className="eyebrow">PAINEL DE SEGURANÇA</p><h1>{activeCopy.title}</h1><p className="page-description">{activeCopy.description}</p></div>
             {activeSection !== 'guide' && <div className="heading-actions">
               <label className="period-control"><CalendarDays size={17} /><span>Mês de referência</span><input aria-label="Selecionar mês de referência" onChange={(event) => { if (event.target.value) setSelectedMonth(event.target.value) }} type="month" value={selectedMonth} /></label>
-              <button className="secondary-button" type="button" onClick={() => { setEditingEvaluationId(null); setActiveSection('evaluations'); setShowEvaluationForm(true) }}><Plus size={17} /> Nova avaliação</button>
+              {(activeSection === 'evaluations' || activeSection === 'forms') && <button className="secondary-button" type="button" onClick={() => { setEditingEvaluationId(null); setActiveSection('evaluations'); setShowEvaluationForm(true) }}><Plus size={17} /> Nova avaliação</button>}
             </div>}
           </div>
 
