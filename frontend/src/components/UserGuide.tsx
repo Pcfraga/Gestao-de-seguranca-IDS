@@ -42,7 +42,7 @@ export function UserGuide() {
         <li><strong>Acesse sua empresa:</strong> o administrador cadastra a empresa e cria as contas da equipe.</li>
         <li><strong>Organize as disciplinas:</strong> cadastre áreas como Meio Ambiente, Qualidade ou Saúde e Segurança do Trabalho.</li>
         <li><strong>Prepare os modelos:</strong> em cada área, crie formulários com tópicos e itens observáveis.</li>
-        <li><strong>Cadastre as referências:</strong> clientes, contratadas, subcontratadas e locais são cadastrados durante o preenchimento de uma nova avaliação.</li>
+        <li><strong>Cadastre as referências:</strong> use Cadastros para contratadas e locais/projetos. Clientes podem ser cadastrados durante uma avaliação.</li>
         <li><strong>Registre a inspeção:</strong> escolha o modelo, informe as pessoas observadas, as quantidades e as severidades; revise e envie.</li>
         <li><strong>Acompanhe:</strong> selecione mês, área e formulário para consultar os dados. Em Relatórios, registre o IPF manual ou componha o IPF por disciplinas.</li>
       </ol>
@@ -94,14 +94,14 @@ export function UserGuide() {
       <p>A organização é: <strong>Área → Formulário → Tópicos → Itens</strong>. Exemplo: Meio Ambiente → Inspeção de resíduos → Armazenamento → Recipientes identificados.</p>
       <h3>Criar uma área</h3>
       <ol>
-        <li>Como administrador, abra <strong>Formulários de inspeção</strong>.</li>
-        <li>No campo <strong>Nova área</strong>, informe um nome claro e clique em <strong>Criar área</strong>.</li>
+        <li>Como administrador, abra <strong>Cadastros</strong>.</li>
+        <li>Em <strong>Áreas de inspeção</strong>, informe um nome claro e clique em <strong>Cadastrar</strong>.</li>
         <li>A área fica disponível para os formulários da sua empresa. Ela não cria um formulário automaticamente.</li>
       </ol>
       <p><strong>Saúde e Segurança do Trabalho</strong> já está disponível. Os registros anteriores à separação por áreas foram preservados nessa disciplina.</p>
       <h3>Criar o formulário completo</h3>
       <ol>
-        <li>Use <strong>Área dos formulários</strong> para organizar a lista e clique em <strong>Novo formulário</strong>.</li>
+        <li>Abra <strong>Formulários de inspeção</strong>, use <strong>Área dos formulários</strong> para organizar a lista e clique em <strong>Novo formulário</strong>.</li>
         <li>Escolha a <strong>Área do formulário</strong> e dê um nome ao modelo.</li>
         <li>Nomeie o primeiro tópico e seus itens. Use <strong>Adicionar item neste tópico</strong> e <strong>Adicionar tópico</strong> conforme necessário.</li>
         <li>As setas reorganizam tópicos e itens; a lixeira remove uma entrada do modelo em edição.</li>
@@ -120,10 +120,9 @@ export function UserGuide() {
         <dt>Local / projeto</dt><dd>Onde a inspeção ocorreu. O cadastro permite informar também um projeto ou ilha, opcionalmente.</dd>
       </dl>
       <ol>
-        <li>Abra <strong>Nova avaliação</strong> e vá à seção <strong>Identificação</strong>.</li>
-        <li>Procure primeiro na lista para não duplicar um cadastro existente.</li>
-        <li>Se não existir, use o botão ao lado do campo: <strong>Novo local</strong>, <strong>Novo cliente</strong>, <strong>Nova contratada</strong> ou <strong>Nova subcontratada</strong>.</li>
-        <li>Informe o nome, salve o cadastro e selecione-o na avaliação. Cadastros operacionais exigem Administrador ou GESTOR.</li>
+        <li>Abra <strong>Cadastros</strong> para consultar e cadastrar contratadas e locais/projetos. Procure primeiro na lista para evitar duplicações.</li>
+        <li>Informe o nome e salve. Para locais, o nome do projeto ou ilha é opcional. Esses cadastros exigem Administrador ou GESTOR.</li>
+        <li>Em <strong>Nova avaliação → Identificação</strong>, selecione os registros. Clientes continuam podendo ser cadastrados pelo botão ao lado do campo.</li>
       </ol>
       <div className="guide-note"><Info size={18} aria-hidden="true" /><p>Vincule a <strong>contratada correta</strong> em todas as inspeções que devem entrar no IPF dela. Um registro sem contratada não entra na média de uma contratada escolhida no relatório. Nome parecido não é suficiente: o vínculo selecionado é o que vale.</p></div>
     </Chapter>
@@ -131,7 +130,7 @@ export function UserGuide() {
     <Chapter id="avaliacoes">
       <ol>
         <li>Clique em <strong>Nova avaliação</strong>. Escolha a área e o modelo; somente os formulários da área selecionada aparecem.</li>
-        <li>Confira data, hora, local, cliente, contratada, subcontratada e responsáveis, conforme o registro.</li>
+        <li>Confira data, hora, local, cliente, contratada e responsáveis, conforme o registro.</li>
         <li>Informe o número de <strong>Pessoas observadas</strong>. Esse número é a base da conta do IDS e precisa ser maior que zero para haver uma nota calculável.</li>
         <li>Em <strong>Observações</strong>, informe a quantidade do desvio e a severidade do item. Use o comentário para explicar o que foi visto.</li>
         <li>Preencha pontos fortes e oportunidades de melhoria para contextualizar o resultado.</li>

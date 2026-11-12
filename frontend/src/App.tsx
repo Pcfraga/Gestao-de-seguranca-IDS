@@ -55,9 +55,10 @@ import { InspectionScopeSelector } from './components/InspectionScopeSelector'
 import { IpfCompositionReport } from './components/IpfCompositionReport'
 import { MonthlyCloseReport } from './components/MonthlyCloseReport'
 import { UserGuide } from './components/UserGuide'
+import { OperationalCatalog } from './components/OperationalCatalog'
 import { inspectionScopeQuery, type InspectionScope } from './lib/api'
 
-type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'monthlyClose' | 'forms' | 'settings' | 'users' | 'account' | 'guide'
+type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'monthlyClose' | 'catalog' | 'forms' | 'settings' | 'users' | 'account' | 'guide'
 
 const sections: Array<{ id: Section; label: string; icon: typeof LayoutDashboard }> = [
   { id: 'overview', label: 'Visão geral', icon: LayoutDashboard },
@@ -75,6 +76,7 @@ const sectionCopy: Record<Section, { title: string; description: string }> = {
   indicators: { title: 'Indicadores', description: 'Resultados de IDS, distribuição de desvios e evolução por período.' },
   reports: { title: 'Relatório IPF', description: 'Dados Relatório Mensal e gráficos do modelo de acompanhamento IPF.' },
   monthlyClose: { title: 'Fechamento mensal', description: 'Consolidação das fórmulas e gráficos por empresa e projeto.' },
+  catalog: { title: 'Cadastros', description: 'Cadastre e consulte contratadas, locais ou projetos e áreas de inspeção.' },
   forms: { title: 'Formulários de inspeção', description: 'Crie e edite formulários completos com tópicos e itens, mantendo as regras de cálculo e o histórico das inspeções.' },
   settings: { title: 'Configurações', description: 'Cadastros e parâmetros disponíveis para o seu perfil.' },
   users: { title: 'Usuários e perfis', description: 'Crie usuários, defina perfis e controle o acesso ao sistema.' },
@@ -205,6 +207,9 @@ function App() {
               {id === 'evaluations' && <span className="nav-indicator" aria-label="Sem avaliações" />}
             </button>
           ))}
+          {canManageCatalog && <button className={`nav-link ${activeSection === 'catalog' ? 'active' : ''}`} onClick={() => { setShowEvaluationForm(false); setActiveSection('catalog') }} type="button">
+            <Database size={18} strokeWidth={1.8} /><span>Cadastros</span>
+          </button>}
           {isAdmin && <>
           <span className="nav-caption nav-caption-lower">ADMINISTRAÇÃO</span>
           <button className={`nav-link ${activeSection === 'forms' ? 'active' : ''}`} onClick={() => { setShowEvaluationForm(false); setActiveSection('forms') }} type="button">
@@ -266,7 +271,7 @@ function App() {
           <div className="page-heading">
             <div><p className="eyebrow">PAINEL DE SEGURANÇA</p><h1>{activeCopy.title}</h1><p className="page-description">{activeCopy.description}</p></div>
             {activeSection !== 'guide' && <div className="heading-actions">
-              <label className="period-control"><CalendarDays size={17} /><input aria-label="Selecionar mês de referência" onChange={(event) => setSelectedMonth(event.target.value)} type="month" value={selectedMonth} /></label>
+              <label className="period-control"><CalendarDays size={17} /><span>Mês de referência</span><input aria-label="Selecionar mês de referência" onChange={(event) => { if (event.target.value) setSelectedMonth(event.target.value) }} type="month" value={selectedMonth} /></label>
               <button className="secondary-button" type="button" onClick={() => { setEditingEvaluationId(null); setActiveSection('evaluations'); setShowEvaluationForm(true) }}><Plus size={17} /> Nova avaliação</button>
             </div>}
           </div>
@@ -284,6 +289,7 @@ function App() {
           {inspectionScope && activeSection === 'indicators' && <Indicators key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
           {inspectionScope && activeSection === 'reports' && reportMode === 'manual' && <Reports key={scopeQuery} scope={inspectionScope} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
           {activeSection === 'reports' && reportMode === 'composition' && <IpfCompositionReport month={selectedMonth} initialAreaId={inspectionScope?.areaId} />}
+          {activeSection === 'catalog' && canManageCatalog && <OperationalCatalog canCreateArea={isAdmin} />}
           {activeSection === 'forms' && isAdmin && <InspectionFormsEditor />}
           {activeSection === 'settings' && isAdmin && <SettingsView />}
           {activeSection === 'users' && isAdmin && <div className="settings-grid"><UsersAdmin /></div>}

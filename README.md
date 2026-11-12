@@ -108,7 +108,7 @@ A API lista os modelos atuais em `GET /api/inspection-forms`, cria com `POST /ap
 
 ### Áreas e resultados separados
 
-Em **Formulários de inspeção**, cadastre áreas como **Meio Ambiente** e **Qualidade** e selecione a área ao criar ou duplicar um formulário. **Saúde e Segurança do Trabalho** já está disponível e contém todos os formulários, inspeções e registros de IPF anteriores a esta separação. As áreas personalizadas pertencem somente à empresa; apenas administradores podem criá-las.
+Na aba **Cadastros**, administradores e gestores podem cadastrar e consultar empresas contratadas e locais/projetos; apenas administradores podem cadastrar áreas como **Meio Ambiente** e **Qualidade**. Depois, em **Formulários de inspeção**, selecione a área ao criar ou duplicar um formulário. Clientes continuam sendo cadastrados na avaliação. As subcontratadas existentes permanecem nos registros antigos, mas não são selecionadas em novas avaliações. **Saúde e Segurança do Trabalho** já está disponível e contém todos os formulários, inspeções e registros de IPF anteriores a esta separação. As áreas personalizadas pertencem somente à empresa.
 
 A estrutura é **Área → Formulário → Tópicos → Itens**. A área de um formulário salvo permanece fixa para que suas versões não misturem históricos de áreas diferentes. Para usá-lo em outra área, duplique-o. Na nova avaliação, a área restringe os modelos disponíveis; inspeções e rascunhos salvos mantêm sua área e versão.
 

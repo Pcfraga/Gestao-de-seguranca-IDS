@@ -42,9 +42,7 @@ function moveEntry<T>(values: T[], index: number, direction: number) {
 export function InspectionFormsEditor() {
   const [forms, setForms] = useState<InspectionFormTemplate[] | null>(null)
   const [areas, setAreas] = useState<InspectionArea[]>([])
-  const [areaName, setAreaName] = useState('')
   const [filterAreaId, setFilterAreaId] = useState('')
-  const [isCreatingArea, setIsCreatingArea] = useState(false)
   const [draft, setDraft] = useState<FormDraft | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
@@ -146,25 +144,6 @@ export function InspectionFormsEditor() {
     }
   }
 
-  async function createArea(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setIsCreatingArea(true)
-    setError('')
-    try {
-      const area = await apiRequest<InspectionArea>('/api/inspection-areas', {
-        method: 'POST', body: JSON.stringify({ name: areaName.trim() }),
-      })
-      setAreas(current => [...current, area])
-      setFilterAreaId(area.id)
-      setAreaName('')
-      setMessage(`Área "${area.name}" criada. Agora crie um formulário e escolha esta área.`)
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'Não foi possível criar a área.')
-    } finally {
-      setIsCreatingArea(false)
-    }
-  }
-
   return <section className="panel users-card catalog-editor">
     {error && <div className="form-error" role="alert">{error}</div>}
     {message && <div className="report-save-confirmation" role="status"><Check size={16} />{message}</div>}
@@ -219,12 +198,7 @@ export function InspectionFormsEditor() {
         </fieldset>
       </form>
     </> : <>
-      <form className="inspection-area-create form-fields" onSubmit={event => void createArea(event)}>
-        <label>Nova área<input required maxLength={150} value={areaName} disabled={isCreatingArea} onChange={event => setAreaName(event.target.value)} placeholder="Ex.: Meio Ambiente ou Qualidade" /></label>
-        <button type="submit" className="outline-button" disabled={isCreatingArea}>{isCreatingArea ? 'Criando…' : 'Criar área'}</button>
-        <p>Áreas cadastradas: {areas.map(area => area.name).join(' · ')}</p>
-      </form>
-      <div className="panel-heading"><div><h2>Seus formulários de inspeção</h2><p>Crie modelos completos ou edite um formulário salvo. Cada modelo tem seus próprios tópicos e itens e segue as mesmas regras de estatística.</p></div></div>
+      <div className="panel-heading"><div><h2>Seus formulários de inspeção</h2><p>Crie modelos completos ou edite um formulário salvo. Cadastre novas áreas na aba Cadastros.</p></div></div>
       <div className="form-fields"><label>Área dos formulários<select value={filterAreaId} onChange={event => setFilterAreaId(event.target.value)}>
         <option value="">Todas as áreas</option>{areas.map(area => <option key={area.id} value={area.id}>{area.name}</option>)}
       </select></label></div>

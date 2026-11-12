@@ -151,17 +151,6 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
     return { id: created.id, label: created.name }
   }
 
-  async function createSite(name: string, projectOrIsland: string): Promise<CatalogChoice> {
-    const created = await apiRequest<{ id: string; name: string; projectOrIsland: string | null }>('/api/catalog/sites', {
-      method: 'POST',
-      body: JSON.stringify({ name, projectOrIsland: projectOrIsland || null }),
-    })
-    setCatalog((current) => current
-      ? { ...current, sites: [...current.sites, created].sort((left, right) => left.name.localeCompare(right.name, 'pt-BR')) }
-      : current)
-    return { id: created.id, label: created.projectOrIsland ? `${created.name} · ${created.projectOrIsland}` : created.name }
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!catalog) return
@@ -263,10 +252,9 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
             <label>Data da avaliação<input onChange={(event) => setEvaluationDate(event.target.value)} required type="date" value={evaluationDate} /></label>
             <label>Hora<input onChange={(event) => setEvaluationTime(event.target.value)} type="time" value={evaluationTime} /></label>
             <label>Pessoas observadas<input onChange={(event) => setObservedPeople(event.target.value)} step="any" type="number" value={observedPeople} /></label>
-            <CatalogPicker label="Local / projeto" placeholder="Selecionar local" value={siteId} options={catalog.sites.map((site) => ({ id: site.id, label: site.projectOrIsland ? `${site.name} · ${site.projectOrIsland}` : site.name }))} canCreate={canCreateCatalog} onChange={setSiteId} createTitle="Novo local" createSecondaryLabel="Projeto / ilha (opcional)" onCreate={createSite} />
+            <label>Local / projeto<select value={siteId} onChange={event => setSiteId(event.target.value)}><option value="">Selecionar local</option>{catalog.sites.map(site => <option key={site.id} value={site.id}>{site.projectOrIsland ? `${site.name} · ${site.projectOrIsland}` : site.name}</option>)}</select></label>
             <CatalogPicker label="Cliente" placeholder="Selecionar cliente" value={clientId} options={catalog.organizations.filter((organization) => organization.kind === 'Client').map((organization) => ({ id: organization.id, label: organization.name }))} canCreate={canCreateCatalog} onChange={setClientId} createTitle="Novo cliente" onCreate={(name) => createOrganization(name, 'Client')} />
-            <CatalogPicker label="Contratada" placeholder="Selecionar contratada" value={contractorId} options={catalog.organizations.filter((organization) => organization.kind === 'Contractor').map((organization) => ({ id: organization.id, label: organization.name }))} canCreate={canCreateCatalog} onChange={setContractorId} createTitle="Nova contratada" onCreate={(name) => createOrganization(name, 'Contractor')} />
-            <CatalogPicker label="Subcontratada" placeholder="Selecionar subcontratada" value={subcontractorId} options={catalog.organizations.filter((organization) => organization.kind === 'Subcontractor').map((organization) => ({ id: organization.id, label: organization.name }))} canCreate={canCreateCatalog} onChange={setSubcontractorId} createTitle="Nova subcontratada" onCreate={(name) => createOrganization(name, 'Subcontractor')} />
+            <label>Contratada<select value={contractorId} onChange={event => setContractorId(event.target.value)}><option value="">Selecionar contratada</option>{catalog.organizations.filter(organization => organization.kind === 'Contractor').map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>
             <label>Auditor líder<input onChange={(event) => setLeadAuditorName(event.target.value)} value={leadAuditorName} /></label>
             <label>Auditor<input onChange={(event) => setAuditorName(event.target.value)} value={auditorName} /></label>
             <label>Acompanhante<input onChange={(event) => setCompanionName(event.target.value)} value={companionName} /></label>
