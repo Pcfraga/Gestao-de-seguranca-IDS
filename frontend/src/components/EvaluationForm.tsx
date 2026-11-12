@@ -274,7 +274,7 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
         </section>
 
         <fieldset disabled={isChangingForm || isSaving} className="form-section checklist-section inspection-observations">
-          <div className="form-section-heading"><span>02</span><div><h3>Observações</h3><p>Quantidade e peso reproduzem os campos de entrada da planilha.</p></div></div>
+          <div className="form-section-heading"><span>02</span><div><h3>Observações</h3><p>Para cada item, informe a quantidade e a severidade do desvio. O comentário é opcional.</p></div></div>
           <div className="checklist-head"><span>Item observado</span><span>Quantidade</span><span>Severidade</span><span>Comentário</span></div>
           {catalog.categories.map((category) => (
             <fieldset className="checklist-category" key={category.id}>
