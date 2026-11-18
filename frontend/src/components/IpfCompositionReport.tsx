@@ -16,7 +16,7 @@ function formatValue(value: number | null) {
   return value === null ? 'Sem média' : value.toLocaleString('pt-BR', { maximumFractionDigits: 4 })
 }
 
-export function IpfCompositionReport({ month, initialAreaId }: { month: string; initialAreaId?: string }) {
+export function IpfCompositionReport({ month, initialAreaId, canSave }: { month: string; initialAreaId?: string; canSave: boolean }) {
   const [references, setReferences] = useState<{ areas: InspectionArea[]; catalog: ChecklistCatalog } | null>(null)
   const [contractorId, setContractorId] = useState('')
   const [error, setError] = useState('')
@@ -51,16 +51,17 @@ export function IpfCompositionReport({ month, initialAreaId }: { month: string; 
     </label></div>
     {references && contractorId
       ? <CompositionWorkspace key={`${contractorId}-${month}`} month={month} contractorId={contractorId}
-        areas={references.areas} initialAreaId={initialAreaId} />
+        areas={references.areas} initialAreaId={initialAreaId} canSave={canSave} />
       : references && <div className="report-empty panel">Selecione uma contratada para calcular ou consultar seu IPF por disciplinas.</div>}
   </section>
 }
 
-function CompositionWorkspace({ month, contractorId, areas, initialAreaId }: {
+function CompositionWorkspace({ month, contractorId, areas, initialAreaId, canSave }: {
   month: string
   contractorId: string
   areas: InspectionArea[]
   initialAreaId?: string
+  canSave: boolean
 }) {
   const year = Number(month.slice(0, 4))
   const monthNumber = Number(month.slice(5, 7))
@@ -115,6 +116,10 @@ function CompositionWorkspace({ month, contractorId, areas, initialAreaId }: {
     && new Set(draft.map(row => row.areaId)).size === draft.length
 
   async function calculate(save: boolean) {
+    if (save && !canSave) {
+      setError('Somente perfis Administrador e Gestor podem salvar o IPF por disciplinas.')
+      return
+    }
     if (!validWeights) {
       setError('Escolha de uma a quatro áreas distintas, com pesos entre 0% e 100% somando 100%.')
       return
@@ -194,19 +199,20 @@ function CompositionWorkspace({ month, contractorId, areas, initialAreaId }: {
           <strong>Total definido: {totalWeight.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</strong>
         </div>
         {!validWeights && <p role="alert">Os pesos definidos devem somar 100%.</p>}
-        <p className="ipf-composition-rule">Área sem média ou com peso 0% não participa. Os pesos das demais são ajustados proporcionalmente para 100%. Uma média válida igual a zero participa normalmente. Todas as notas usam a mesma escala do IDS das avaliações, sem conversão automática para 0–10. A classificação aplica o limite literal de IPF 7, portanto valores de 0 a 1 não atingem a meta.</p>
+        <p className="ipf-composition-rule">Área sem média ou com peso 0% não participa. Os pesos das demais são ajustados proporcionalmente para 100%. Uma média válida igual a zero participa normalmente. Todas as notas usam a mesma escala do IDS, portanto a meta é atingida a partir de 0,85 (85%).</p>
         <div className="ipf-composition-actions">
           <button className="outline-button" type="submit" disabled={!validWeights}>{isBusy ? 'Processando…' : 'Calcular IPF por disciplinas'}</button>
-          <button className="primary-button" type="button" disabled={!validWeights || result?.value === null || !result}
-            onClick={() => void calculate(true)}><Save size={16} />Salvar IPF por disciplinas</button>
+          {canSave && <button className="primary-button" type="button" disabled={!validWeights || isBusy}
+            onClick={() => void calculate(true)}><Save size={16} />{isBusy ? 'Salvando…' : 'Salvar IPF por disciplinas'}</button>}
         </div>
+        {!canSave && <p className="ipf-composition-rule">Você pode calcular e consultar. Somente Administrador e Gestor podem salvar a composição.</p>}
       </fieldset>
     </form>}
     {result && <CompositionDetails record={result} saved={resultIsSaved} onPdf={() => exportPdf(result)} />}
     {history && <section className="panel ipf-composition-history">
       <div className="panel-heading"><div><h3>Histórico do IPF por disciplinas · {year}</h3><p>Valores salvos, independentes do IPF manual por formulário. As médias e os pesos históricos não mudam quando novas avaliações são criadas.</p></div></div>
       <div className="table-scroll"><table><thead><tr><th>Mês</th><th>IPF salvo</th><th>Disciplinas participantes</th><th>Detalhes</th></tr></thead><tbody>
-        {history.months.map(record => <tr key={record.month}><td>{String(record.month).padStart(2, '0')}/{year}</td><td><IndicatorResult kind="ipf" value={record.value} empty="Sem média" /></td>
+        {history.months.map(record => <tr key={record.month}><td>{String(record.month).padStart(2, '0')}/{year}</td><td><IndicatorResult kind="ipf" statusKind="ids" value={record.value} empty="Sem média" /></td>
           <td>{record.areas.filter(area => area.status === 'included').map(area => `${area.areaName} (${formatValue(area.effectiveWeight)}%)`).join(' · ')}</td>
           <td><button className="quiet-button" type="button" onClick={() => setViewedMonth(record)}>Ver composição de {String(record.month).padStart(2, '0')}/{year}</button></td></tr>)}
         {!history.months.length && <tr><td colSpan={4}>Nenhum IPF por disciplinas registrado neste ano.</td></tr>}
@@ -222,7 +228,7 @@ function CompositionDetails({ record, saved, onPdf }: { record: IpfComposition; 
       <p>{record.contractor}{record.updatedAtUtc ? ` · Salvo em ${new Date(record.updatedAtUtc).toLocaleString('pt-BR')}` : ''}</p></div>
       <button className="outline-button" type="button" onClick={onPdf}><FileDown size={16} />PDF da composição</button>
     </div>
-    <p className="ipf-composition-score">IPF final: <strong><IndicatorResult kind="ipf" value={record.value} empty="Sem média" /></strong></p>
+    <p className="ipf-composition-score">IPF final: <strong><IndicatorResult kind="ipf" statusKind="ids" value={record.value} empty="Sem média" /></strong></p>
     {record.areas.some(area => area.status === 'no-average' && area.weight > 0)
       && <p role="status">Há áreas sem média. Elas não participaram da nota; os pesos das áreas com média foram ajustados proporcionalmente.</p>}
     <div className="table-scroll"><table><thead><tr><th>Disciplina</th><th>Média IDS</th><th>Avaliações válidas / total</th><th>Peso definido</th><th>Peso aplicado</th><th>Contribuição</th><th>Situação</th></tr></thead><tbody>

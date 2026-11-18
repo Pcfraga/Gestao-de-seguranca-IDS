@@ -88,7 +88,7 @@ No gráfico de IDS semanal, as barras dos dias e da média ficam lado a lado, po
 
 Os resultados de IDS são exibidos com duas casas decimais e os de IPF com uma, nas telas e nos relatórios. Na composição por disciplinas, as médias continuam na escala original do IDS. A formatação não altera a precisão dos valores usados nos cálculos ou armazenados; por isso, o resultado calculado pode diferir de um recálculo feito com os números arredondados da tela.
 
-A classificação usa o valor real, antes da formatação: IDS abaixo de 85% ou IPF abaixo de 7 é **Não atingiu a meta** em vermelho; a partir desses limites é **Meta alcançada** em verde. Um valor exibido arredondado como 7,0 ou 85,00% ainda pode estar abaixo do limite. Valores ausentes não são classificados. No IPF por disciplinas, aplica-se o limite 7 literalmente à escala original, sem conversão; assim, resultados de 0 a 1 não atingem a meta.
+A classificação usa o valor real, antes da formatação: IDS abaixo de 85% ou IPF manual abaixo de 7 é **Não atingiu a meta** em vermelho; a partir desses limites é **Meta alcançada** em verde. Um valor exibido arredondado como 7,0 ou 85,00% ainda pode estar abaixo do limite. Valores ausentes não são classificados. O IPF por disciplinas permanece na escala original do IDS, portanto usa a meta de 0,85 (85%): 0,9 atinge a meta.
 O CSV de avaliações inclui uma coluna de classificação do IDS; o formato CSV não contém cores.
 
 Testes direcionados da fórmula do IPF, classificação, formatação e dos 14 gráficos (Node.js 24 e dependências do frontend):
@@ -100,6 +100,8 @@ node --experimental-strip-types --test frontend\src\lib\monthlyIpf.test.mjs fron
 No primeiro acesso, escolha **Sou gestor: cadastrar minha empresa**, informe o nome da empresa, seu nome, e-mail e senha. O sistema cria uma empresa independente e sua conta de `ADMINISTRADOR`; não exige chave do Render. A senha deve ter pelo menos 8 caracteres, sem exigência de composição. O login usa `POST /api/auth/login`; cada e-mail identifica uma conta única no sistema e não pode ser reutilizado em outra empresa.
 
 Depois do cadastro, o administrador cria colaboradores em **Usuários e perfis**, mantendo o perfil **Usuário comum** (`AVALIADOR`) e definindo uma senha inicial. Essas contas pertencem automaticamente à empresa do administrador. Colaboradores não usam o cadastro de empresa: devem solicitar uma conta ao seu gestor. Administradores veem todas as avaliações da própria empresa; usuários comuns veem e editam apenas as próprias. Catálogos operacionais, relatórios IPF e identidade visual também são isolados por empresa. A identidade visual dos relatórios continua em **Configurações**.
+
+Usuários comuns podem criar avaliações, consultar seus resultados e editar ou enviar somente os próprios rascunhos. Depois do envio, uma avaliação comum fica somente leitura; não há operação de exclusão. O perfil `CONSULTA` permanece somente leitura. Todos podem calcular/consultar IDS e IPF usando os dados visíveis ao perfil, mas somente `ADMINISTRADOR` e `GESTOR` podem salvar IPF manual ou por disciplinas.
 
 ### Formulários completos de inspeção
 

@@ -57,11 +57,11 @@ function formatNumber(value: number | null | undefined, maximumFractionDigits = 
   return value === null || value === undefined ? '—' : value.toLocaleString('pt-BR', { maximumFractionDigits })
 }
 
-function indicatorHtml(kind: IndicatorKind, value: number | null | undefined, originalScale = false) {
+function indicatorHtml(kind: IndicatorKind, value: number | null | undefined, originalScale = false, statusKind: IndicatorKind = kind) {
   const formatted = kind === 'ipf' ? formatIpf(value)
     : originalScale ? formatIdsNumber(value) : formatIds(value)
-  const status = indicatorStatus(kind, value)
-  const color = indicatorColor(kind, value)
+  const status = indicatorStatus(statusKind, value)
+  const color = indicatorColor(statusKind, value)
   return status && color ? `<span style="color:${color}">${formatted} · ${status}</span>` : formatted
 }
 
@@ -94,9 +94,9 @@ function sectionTitle(title: string, columns: number) {
   return `<tr><th class="sec-title" colspan="${columns}">${escapeHtml(title)}</th></tr>`
 }
 
-function detailsTable(title: string, entries: Array<[string, string | number | null | undefined, { kind: IndicatorKind; value: number | null | undefined; originalScale?: boolean }?]>) {
+function detailsTable(title: string, entries: Array<[string, string | number | null | undefined, { kind: IndicatorKind; value: number | null | undefined; originalScale?: boolean; statusKind?: IndicatorKind }?]>) {
   const renderValue = (entry: typeof entries[number]) => entry[2]
-    ? indicatorHtml(entry[2].kind, entry[2].value, entry[2].originalScale)
+    ? indicatorHtml(entry[2].kind, entry[2].value, entry[2].originalScale, entry[2].statusKind)
     : text(entry[1])
   const rows: string[] = []
   for (let index = 0; index < entries.length; index += 2) {
@@ -293,7 +293,7 @@ export function ipfCompositionPdf(record: IpfComposition) {
   const content = `${reportHeader('IPF por disciplinas', period, record.contractor)}
     ${detailsTable('Identificação', [
       ['Período', period],
-      ['IPF final', null, { kind: 'ipf', value: record.value }],
+      ['IPF final', null, { kind: 'ipf', value: record.value, statusKind: 'ids' }],
       ['Situação', record.id ? 'Composição salva' : 'Prévia — ainda não salva'],
       ['Salvo em', record.updatedAtUtc ? new Date(record.updatedAtUtc).toLocaleString('pt-BR') : null],
     ])}
@@ -301,7 +301,7 @@ export function ipfCompositionPdf(record: IpfComposition) {
       <thead><tr><th>Disciplina</th><th>Média IDS</th><th>Válidas / total</th><th>Peso definido</th><th>Peso aplicado</th><th>Contribuição</th><th>Situação</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <table class="frame"><tr><td>As médias incluem todos os formulários de cada área para a contratada no mês, na escala original do IDS. Áreas sem média ou com peso 0% ficam fora; os demais pesos são ajustados proporcionalmente para 100%. Média válida igual a zero participa normalmente. Fórmula: soma das médias × pesos definidos, dividida pela soma dos pesos participantes. O cálculo usa médias sem arredondamento intermediário e arredonda a nota final a quatro casas. A classificação aplica o limite literal de IPF 7, sem conversão de escala; valores de 0 a 1 não atingem a meta.</td></tr></table>
+    <table class="frame"><tr><td>As médias incluem todos os formulários de cada área para a contratada no mês, na escala original do IDS. Áreas sem média ou com peso 0% ficam fora; os demais pesos são ajustados proporcionalmente para 100%. Média válida igual a zero participa normalmente. Fórmula: soma das médias × pesos definidos, dividida pela soma dos pesos participantes. O cálculo usa médias sem arredondamento intermediário e arredonda a nota final a quatro casas. Como a composição permanece na escala do IDS, a meta é atingida a partir de 0,85 (85%).</td></tr></table>
     <footer class="footer">Documento gerado pelo IDS · ${generatedAt()}</footer>`
   return { title, content }
 }

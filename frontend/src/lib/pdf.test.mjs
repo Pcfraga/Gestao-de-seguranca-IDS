@@ -21,6 +21,7 @@ test('formats IDS and IPF in printable reports without changing other precision'
     assert.match(display('ids', 0.85), /color:#18743a.*85,00%.*Meta alcançada/)
     assert.match(display('ipf', 6.9999), /color:#c62828.*7,0.*Não atingiu a meta/)
     assert.match(display('ipf', 7), /color:#18743a.*7,0.*Meta alcançada/)
+    assert.match(renderToStaticMarkup(createElement(IndicatorResult, { kind: 'ipf', value: 0.9, statusKind: 'ids' })), /color:#18743a.*0,9.*Meta alcançada/)
     assert.doesNotMatch(display('ids', null), /Meta alcançada|Não atingiu a meta|color:/)
     const evaluation = evaluationPdf({
       evaluationDate: '2026-01-15', observations: [], indicators: {
@@ -52,7 +53,7 @@ test('formats IDS and IPF in printable reports without changing other precision'
         effectiveWeight: 100, contribution: 0.8762, status: 'included',
         scoredEvaluationCount: 1, evaluationCount: 1 }],
     })
-    assert.match(composition.content, /IPF final<\/td><td><span style="color:#c62828">0,9 · Não atingiu a meta<\/span><\/td>/)
+    assert.match(composition.content, /IPF final<\/td><td><span style="color:#18743a">0,9 · Meta alcançada<\/span><\/td>/)
     assert.match(composition.content, /class="number"><span style="color:#18743a">0,88 · Meta alcançada<\/span><\/td>/)
     assert.match(composition.content, /class="number">12,3456%<\/td>/)
     assert.match(composition.content, /class="number">0,8762<\/td>/)

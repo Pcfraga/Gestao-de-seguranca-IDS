@@ -121,6 +121,8 @@ function App() {
   const [profileError, setProfileError] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   const [canManageCatalog, setCanManageCatalog] = useState(false)
+  const [canSaveReports, setCanSaveReports] = useState(false)
+  const [canWriteEvaluations, setCanWriteEvaluations] = useState(false)
   const [profileReady, setProfileReady] = useState(false)
   const [showEvaluationForm, setShowEvaluationForm] = useState(false)
   const [editingEvaluationId, setEditingEvaluationId] = useState<string | null>(null)
@@ -136,6 +138,8 @@ function App() {
       clearBranding()
       setIsAdmin(false)
       setCanManageCatalog(false)
+      setCanSaveReports(false)
+      setCanWriteEvaluations(false)
       setProfileReady(false)
       setShowEvaluationForm(false)
       setActiveSection('overview')
@@ -157,6 +161,8 @@ function App() {
       setCompanyName(me.companyName)
       setIsAdmin(me.roles.includes('ADMINISTRADOR'))
       setCanManageCatalog(me.roles.some(role => role === 'ADMINISTRADOR' || role === 'GESTOR'))
+      setCanSaveReports(me.roles.some(role => role === 'ADMINISTRADOR' || role === 'GESTOR'))
+      setCanWriteEvaluations(me.roles.some(role => role === 'ADMINISTRADOR' || role === 'GESTOR' || role === 'AVALIADOR'))
       setProfileReady(true)
     }).catch(error => {
       if (active) setProfileError(error instanceof Error ? error.message : 'Não foi possível carregar sua empresa.')
@@ -185,6 +191,8 @@ function App() {
     setShowEvaluationForm(false)
     setIsAdmin(false)
     setCanManageCatalog(false)
+    setCanSaveReports(false)
+    setCanWriteEvaluations(false)
     setIsAuthenticated(false)
     setActiveSection('overview')
   }
@@ -284,7 +292,7 @@ function App() {
             <div><p className="eyebrow">PAINEL DE SEGURANÇA</p><h1>{activeCopy.title}</h1><p className="page-description">{activeCopy.description}</p></div>
             {activeSection !== 'guide' && <div className="heading-actions">
               <label className="period-control"><CalendarDays size={17} /><span>Mês de referência</span><input aria-label="Selecionar mês de referência" onChange={(event) => { if (event.target.value) setSelectedMonth(event.target.value) }} type="month" value={selectedMonth} /></label>
-              {(activeSection === 'evaluations' || activeSection === 'forms') && <button className="secondary-button" type="button" onClick={() => { setEditingEvaluationId(null); setActiveSection('evaluations'); setShowEvaluationForm(true) }}><Plus size={17} /> Nova avaliação</button>}
+              {canWriteEvaluations && (activeSection === 'evaluations' || activeSection === 'forms') && <button className="secondary-button" type="button" onClick={() => { setEditingEvaluationId(null); setActiveSection('evaluations'); setShowEvaluationForm(true) }}><Plus size={17} /> Nova avaliação</button>}
             </div>}
           </div>
 
@@ -295,12 +303,12 @@ function App() {
           {['overview', 'evaluations', 'data', 'indicators', 'reports', 'monthlyClose'].includes(activeSection)
             && !(activeSection === 'reports' && reportMode === 'composition') && <InspectionScopeSelector key={activeSection} onChange={setInspectionScope} includeOrganizationFilters={activeSection === 'overview' || activeSection === 'indicators'} />}
           {inspectionScope && activeSection === 'overview' && <Dashboard key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} onOpenEvaluations={() => setActiveSection('evaluations')} />}
-          {inspectionScope && activeSection === 'evaluations' && <Evaluations scopeQuery={scopeQuery} key={`${evaluationRefresh}-${scopeQuery}`} search={search} month={selectedMonth} onCreate={() => { setEditingEvaluationId(null); setShowEvaluationForm(true) }} onEdit={(id) => { setEditingEvaluationId(id); setShowEvaluationForm(true) }} />}
+          {inspectionScope && activeSection === 'evaluations' && <Evaluations scopeQuery={scopeQuery} key={`${evaluationRefresh}-${scopeQuery}`} search={search} month={selectedMonth} canWrite={canWriteEvaluations} onCreate={() => { setEditingEvaluationId(null); setShowEvaluationForm(true) }} onEdit={(id) => { setEditingEvaluationId(id); setShowEvaluationForm(true) }} />}
           {inspectionScope && activeSection === 'data' && <DataView key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} />}
           {inspectionScope && activeSection === 'monthlyClose' && <MonthlyCloseReport key={scopeQuery} scope={inspectionScope} month={selectedMonth} />}
           {inspectionScope && activeSection === 'indicators' && <Indicators key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
-          {inspectionScope && activeSection === 'reports' && reportMode === 'manual' && <Reports key={scopeQuery} scope={inspectionScope} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
-          {activeSection === 'reports' && reportMode === 'composition' && <IpfCompositionReport month={selectedMonth} initialAreaId={inspectionScope?.areaId} />}
+          {inspectionScope && activeSection === 'reports' && reportMode === 'manual' && <Reports key={scopeQuery} scope={inspectionScope} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} canSave={canSaveReports} />}
+          {activeSection === 'reports' && reportMode === 'composition' && <IpfCompositionReport month={selectedMonth} initialAreaId={inspectionScope?.areaId} canSave={canSaveReports} />}
           {activeSection === 'catalog' && canManageCatalog && <OperationalCatalog canCreateArea={isAdmin} />}
           {activeSection === 'forms' && isAdmin && <InspectionFormsEditor />}
           {activeSection === 'settings' && isAdmin && <SettingsView />}
@@ -830,7 +838,7 @@ function DataView({ month, scopeQuery }: { month: string; scopeQuery: string }) 
   )
 }
 
-function Evaluations({ search, month, onCreate, onEdit, scopeQuery }: { search: string; month: string; onCreate: () => void; onEdit: (id: string) => void; scopeQuery: string }) {
+function Evaluations({ search, month, onCreate, onEdit, scopeQuery, canWrite }: { search: string; month: string; onCreate: () => void; onEdit: (id: string) => void; scopeQuery: string; canWrite: boolean }) {
   const [evaluations, setEvaluations] = useState<EvaluationSummary[]>([])
   const [catalog, setCatalog] = useState<ChecklistCatalog | null>(null)
   const [contractorId, setContractorId] = useState('')
@@ -983,7 +991,7 @@ function Evaluations({ search, month, onCreate, onEdit, scopeQuery }: { search: 
         <div className="list-actions">
           <button aria-expanded={isFilterPanelOpen} className={`outline-button ${siteId || contractorId ? 'has-active-filters' : ''}`} onClick={() => setIsFilterPanelOpen((open) => !open)} type="button"><Filter size={15} /> Filtros{siteId || contractorId ? ' · ativos' : ''}</button>
           <button className="outline-button" disabled={isLoading || filteredEvaluations.length === 0} onClick={exportEvaluations} type="button"><Download size={15} /> Exportar CSV</button>
-          <button className="primary-button" type="button" onClick={onCreate}><Plus size={15} /> Nova</button>
+          {canWrite && <button className="primary-button" type="button" onClick={onCreate}><Plus size={15} /> Nova</button>}
         </div>
       </div>
       {isFilterPanelOpen && <div className="evaluation-filters" aria-label="Filtros das avaliações">
@@ -996,7 +1004,7 @@ function Evaluations({ search, month, onCreate, onEdit, scopeQuery }: { search: 
       {submitError && <div className="form-error list-error" role="alert">{submitError}</div>}
       {pdfError && <div className="form-error list-error" role="alert">{pdfError}</div>}
       <div className="table-scroll"><table><thead><tr><th>Data</th><th>Local / projeto</th><th>Contratada</th><th>Avaliador</th><th>Pessoas</th><th>IDS</th><th>Estado</th><th aria-label="Ações" /></tr></thead><tbody>
-        {isLoading ? <tr><td colSpan={8}><div className="table-empty evaluations-empty">Carregando avaliações…</div></td></tr> : filteredEvaluations.length === 0 ? <tr><td colSpan={8}><div className="table-empty evaluations-empty"><div className="empty-line-icon"><ClipboardCheck size={21} /></div><strong>{query ? `Nenhuma avaliação encontrada para “${query}”` : 'Nenhuma avaliação encontrada'}</strong><span>Ajuste os filtros ou registre a primeira avaliação.</span></div></td></tr> : filteredEvaluations.map((evaluation) => <tr className="evaluation-result-row" key={evaluation.id}><td>{new Intl.DateTimeFormat('pt-BR').format(new Date(`${evaluation.evaluationDate}T12:00:00`))}</td><td>{evaluation.site ?? '—'}</td><td>{evaluation.contractor ?? '—'}</td><td>{evaluation.leadAuditorName ?? '—'}</td><td>{evaluation.indicators.observedPeople ?? '—'}</td><td><IndicatorResult kind="ids" value={evaluation.indicators.ids} /></td><td><span className="draft-status">{evaluation.status === 'Draft' ? 'Rascunho' : 'Concluída'}</span></td><td><div className="row-actions"><button className="row-action" type="button" aria-label="Gerar PDF da avaliação" title="Gerar PDF da avaliação" disabled={exportingEvaluationId === evaluation.id} onClick={() => void exportEvaluation(evaluation.id)}><FileDown size={16} /></button>{evaluation.status === 'Draft' && <><button className="row-action" type="button" aria-label="Editar avaliação" title="Editar rascunho" onClick={() => onEdit(evaluation.id)}><Pencil size={15} /></button><button className="row-action submit-row-action" type="button" aria-label="Enviar avaliação" title="Enviar avaliação" onClick={() => { setSubmitError(''); setPendingSubmission(evaluation) }}><Send size={15} /></button></>}</div></td></tr>)}
+        {isLoading ? <tr><td colSpan={8}><div className="table-empty evaluations-empty">Carregando avaliações…</div></td></tr> : filteredEvaluations.length === 0 ? <tr><td colSpan={8}><div className="table-empty evaluations-empty"><div className="empty-line-icon"><ClipboardCheck size={21} /></div><strong>{query ? `Nenhuma avaliação encontrada para “${query}”` : 'Nenhuma avaliação encontrada'}</strong><span>Ajuste os filtros ou registre a primeira avaliação.</span></div></td></tr> : filteredEvaluations.map((evaluation) => <tr className="evaluation-result-row" key={evaluation.id}><td>{new Intl.DateTimeFormat('pt-BR').format(new Date(`${evaluation.evaluationDate}T12:00:00`))}</td><td>{evaluation.site ?? '—'}</td><td>{evaluation.contractor ?? '—'}</td><td>{evaluation.leadAuditorName ?? '—'}</td><td>{evaluation.indicators.observedPeople ?? '—'}</td><td><IndicatorResult kind="ids" value={evaluation.indicators.ids} /></td><td><span className="draft-status">{evaluation.status === 'Draft' ? 'Rascunho' : 'Concluída'}</span></td><td><div className="row-actions"><button className="row-action" type="button" aria-label="Gerar PDF da avaliação" title="Gerar PDF da avaliação" disabled={exportingEvaluationId === evaluation.id} onClick={() => void exportEvaluation(evaluation.id)}><FileDown size={16} /></button>{canWrite && evaluation.status === 'Draft' && <><button className="row-action" type="button" aria-label="Editar avaliação" title="Editar rascunho" onClick={() => onEdit(evaluation.id)}><Pencil size={15} /></button><button className="row-action submit-row-action" type="button" aria-label="Enviar avaliação" title="Enviar avaliação" onClick={() => { setSubmitError(''); setPendingSubmission(evaluation) }}><Send size={15} /></button></>}</div></td></tr>)}
       </tbody></table></div>
       <div className="list-footer"><span>{filteredEvaluations.length} de {evaluations.length} avaliações</span><span>{formatMonth(month)}</span></div>
     </section>
@@ -1202,7 +1210,7 @@ function RankingTable({ title, subtitle, rows }: { title: string; subtitle: stri
   </article>
 }
 
-function Reports({ month, monthLabel, scope }: { month: string; monthLabel: string; scope: InspectionScope }) {
+function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLabel: string; scope: InspectionScope; canSave: boolean }) {
   const scopeQuery = inspectionScopeQuery({ ...scope, islandId: undefined })
   const dataScopeQuery = inspectionScopeQuery(scope)
   const [reportTab, setReportTab] = useState<'monthly-data' | 'ipf-report'>('monthly-data')
@@ -1566,11 +1574,11 @@ function Reports({ month, monthLabel, scope }: { month: string; monthLabel: stri
                 : 'Este mês ainda não tem avaliações. Não é possível calcular o IPF.'}
           </small>}
         </label>
-        <button className="primary-button report-save-button" disabled={!contractorId || isLoading || isHistoryLoading || isSaving || calculatedIpf === null} type="submit">
+        {canSave && <button className="primary-button report-save-button" disabled={!contractorId || isLoading || isHistoryLoading || isSaving || calculatedIpf === null} type="submit">
           {isSaving ? 'Salvando…' : 'Salvar IPF'}
-        </button>
+        </button>}
       </div>
-      <div className="report-access-note"><ShieldCheck size={15} /><span>O registro é permitido para os perfis Administrador e Gestor.</span></div>
+      <div className="report-access-note"><ShieldCheck size={15} /><span>{canSave ? 'O registro é permitido para o seu perfil.' : 'Você pode calcular e consultar. Somente Administrador e Gestor podem salvar.'}</span></div>
     </form>
     {error && <div className="form-error report-feedback" role="alert">{error}</div>}
     {reportDataError && <div className="form-error report-feedback" role="alert">{reportDataError}</div>}
