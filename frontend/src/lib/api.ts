@@ -39,15 +39,49 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 const tokenStorageKey = 'ids.access-token'
 
 export function getAccessToken() {
-  return sessionStorage.getItem(tokenStorageKey)
+  const token = localStorage.getItem(tokenStorageKey)
+    ?? sessionStorage.getItem(tokenStorageKey)
+  if (token && !localStorage.getItem(tokenStorageKey)) {
+    localStorage.setItem(tokenStorageKey, token)
+    sessionStorage.removeItem(tokenStorageKey)
+  }
+  return token
 }
 
 export function setAccessToken(token: string) {
-  sessionStorage.setItem(tokenStorageKey, token)
+  localStorage.setItem(tokenStorageKey, token)
+  sessionStorage.removeItem(tokenStorageKey)
 }
 
 export function clearAccessToken() {
+  localStorage.removeItem(tokenStorageKey)
   sessionStorage.removeItem(tokenStorageKey)
+}
+
+export function getAccessTokenOwnerKey() {
+  const token = getAccessToken()
+  if (!token) return 'anonymous'
+  try {
+    const encodedPayload = token.split('.')[1]
+    const normalizedPayload = encodedPayload.replace(/-/g, '+').replace(/_/g, '/')
+    const paddedPayload = normalizedPayload.padEnd(
+      normalizedPayload.length + ((4 - normalizedPayload.length % 4) % 4),
+      '=',
+    )
+    const payload = JSON.parse(atob(paddedPayload)) as {
+      sub?: string
+      tenant_id?: string
+    }
+    if (payload.sub && payload.tenant_id) return `${payload.tenant_id}:${payload.sub}`
+  } catch (error) {
+    console.warn('Não foi possível identificar a sessão para o cache offline.', error)
+  }
+  let hash = 2166136261
+  for (let index = 0; index < token.length; index += 1) {
+    hash ^= token.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `token-${(hash >>> 0).toString(36)}`
 }
 
 export class ApiError extends Error {
@@ -73,13 +107,19 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     headers.set('Authorization', `Bearer ${token}`)
   }
 
+  const method = (init.method ?? 'GET').toUpperCase()
+  const requestUrl = new URL(path, apiBaseUrl || window.location.origin)
   let response: Response
   try {
-    response = await fetch(new URL(path, apiBaseUrl || window.location.origin), {
+    response = await fetch(requestUrl, {
       ...init,
       headers,
     })
   } catch {
+    if (method === 'GET') {
+      const cached = await readCachedGet(requestUrl)
+      if (cached) return cached.json() as Promise<T>
+    }
     throw new ApiError('Não foi possível conectar à API. Verifique o serviço e tente novamente.', 0)
   }
 
@@ -109,7 +149,38 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     return undefined as T
   }
 
+  if (method === 'GET' && response.ok) {
+    await writeCachedGet(requestUrl, response.clone())
+  }
+
   return response.json() as Promise<T>
+}
+
+function cacheRequestUrl(requestUrl: URL) {
+  const cachedUrl = new URL(requestUrl, window.location.origin)
+  cachedUrl.searchParams.set('__ids_cache_owner', getAccessTokenOwnerKey())
+  return cachedUrl.toString()
+}
+
+async function writeCachedGet(requestUrl: URL, response: Response) {
+  if (!('caches' in window)) return
+  try {
+    const cache = await caches.open('ids-api-offline-v1')
+    await cache.put(cacheRequestUrl(requestUrl), response)
+  } catch (error) {
+    console.warn('Não foi possível atualizar o cache offline.', error)
+  }
+}
+
+async function readCachedGet(requestUrl: URL) {
+  if (!('caches' in window)) return undefined
+  try {
+    const cache = await caches.open('ids-api-offline-v1')
+    return await cache.match(cacheRequestUrl(requestUrl))
+  } catch (error) {
+    console.warn('Não foi possível ler o cache offline.', error)
+    return undefined
+  }
 }
 
 export interface ChecklistCatalog {

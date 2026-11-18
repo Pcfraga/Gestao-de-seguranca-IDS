@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { AlertTriangle, ArrowLeft, Check, Save, X } from 'lucide-react'
 import { CatalogPicker, type CatalogChoice } from './CatalogPicker'
-import { apiRequest, defaultInspectionId, type InspectionScope, type ChecklistCatalog, type EvaluationResult, type InspectionFormTemplate, type InspectionIsland, type InspectionArea } from '../lib/api'
+import { ApiError, apiRequest, defaultInspectionId, type InspectionScope, type ChecklistCatalog, type EvaluationResult, type InspectionFormTemplate, type InspectionIsland, type InspectionArea } from '../lib/api'
+import { queueEvaluation, type EvaluationWriteRequest } from '../lib/offline'
 
 interface EvaluationFormProps {
   evaluationId?: string
@@ -9,6 +10,7 @@ interface EvaluationFormProps {
   canCreateCatalog: boolean
   onClose: () => void
   onCreated: (evaluation: EvaluationResult) => void
+  onSavedOffline: () => void
 }
 
 interface ObservationDraft {
@@ -21,7 +23,7 @@ function today() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, onClose, onCreated }: EvaluationFormProps) {
+export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, onClose, onCreated, onSavedOffline }: EvaluationFormProps) {
   const [catalog, setCatalog] = useState<ChecklistCatalog | null>(null)
   const [templates, setTemplates] = useState<InspectionFormTemplate[]>([])
   const [islands, setIslands] = useState<InspectionIsland[]>([])
@@ -50,6 +52,7 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
   const [strengths, setStrengths] = useState('')
   const [improvementOpportunities, setImprovementOpportunities] = useState('')
   const [observations, setObservations] = useState<Record<string, ObservationDraft>>({})
+  const operationId = useRef(crypto.randomUUID())
 
   useEffect(() => {
     let active = true
@@ -194,8 +197,8 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
     }
     setIsSaving(true)
 
-    try {
-      const request = {
+    const request: EvaluationWriteRequest = {
+        clientOperationId: operationId.current,
         formVersionId,
         evaluationDate,
         evaluationTime: evaluationTime || null,
@@ -220,9 +223,15 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
             comment: value.comment || null,
           }]
         })),
-      }
+    }
+    const currentEvaluationId = evaluationId ?? createdDraftId
 
-      const currentEvaluationId = evaluationId ?? createdDraftId
+    try {
+      if (!navigator.onLine) {
+        await queueEvaluation(operationId.current, request, shouldSubmit, currentEvaluationId)
+        onSavedOffline()
+        return
+      }
       let evaluation = await apiRequest<EvaluationResult>(
         currentEvaluationId ? `/api/evaluations/${currentEvaluationId}` : '/api/evaluations',
         {
@@ -236,11 +245,23 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
       }
 
       if (shouldSubmit) {
-        evaluation = await apiRequest<EvaluationResult>(`/api/evaluations/${evaluation.id}/submit`, { method: 'POST' })
+        try {
+          evaluation = await apiRequest<EvaluationResult>(`/api/evaluations/${evaluation.id}/submit`, { method: 'POST' })
+        } catch (error) {
+          if (!(error instanceof ApiError) || error.status !== 400) throw error
+          const current = await apiRequest<EvaluationResult>(`/api/evaluations/${evaluation.id}`)
+          if (current.status !== 'Submitted') throw error
+          evaluation = current
+        }
       }
 
       onCreated(evaluation)
     } catch (error) {
+      if (error instanceof ApiError && error.status === 0) {
+        await queueEvaluation(operationId.current, request, shouldSubmit, currentEvaluationId)
+        onSavedOffline()
+        return
+      }
       setSubmitError(error instanceof Error ? error.message : 'Não foi possível salvar a avaliação.')
     } finally {
       setIsSaving(false)
@@ -324,7 +345,7 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
         </section>
 
         {submitError && <div className="form-error" role="alert">{submitError}</div>}
-        <div className="form-submit-row"><span>O auditor secundário e comentários são opcionais. Itens do checklist podem ficar em branco, mas quantidade e severidade devem ser preenchidas juntas.</span><div className="evaluation-actions"><button className="outline-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="draft"><Save size={16} />{isSaving ? 'Salvando…' : 'Salvar rascunho'}</button><button className="primary-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="submit"><Check size={16} />{isSaving ? 'Enviando…' : 'Enviar avaliação'}</button></div></div>
+        <div className="form-submit-row"><span>O auditor secundário e comentários são opcionais. Sem sinal, os dados ficam salvos neste aparelho até a sincronização.</span><div className="evaluation-actions"><button className="outline-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="draft"><Save size={16} />{isSaving ? 'Salvando…' : navigator.onLine ? 'Salvar rascunho' : 'Salvar offline'}</button><button className="primary-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="submit"><Check size={16} />{isSaving ? 'Enviando…' : navigator.onLine ? 'Enviar avaliação' : 'Enviar depois'}</button></div></div>
       </form>}
     </div>
   )

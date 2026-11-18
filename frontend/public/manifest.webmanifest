@@ -1,0 +1,19 @@
+{
+  "name": "IDS - Gestão de Segurança",
+  "short_name": "IDS",
+  "description": "Registro e sincronização de avaliações de segurança operacional.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f6f3",
+  "theme_color": "#24543f",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/ids-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

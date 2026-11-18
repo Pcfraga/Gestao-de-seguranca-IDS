@@ -154,6 +154,9 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
             entity.Property(value => value.Status).HasConversion<string>().HasMaxLength(20);
             entity.HasIndex(value => value.EvaluationDate);
             entity.HasIndex(value => new { value.SiteId, value.EvaluationDate });
+            entity.HasIndex(value => new { value.TenantId, value.ClientOperationId })
+                .IsUnique()
+                .HasFilter("\"ClientOperationId\" IS NOT NULL");
             entity.HasOne(value => value.FormVersion).WithMany().HasForeignKey(value => value.FormVersionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.Site).WithMany().HasForeignKey(value => value.SiteId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.Island).WithMany().HasForeignKey(value => value.IslandId).OnDelete(DeleteBehavior.Restrict);

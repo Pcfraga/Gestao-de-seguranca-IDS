@@ -77,6 +77,9 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
     public Task<Evaluation?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
         QueryDetails().SingleOrDefaultAsync(evaluation => evaluation.Id == id, cancellationToken);
 
+    public Task<Evaluation?> GetByClientOperationIdAsync(Guid operationId, CancellationToken cancellationToken) =>
+        QueryDetails().SingleOrDefaultAsync(evaluation => evaluation.ClientOperationId == operationId, cancellationToken);
+
     public Task<Evaluation?> GetForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
         QueryDetails(asNoTracking: false).SingleOrDefaultAsync(evaluation => evaluation.Id == id, cancellationToken);
 

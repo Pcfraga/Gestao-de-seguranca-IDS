@@ -16,8 +16,17 @@ O projeto começa a substituir o preenchimento manual da planilha IDS por um sis
 - Aba **Relatório IPF**, com **Dados Relatório Mensal** e os 14 gráficos do modelo: históricos de IPF/IDS, IDS semanal, pessoas, desvios, severidades em quantidade/percentual, categorias e seis detalhamentos por itens. A tela e o PDF compartilham o mesmo gerador SVG, com ordem, séries e paleta extraídas da planilha. O IPF salvo tem prioridade sobre a sugestão de IDS; contratada, local, área e formulário filtram os dados das avaliações.
 - Composição opcional de IPF pelas médias de IDS de até quatro disciplinas com pesos percentuais. Cada modalidade mantém seu próprio histórico mensal e exportação PDF; a composição não substitui a regra manual da planilha.
 - Testes HTTP da API para autorização por padrão, health check sem banco e CORS local; teste de aplicação para média anual e gravação mensal de IPF.
+- PWA com cache do aplicativo e dos dados de consulta usados recentemente. Avaliações podem ser salvas em uma fila local durante a perda de sinal e sincronizadas automaticamente na reconexão ou pelo botão de sincronização manual. Reenvios são idempotentes, evitando avaliações duplicadas.
 
 Exportação consolidada PDF/Excel, importação histórica, auditoria completa, cálculo mensal final de IDS e validação com avaliações reais do Excel ainda estão pendentes. Não use o sistema para decisões operacionais até validar o IDS mensal e comparar com avaliações preenchidas no Excel.
+
+### Uso offline
+
+O primeiro acesso deve ocorrer uma vez com conexão, usando o navegador ou o menu **Instalar aplicativo**. A sessão, os arquivos do aplicativo e as consultas de áreas, modelos, catálogo e avaliações são mantidos no aparelho para uso posterior sem sinal. O sistema não consulta dados ainda não carregados.
+
+Sem internet, **Salvar offline** ou **Enviar depois** grava a avaliação em IndexedDB no aparelho. Ao voltar a internet, o aplicativo tenta criar/atualizar o rascunho e enviá-lo quando essa opção tiver sido escolhida. Também aparece **Sincronizar** no cabeçalho para envio manual. A fila fica vinculada ao usuário/empresa; saia pelo menu do sistema ao usar um aparelho compartilhado.
+
+Mantenha API e frontend na mesma versão e aplique a migration `AddEvaluationClientOperationId` antes de publicar o frontend com sincronização. Catálogos administrativos e demais gravações continuam exigindo conexão; somente o fluxo de avaliações entra na fila offline.
 
 ## Requisitos locais
 

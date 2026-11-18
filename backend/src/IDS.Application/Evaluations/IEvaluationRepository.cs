@@ -62,6 +62,8 @@ public interface IEvaluationRepository
 
     Task<Evaluation?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
 
+    Task<Evaluation?> GetByClientOperationIdAsync(Guid operationId, CancellationToken cancellationToken);
+
     Task<Evaluation?> GetForUpdateAsync(Guid id, CancellationToken cancellationToken);
 
     Task SaveChangesAsync(CancellationToken cancellationToken);

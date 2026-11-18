@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { calculateMonthlyIpf } from './lib/monthlyIpf'
 import { formatIds, formatIdsNumber, formatIpf } from './lib/indicatorFormat'
 import { indicatorStatus } from './lib/indicatorStatus'
@@ -14,6 +14,7 @@ import {
   Check,
   ChevronDown,
   ClipboardCheck,
+  CloudUpload,
   Download,
   Database,
   FileDown,
@@ -24,12 +25,14 @@ import {
   ListChecks,
   Plus,
   Pencil,
+  RefreshCw,
   Search,
   Send,
   Settings2,
   ShieldCheck,
   UserRound,
   UsersRound,
+  WifiOff,
 } from 'lucide-react'
 import {
   Area,
@@ -57,6 +60,7 @@ import { MonthlyCloseReport } from './components/MonthlyCloseReport'
 import { UserGuide } from './components/UserGuide'
 import { OperationalCatalog } from './components/OperationalCatalog'
 import { inspectionScopeQuery, type InspectionScope } from './lib/api'
+import { countPendingEvaluations, syncPendingEvaluations } from './lib/offline'
 
 type Section = 'overview' | 'evaluations' | 'data' | 'indicators' | 'reports' | 'monthlyClose' | 'catalog' | 'forms' | 'settings' | 'users' | 'account' | 'guide'
 
@@ -123,6 +127,7 @@ function App() {
   const [evaluationRefresh, setEvaluationRefresh] = useState(0)
   const [inspectionScope, setInspectionScope] = useState<InspectionScope | null>(null)
   const [reportMode, setReportMode] = useState<'manual' | 'composition'>('manual')
+  const handleEvaluationsSynced = useCallback(() => setEvaluationRefresh((revision) => revision + 1), [])
   const scopeQuery = inspectionScope ? inspectionScopeQuery(inspectionScope) : ''
   const activeCopy = sectionCopy[activeSection]
 
@@ -249,6 +254,7 @@ function App() {
               <input aria-label="Buscar avaliações e relatórios" onChange={(event) => setSearch(event.target.value)} placeholder="Buscar registros" value={search} />
               <kbd>⌘ K</kbd>
             </label>
+            <OfflineSyncStatus onSynced={handleEvaluationsSynced} />
             <button className="profile-button" type="button" aria-label="Sair do sistema" onClick={signOut}><span className="profile-initial">{displayName.slice(0, 1).toUpperCase()}</span><ChevronDown size={14} /></button>
           </div>
         </header>
@@ -260,6 +266,12 @@ function App() {
               evaluationId={editingEvaluationId ?? undefined}
               canCreateCatalog={canManageCatalog}
               onClose={() => setShowEvaluationForm(false)}
+              onSavedOffline={() => {
+                setShowEvaluationForm(false)
+                setEditingEvaluationId(null)
+                setActiveSection('evaluations')
+                setEvaluationRefresh((revision) => revision + 1)
+              }}
               onCreated={() => {
                 setShowEvaluationForm(false)
                 setEditingEvaluationId(null)
@@ -302,6 +314,68 @@ function App() {
       </main>
     </div>
   )
+}
+
+function OfflineSyncStatus({ onSynced }: { onSynced: () => void }) {
+  const [online, setOnline] = useState(navigator.onLine)
+  const [pending, setPending] = useState(0)
+  const [syncing, setSyncing] = useState(false)
+  const [error, setError] = useState('')
+
+  const synchronize = useCallback(async () => {
+    if (!navigator.onLine) return
+    setSyncing(true)
+    setError('')
+    try {
+      const remaining = await syncPendingEvaluations()
+      setPending(remaining)
+      if (remaining > 0) setError('Há avaliações pendentes. Confira os dados e tente novamente.')
+      onSynced()
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : 'Não foi possível sincronizar agora.')
+    } finally {
+      setSyncing(false)
+    }
+  }, [onSynced])
+
+  useEffect(() => {
+    let active = true
+    const updateCount = () => {
+      void countPendingEvaluations().then((count) => {
+        if (active) setPending(count)
+      })
+    }
+    const handleOnline = () => {
+      setOnline(true)
+      void synchronize()
+    }
+    const handleOffline = () => setOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    window.addEventListener('ids:offline-queue-changed', updateCount)
+    window.addEventListener('ids:offline-sync-finished', updateCount)
+    updateCount()
+    if (navigator.onLine) queueMicrotask(() => void synchronize())
+    return () => {
+      active = false
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('ids:offline-queue-changed', updateCount)
+      window.removeEventListener('ids:offline-sync-finished', updateCount)
+    }
+  }, [synchronize])
+
+  if (!online) {
+    return <div className="offline-sync-status offline" title="Os dados serão enviados ao voltar a internet."><WifiOff size={15} /><span>Offline{pending > 0 ? ` · ${pending} na fila` : ''}</span></div>
+  }
+
+  return pending > 0 || error ? <div className="offline-sync-wrapper">
+    <button className="offline-sync-status" type="button" disabled={syncing} onClick={() => void synchronize()}>
+      {syncing ? <RefreshCw className="spin" size={15} /> : <CloudUpload size={15} />}
+      <span>{syncing ? 'Sincronizando…' : `Sincronizar ${pending}`}</span>
+    </button>
+    {error && <span className="offline-sync-error" role="alert">{error}</span>}
+  </div> : null
 }
 
 function Dashboard({ month, monthLabel, onOpenEvaluations, scopeQuery }: { month: string; monthLabel: string; onOpenEvaluations: () => void; scopeQuery: string }) {
@@ -855,7 +929,15 @@ function Evaluations({ search, month, onCreate, onEdit, scopeQuery }: { search: 
     setIsSubmitting(true)
     setSubmitError('')
     try {
-      const submitted = await apiRequest<EvaluationSummary>(`/api/evaluations/${pendingSubmission.id}/submit`, { method: 'POST' })
+      let submitted: EvaluationSummary
+      try {
+        submitted = await apiRequest<EvaluationSummary>(`/api/evaluations/${pendingSubmission.id}/submit`, { method: 'POST' })
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 400) throw error
+        const current = await apiRequest<EvaluationSummary>(`/api/evaluations/${pendingSubmission.id}`)
+        if (current.status !== 'Submitted') throw error
+        submitted = current
+      }
       setEvaluations((current) => current.map((evaluation) => evaluation.id === submitted.id
         ? { ...evaluation, status: submitted.status }
         : evaluation))
@@ -918,7 +1000,7 @@ function Evaluations({ search, month, onCreate, onEdit, scopeQuery }: { search: 
       </tbody></table></div>
       <div className="list-footer"><span>{filteredEvaluations.length} de {evaluations.length} avaliações</span><span>{formatMonth(month)}</span></div>
     </section>
-    {pendingSubmission && <div className="submit-confirm-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSubmitting) setPendingSubmission(null) }}><section className="submit-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="submit-confirm-title"><span className="submit-confirm-icon"><Send size={18} /></span><h2 id="submit-confirm-title">Enviar avaliação?</h2><p>O rascunho de {new Intl.DateTimeFormat('pt-BR').format(new Date(`${pendingSubmission.evaluationDate}T12:00:00`))} será marcado como enviado. Depois disso, não poderá ser editado.</p><div className="submit-confirm-actions"><button className="outline-button" type="button" disabled={isSubmitting} onClick={() => setPendingSubmission(null)}>Cancelar</button><button className="primary-button" type="button" disabled={isSubmitting} onClick={() => void submitEvaluation()}><Send size={15} />{isSubmitting ? 'Enviando…' : 'Confirmar envio'}</button></div></section></div>}
+    {pendingSubmission && <div className="submit-confirm-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSubmitting) setPendingSubmission(null) }}><section className="submit-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="submit-confirm-title"><span className="submit-confirm-icon"><Send size={18} /></span><h2 id="submit-confirm-title">Enviar avaliação?</h2><p>O rascunho de {new Intl.DateTimeFormat('pt-BR').format(new Date(`${pendingSubmission.evaluationDate}T12:00:00`))} será marcado como enviado. Depois disso, não poderá ser editado.</p>{submitError && <div className="form-error" role="alert">{submitError}</div>}<div className="submit-confirm-actions"><button className="outline-button" type="button" disabled={isSubmitting} onClick={() => setPendingSubmission(null)}>Cancelar</button><button className="primary-button" type="button" disabled={isSubmitting} onClick={() => void submitEvaluation()}><Send size={15} />{isSubmitting ? 'Enviando…' : 'Confirmar envio'}</button></div></section></div>}
     </>
   )
 }
