@@ -49,7 +49,7 @@ import {
 import { LoginScreen } from './components/LoginScreen'
 import { EvaluationForm } from './components/EvaluationForm'
 import { InspectionFormsEditor } from './components/InspectionFormsEditor'
-import { ApiError, apiRequest, clearAccessToken, getAccessToken, type ChecklistCatalog, type DashboardSummary, type DataConsolidation, type EvaluationResult, type EvaluationSummary, type IpfAnnualHistory, type IpfMonthlySuggestion } from './lib/api'
+import { ApiError, apiRequest, clearAccessToken, getAccessToken, type ChecklistCatalog, type DashboardSummary, type DataConsolidation, type EvaluationResult, type EvaluationSummary, type IpfAnnualHistory, type IpfCompositionHistory, type IpfMonthlySuggestion } from './lib/api'
 import { evaluationPdf, monthlyIpfReportPdf, openPrintWindow, writePrintWindow } from './lib/pdf'
 import { buildWorkbookCharts } from './lib/workbookReport'
 import { clearBranding, defaultPrimaryColor, fetchBranding, loadBranding, readLogoFile, saveBranding, type ReportBranding } from './lib/branding'
@@ -298,7 +298,7 @@ function App() {
 
           {activeSection === 'reports' && <div className="ipf-report-modes" role="group" aria-label="Tipo de relatório IPF">
             <button type="button" className={reportMode === 'manual' ? 'primary-button' : 'outline-button'} aria-pressed={reportMode === 'manual'} onClick={() => setReportMode('manual')}>IPF manual por formulário</button>
-            <button type="button" className={reportMode === 'composition' ? 'primary-button' : 'outline-button'} aria-pressed={reportMode === 'composition'} onClick={() => setReportMode('composition')}>IPF por disciplinas e pesos</button>
+            <button type="button" className={reportMode === 'composition' ? 'primary-button' : 'outline-button'} aria-pressed={reportMode === 'composition'} onClick={() => setReportMode('composition')}>IDS por disciplinas e pesos</button>
           </div>}
           {['overview', 'evaluations', 'data', 'indicators', 'reports', 'monthlyClose'].includes(activeSection)
             && !(activeSection === 'reports' && reportMode === 'composition') && <InspectionScopeSelector key={activeSection} onChange={setInspectionScope} includeOrganizationFilters={activeSection === 'overview' || activeSection === 'indicators'} />}
@@ -1221,6 +1221,7 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
   const [suggestion, setSuggestion] = useState<IpfMonthlySuggestion | null>(null)
   const [yearSummary, setYearSummary] = useState<DashboardSummary | null>(null)
   const [generalYearSummary, setGeneralYearSummary] = useState<DashboardSummary | null>(null)
+  const [disciplineIdsAverage, setDisciplineIdsAverage] = useState<number | null>(null)
   const [monthlyData, setMonthlyData] = useState<DataConsolidation | null>(null)
   const [reportIssuedAt, setReportIssuedAt] = useState<Date | null>(null)
   const [multiplicationFactor, setMultiplicationFactor] = useState('0.8')
@@ -1252,6 +1253,7 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
       setSuggestion(null)
       setYearSummary(null)
       setGeneralYearSummary(null)
+      setDisciplineIdsAverage(null)
       setMultiplicationFactor('0.8')
       setAdditionalScore('20')
       setIsFormulaDirty(false)
@@ -1265,6 +1267,7 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
     setSuggestion(null)
     setYearSummary(null)
     setGeneralYearSummary(null)
+    setDisciplineIdsAverage(null)
     setMultiplicationFactor('0.8')
     setAdditionalScore('20')
     setIsFormulaDirty(false)
@@ -1282,12 +1285,14 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
       apiRequest<IpfMonthlySuggestion>(`/api/reports/ipf/${year}/${monthNumber}/suggestion?contractorId=${contractorId}&${scopeQuery}`),
       apiRequest<DashboardSummary>(`/api/dashboard/summary?${evaluationQuery}&${scopeQuery}`),
       scope.islandId ? apiRequest<DashboardSummary>(`/api/dashboard/summary?${evaluationQuery}&${dataScopeQuery}`) : Promise.resolve(null),
+      apiRequest<IpfCompositionHistory>(`/api/reports/ipf-composition/${year}?contractorId=${contractorId}`),
     ])
-      .then(([result, monthlySuggestion, summary, filteredSummary]) => {
+      .then(([result, monthlySuggestion, summary, filteredSummary, disciplineHistory]) => {
         if (!isCurrent) return
         setHistory(result)
         setSuggestion(monthlySuggestion)
         setGeneralYearSummary(summary)
+        setDisciplineIdsAverage(disciplineHistory.months.find(record => record.month === monthNumber)?.value ?? null)
         setYearSummary(filteredSummary ?? summary)
         const currentValue = result.months.find(record => record.month === monthNumber)
         setMultiplicationFactor((currentValue?.multiplicationFactor ?? 0.8).toString())
@@ -1347,6 +1352,7 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
           contractorOrganizationId: contractorId, siteId: null, value,
           areaId: scope.areaId, formId: scope.formId,
           multiplicationFactor: Number(multiplicationFactor), additionalScore: Number(additionalScore),
+          useDisciplineAverage: disciplineIdsAverage !== null,
         }),
       })
       setHistory((current) => {
@@ -1424,7 +1430,8 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
       })(),
     },
   ]
-  const monthlyIdsAverage = averageTrendIds((generalYearSummary?.trend ?? []).filter(point => point.date.startsWith(month)))
+  const evaluationIdsAverage = averageTrendIds((generalYearSummary?.trend ?? []).filter(point => point.date.startsWith(month)))
+  const monthlyIdsAverage = disciplineIdsAverage ?? evaluationIdsAverage
   const calculatedIpf = calculateMonthlyIpf(monthlyIdsAverage, multiplicationFactor, additionalScore)
   const savedIpf = history?.months.find(record => record.month === monthNumber)?.value ?? null
   const legacyIpfMonths = history?.months.filter(record => record.siteId !== null).map(record => record.month) ?? []
@@ -1532,7 +1539,9 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
             value={monthlyIdsAverage === null ? '' : formatIdsNumber(monthlyIdsAverage * 100)}
           />
           {indicatorStatus('ids', monthlyIdsAverage) && <IndicatorResult kind="ids" value={monthlyIdsAverage} />}
-          <small>Média das avaliações válidas da contratada no mês, em todos os projetos e ilhas.</small>
+          <small>{disciplineIdsAverage !== null
+            ? 'Média IDS ponderada pelas disciplinas, salva para esta contratada e mês.'
+            : 'Média das avaliações válidas da contratada no mês, em todos os projetos e ilhas.'}</small>
         </label>
         <label>
           Fator multiplicador

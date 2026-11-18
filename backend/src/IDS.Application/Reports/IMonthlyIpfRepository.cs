@@ -24,6 +24,12 @@ public interface IMonthlyIpfRepository
         Guid? formId = null,
         Guid? siteId = null);
 
+    Task<decimal?> GetDisciplineAverageAsync(
+        int year,
+        int month,
+        Guid contractorId,
+        CancellationToken cancellationToken);
+
     Task<(string AreaName, string FormName)> ValidateScopeAsync(
         Guid? areaId,
         Guid? formId,

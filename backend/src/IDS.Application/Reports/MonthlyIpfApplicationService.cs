@@ -96,18 +96,31 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
 
         if (request.MultiplicationFactor is decimal factor && request.AdditionalScore is decimal additionalScore)
         {
-            var scores = await repository.GetMonthlyEvaluationScoresAsync(
-                year, month, request.ContractorOrganizationId, cancellationToken, areaId, formId);
-            var validScores = scores.Where(score => score.HasValue).Select(score => score!.Value).ToArray();
-            if (validScores.Length == 0)
+            decimal idsAverage;
+            if (request.UseDisciplineAverage)
             {
-                throw new IpfReportValidationException(["Não há avaliações com IDS calculável neste mês e recorte para calcular o IPF."]);
+                idsAverage = await repository.GetDisciplineAverageAsync(
+                    year, month, request.ContractorOrganizationId, cancellationToken)
+                    ?? throw new IpfReportValidationException([
+                        "Salve primeiro a média de IDS por disciplinas para usar esta opção."
+                    ]);
+            }
+            else
+            {
+                var scores = await repository.GetMonthlyEvaluationScoresAsync(
+                    year, month, request.ContractorOrganizationId, cancellationToken, areaId, formId);
+                var validScores = scores.Where(score => score.HasValue).Select(score => score!.Value).ToArray();
+                if (validScores.Length == 0)
+                {
+                    throw new IpfReportValidationException(["Não há avaliações com IDS calculável neste mês e recorte para calcular o IPF."]);
+                }
+                idsAverage = validScores.Average();
             }
 
             decimal value;
             try
             {
-                var idsPercentage = validScores.Average() * 100m;
+                var idsPercentage = idsAverage * 100m;
                 value = decimal.Round(((idsPercentage * 60m * factor / 100m) + additionalScore) / 10m,
                     4, MidpointRounding.AwayFromZero);
             }

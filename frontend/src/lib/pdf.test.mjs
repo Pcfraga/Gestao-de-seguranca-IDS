@@ -53,7 +53,7 @@ test('formats IDS and IPF in printable reports without changing other precision'
         effectiveWeight: 100, contribution: 0.8762, status: 'included',
         scoredEvaluationCount: 1, evaluationCount: 1 }],
     })
-    assert.match(composition.content, /IPF final<\/td><td><span style="color:#18743a">0,9 · Meta alcançada<\/span><\/td>/)
+    assert.match(composition.content, /Média IDS ponderada<\/td><td><span style="color:#18743a">87,62% · Meta alcançada<\/span><\/td>/)
     assert.match(composition.content, /class="number"><span style="color:#18743a">0,88 · Meta alcançada<\/span><\/td>/)
     assert.match(composition.content, /class="number">12,3456%<\/td>/)
     assert.match(composition.content, /class="number">0,8762<\/td>/)

@@ -9,7 +9,8 @@ public sealed record UpsertMonthlyIpfRequest(
     Guid? AreaId = null,
     Guid? FormId = null,
     decimal? MultiplicationFactor = null,
-    decimal? AdditionalScore = null);
+    decimal? AdditionalScore = null,
+    bool UseDisciplineAverage = false);
 
 public sealed record MonthlyIpfValueDto(
     Guid Id,

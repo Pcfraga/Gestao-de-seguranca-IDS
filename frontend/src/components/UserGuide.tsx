@@ -11,7 +11,7 @@ const chapters = [
   { id: 'dados-indicadores', title: '7. Consultar dados e indicadores' },
   { id: 'contas-ids', title: '8. Entenda as contas do IDS' },
   { id: 'ipf-manual', title: '9. IPF manual por formulário' },
-  { id: 'ipf-disciplinas', title: '10. IPF por disciplinas e pesos' },
+  { id: 'ipf-disciplinas', title: '10. IDS por disciplinas e pesos' },
   { id: 'relatorios-conta', title: '11. PDFs, identidade visual e conta' },
   { id: 'duvidas', title: '12. Dúvidas e cuidados importantes' },
 ]
@@ -44,7 +44,7 @@ export function UserGuide() {
         <li><strong>Prepare os modelos:</strong> em cada área, crie formulários com tópicos e itens observáveis.</li>
         <li><strong>Cadastre as referências:</strong> use Cadastros para contratadas e locais/projetos. Clientes podem ser cadastrados durante uma avaliação.</li>
         <li><strong>Registre a inspeção:</strong> escolha o modelo, informe as pessoas observadas, as quantidades e as severidades; revise e envie.</li>
-        <li><strong>Acompanhe:</strong> selecione mês, área e formulário para consultar os dados. Em Relatórios, registre o IPF manual ou componha o IPF por disciplinas.</li>
+        <li><strong>Acompanhe:</strong> selecione mês, área e formulário para consultar os dados. Em Relatórios, registre o IPF manual ou componha o IDS por disciplinas.</li>
       </ol>
       <div className="guide-note"><Info size={18} aria-hidden="true" /><p><strong>Não confunda:</strong> sua empresa é o ambiente de acesso da equipe. Uma contratada é uma organização avaliada dentro desse ambiente. Cadastrar uma contratada não cria outra empresa de acesso nem uma conta de usuário.</p></div>
     </Chapter>
@@ -80,8 +80,8 @@ export function UserGuide() {
           <tr><th scope="row">Consultar avaliações e suas consolidações</th><td>Todas as avaliações da própria empresa</td><td>Somente as próprias avaliações</td></tr>
           <tr><th scope="row">Editar avaliações</th><td>Rascunhos visíveis da própria empresa</td><td>Somente os próprios rascunhos</td></tr>
           <tr><th scope="row">Consultar histórico salvo de IPF</th><td>Sim, na própria empresa</td><td>Sim, na própria empresa</td></tr>
-          <tr><th scope="row">Calcular prévia de IPF por disciplinas</th><td>Sim, com as avaliações da empresa</td><td>Sim, somente com as próprias avaliações</td></tr>
-          <tr><th scope="row">Salvar IPF manual ou por disciplinas</th><td>Sim</td><td>Não</td></tr>
+          <tr><th scope="row">Calcular prévia de IDS por disciplinas</th><td>Sim, com as avaliações da empresa</td><td>Sim, somente com as próprias avaliações</td></tr>
+          <tr><th scope="row">Salvar IPF manual ou IDS por disciplinas</th><td>Sim</td><td>Não</td></tr>
           <tr><th scope="row">Alterar logo e identidade dos relatórios</th><td>Sim</td><td>Não</td></tr>
           <tr><th scope="row">Trocar a própria senha e consultar este guia</th><td>Sim</td><td>Sim</td></tr>
         </tbody>
@@ -178,7 +178,7 @@ export function UserGuide() {
       <ol>
         <li>Abra <strong>Relatório IPF → IPF manual por formulário → Dados Relatório Mensal</strong>.</li>
         <li>Selecione mês de referência, área, tipo de formulário e contratada.</li>
-        <li>Opcionalmente, selecione um local. Confira a <strong>Média do IDS (%)</strong> das avaliações calculáveis desse recorte.</li>
+        <li>Opcionalmente, selecione um local. Confira a <strong>Média do IDS (%)</strong>. Quando houver média ponderada salva em <strong>IDS por disciplinas</strong>, ela terá prioridade para a contratada e o mês.</li>
         <li>Preencha <strong>Fator multiplicador</strong> (inicialmente 0,8) e <strong>Parcela adicional</strong> (inicialmente 20). O <strong>Valor do IPF</strong> é calculado automaticamente.</li>
         <li>Como Administrador ou GESTOR, clique em <strong>Salvar IPF</strong>.</li>
       </ol>
@@ -189,17 +189,17 @@ export function UserGuide() {
     </Chapter>
 
     <Chapter id="ipf-disciplinas">
-      <p>Esta opção junta as médias das disciplinas para obter uma nota mensal da contratada, dando mais importância às áreas que você escolher. Ela tem histórico próprio e não substitui os registros manuais por formulário.</p>
+      <p>Esta opção junta as médias das disciplinas para obter a média IDS mensal da contratada. Depois de salva, essa média alimenta o campo <strong>Média do IDS (%)</strong> do IPF manual.</p>
       <ol>
-        <li>Abra <strong>Relatório IPF → IPF por disciplinas e pesos</strong> e selecione a contratada e o mês de referência.</li>
+        <li>Abra <strong>Relatório IPF → IDS por disciplinas e pesos</strong> e selecione a contratada e o mês de referência.</li>
         <li>Sem divisão, deixe <strong>uma disciplina com 100%</strong>.</li>
         <li>Para dividir a nota, clique em <strong>Adicionar disciplina</strong>. Escolha de duas a quatro áreas diferentes e distribua os percentuais até somarem <strong>100%</strong>.</li>
-        <li>Clique em <strong>Calcular IPF por disciplinas</strong>. Cada média reúne todos os formulários e versões da área para aquela contratada no mês, respeitando as permissões de consulta.</li>
+        <li>Clique em <strong>Calcular IDS por disciplinas</strong>. Cada média reúne todos os formulários e versões da área para aquela contratada no mês, respeitando as permissões de consulta.</li>
         <li>Confira média IDS, avaliações válidas/total, peso definido, peso aplicado, contribuição e situação de cada área.</li>
-        <li>Para registrar, use <strong>Salvar IPF por disciplinas</strong> e confirme. A gravação exige Administrador ou GESTOR e recalcula as médias no servidor naquele momento.</li>
+        <li>Para registrar, use <strong>Salvar IDS por disciplinas</strong> e confirme. A gravação exige Administrador ou GESTOR e recalcula as médias no servidor naquele momento.</li>
       </ol>
       <h3>Exemplo: Segurança com 70% e Meio Ambiente com 30%</h3>
-      <p>Se Segurança tem média <strong>0,9</strong>, a parte dela na nota é <strong>0,63</strong>. Se Meio Ambiente tem média <strong>0,8</strong>, a parte ambiental é <strong>0,24</strong>. Juntando as duas partes, o IPF é <strong>0,87</strong>.</p>
+      <p>Se Segurança tem média <strong>0,9</strong>, a parte dela na nota é <strong>0,63</strong>. Se Meio Ambiente tem média <strong>0,8</strong>, a parte ambiental é <strong>0,24</strong>. Juntando as duas partes, a média IDS é <strong>0,87</strong> (87%).</p>
       <p>Dentro de cada disciplina, o sistema soma os IDS válidos das avaliações e divide pela quantidade dessas avaliações. Cada avaliação válida participa igualmente dessa média: não há peso adicional por tamanho do formulário ou número de pessoas. Avaliações sem IDS calculável são excluídas da média; rascunhos também participam quando têm nota calculável.</p>
       <h3>E se faltar uma média?</h3>
       <ul>
@@ -208,7 +208,7 @@ export function UserGuide() {
         <li><strong>Média realmente igual a zero:</strong> participa normalmente. Com Segurança 0,9 a 70% e Meio Ambiente zero a 30%, a nota final é 0,63.</li>
         <li><strong>Nenhuma área com média e peso positivo:</strong> não existe nota para salvar; registre avaliações válidas ou ajuste as disciplinas.</li>
       </ul>
-      <p>A nota usa a mesma escala do IDS, sem transformação automática para zero a dez. A conta utiliza as médias sem arredondamento intermediário e arredonda o resultado final a quatro casas decimais.</p>
+      <p>A média usa a escala original do IDS. A conta não arredonda as parcelas intermediárias e arredonda o resultado final a quatro casas decimais.</p>
       <h3>Histórico e revisão</h3>
       <p>A prévia não salva dados. Ao salvar, ficam registrados a nota, as médias, os pesos e as exclusões usados naquele mês. Novas avaliações não mudam esse retrato automaticamente. Para atualizar o mês, recalcule e salve novamente, confirmando a substituição. Os pesos do último mês anterior podem ser copiados como ponto de partida.</p>
       <p>Em <strong>Ver composição</strong>, consulte os detalhes salvos; em <strong>PDF da composição</strong>, emita o documento. O PDF de uma prévia é identificado como ainda não salvo.</p>
@@ -226,7 +226,7 @@ export function UserGuide() {
     <Chapter id="duvidas">
       <dl>
         <dt>Não vejo uma avaliação ou a média está diferente da do colega.</dt>
-        <dd>Confira empresa de acesso, mês, área, formulário, contratada, local e seu perfil. Usuários comuns consultam apenas suas próprias avaliações. Na composição por disciplinas, confira também quantas avaliações têm IDS válido.</dd>
+        <dd>Confira empresa de acesso, mês, área, formulário, contratada, local e seu perfil. Usuários comuns consultam apenas suas próprias avaliações. No IDS por disciplinas, confira também quantas avaliações têm IDS válido.</dd>
         <dt>Minha contratada não aparece no relatório.</dt>
         <dd>Verifique se ela foi cadastrada como Contratada, não como Cliente ou Subcontratada. Os cadastros pertencem ao ambiente da empresa em que você entrou.</dd>
         <dt>Criei uma área, mas não consigo usá-la numa inspeção.</dt>
@@ -234,9 +234,9 @@ export function UserGuide() {
         <dt>Não consigo editar a área de um modelo ou o modelo de uma avaliação salva.</dt>
         <dd>Essa proteção mantém o histórico consistente. Duplique o formulário em outra área ou crie uma nova avaliação com o modelo correto.</dd>
         <dt>Aparece “sem média” ou um traço.</dt>
-        <dd>Ausência de resultado não significa zero. Confira pessoas observadas, pares de quantidade/severidade e os filtros. Uma nota zero válida continua participando da média do IPF por disciplinas.</dd>
+        <dd>Ausência de resultado não significa zero. Confira pessoas observadas, pares de quantidade/severidade e os filtros. Um IDS zero válido continua participando da média por disciplinas.</dd>
         <dt>O IPF salvo não mudou depois de novas avaliações.</dt>
-        <dd>O registro salvo é um histórico. No IPF por disciplinas, recalcule e salve novamente para atualizar. No manual, confira e salve o valor aprovado.</dd>
+        <dd>O registro salvo é um histórico. No IDS por disciplinas, recalcule e salve novamente para atualizar. No IPF manual, confira e salve o valor aprovado.</dd>
         <dt>O sistema informa falta de permissão ou sessão expirada.</dt>
         <dd>Se a sessão expirou, entre novamente. Se faltar permissão, solicite a operação ao administrador, em vez de criar outra empresa ou duplicar sua conta.</dd>
       </dl>

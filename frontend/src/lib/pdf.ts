@@ -279,7 +279,7 @@ export function monthlyIpfReportPdf(report: MonthlyIpfReportData) {
 
 export function ipfCompositionPdf(record: IpfComposition) {
   const period = `${String(record.month).padStart(2, '0')}/${record.year}`
-  const title = `IPF por disciplinas ${period} - ${record.contractor}`
+  const title = `IDS por disciplinas ${period} - ${record.contractor}`
   const number = (value: number | null) => value === null ? '—' : value.toLocaleString('pt-BR', { maximumFractionDigits: 4 })
   const rows = record.areas.map(area => `<tr>
     <td>${escapeHtml(area.areaName)}</td>
@@ -290,10 +290,10 @@ export function ipfCompositionPdf(record: IpfComposition) {
     <td class="number">${number(area.contribution)}</td>
     <td>${area.status === 'included' ? 'Participou' : area.status === 'zero-weight' ? 'Sem peso' : 'Sem média — excluída'}</td>
   </tr>`).join('')
-  const content = `${reportHeader('IPF por disciplinas', period, record.contractor)}
+  const content = `${reportHeader('IDS por disciplinas', period, record.contractor)}
     ${detailsTable('Identificação', [
       ['Período', period],
-      ['IPF final', null, { kind: 'ipf', value: record.value, statusKind: 'ids' }],
+      ['Média IDS ponderada', null, { kind: 'ids', value: record.value }],
       ['Situação', record.id ? 'Composição salva' : 'Prévia — ainda não salva'],
       ['Salvo em', record.updatedAtUtc ? new Date(record.updatedAtUtc).toLocaleString('pt-BR') : null],
     ])}

@@ -7,6 +7,17 @@ namespace IDS.Infrastructure.Persistence;
 
 public sealed class EfMonthlyIpfRepository(IdsDbContext dbContext, ICurrentUserScope userScope) : IMonthlyIpfRepository
 {
+    public Task<decimal?> GetDisciplineAverageAsync(
+        int year,
+        int month,
+        Guid contractorId,
+        CancellationToken cancellationToken) =>
+        dbContext.IpfCompositions.AsNoTracking()
+            .Where(record => record.Year == year && record.Month == month
+                && record.ContractorOrganizationId == contractorId)
+            .Select(record => (decimal?)record.Value)
+            .SingleOrDefaultAsync(cancellationToken);
+
     public Task<Organization?> GetContractorAsync(Guid contractorId, CancellationToken cancellationToken) =>
         dbContext.Organizations.AsNoTracking()
             .SingleOrDefaultAsync(organization => organization.Id == contractorId, cancellationToken);

@@ -163,6 +163,21 @@ public sealed class MonthlyIpfApplicationServiceTests
         Assert.Equal(expected, saved.Value);
     }
 
+    [Fact]
+    public async Task CalculatesIpfFromSavedDisciplineAverage()
+    {
+        var repository = new FakeMonthlyIpfRepository { DisciplineAverage = 0.9m };
+        var service = new MonthlyIpfApplicationService(repository);
+
+        var saved = await service.UpsertAsync(2026, 10,
+            new UpsertMonthlyIpfRequest(ContractorId, null, 0m,
+                MultiplicationFactor: 0.8m, AdditionalScore: 20m, UseDisciplineAverage: true),
+            CancellationToken.None);
+
+        Assert.Equal(6.32m, saved.Value);
+        Assert.Empty(repository.MonthlyEvaluationScores);
+    }
+
     [Theory]
     [InlineData(false, true)]
     [InlineData(true, false)]
@@ -202,6 +217,7 @@ public sealed class MonthlyIpfApplicationServiceTests
     {
         public List<MonthlyIpfRecord> Records { get; } = [];
         public List<decimal?> MonthlyEvaluationScores { get; } = [];
+        public decimal? DisciplineAverage { get; set; }
         public Guid? RequestedSiteId { get; private set; }
 
         public Task<Organization?> GetContractorAsync(Guid contractorId, CancellationToken cancellationToken) =>
@@ -240,6 +256,13 @@ public sealed class MonthlyIpfApplicationServiceTests
             RequestedSiteId = siteId;
             return Task.FromResult<IReadOnlyCollection<decimal?>>(MonthlyEvaluationScores);
         }
+
+        public Task<decimal?> GetDisciplineAverageAsync(
+            int year,
+            int month,
+            Guid contractorId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(DisciplineAverage);
 
         public Task<MonthlyIpfRecord> UpsertAsync(
             int year,

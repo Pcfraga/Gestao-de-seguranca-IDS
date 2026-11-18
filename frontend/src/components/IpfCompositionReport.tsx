@@ -36,13 +36,13 @@ export function IpfCompositionReport({ month, initialAreaId, canSave }: { month:
 
   return <section className="report-layout">
     <div className="report-intro"><div>
-      <span className="report-step">IPF POR DISCIPLINAS</span>
-      <h2>Compor a nota da contratada</h2>
-      <p>Escolha de uma a quatro áreas. Cada média reúne todos os formulários da área para a contratada e o mês, sem usar o filtro de tipo de formulário.</p>
+      <span className="report-step">IDS POR DISCIPLINAS</span>
+      <h2>Compor a média IDS da contratada</h2>
+      <p>Escolha de uma a quatro áreas. A média ponderada salva será usada no campo Média IDS (%) do IPF manual.</p>
     </div></div>
     {error && <div className="form-error" role="alert">{error}</div>}
     {!references && !error && <p role="status">Carregando áreas e contratadas…</p>}
-    <div className="form-fields panel ipf-composition-filter"><label>Contratada do IPF por disciplinas
+    <div className="form-fields panel ipf-composition-filter"><label>Contratada do IDS por disciplinas
       <select disabled={!references} value={contractorId} onChange={event => setContractorId(event.target.value)}>
         <option value="">Selecionar contratada</option>
         {references?.catalog.organizations.filter(organization => organization.kind === 'Contractor')
@@ -52,7 +52,7 @@ export function IpfCompositionReport({ month, initialAreaId, canSave }: { month:
     {references && contractorId
       ? <CompositionWorkspace key={`${contractorId}-${month}`} month={month} contractorId={contractorId}
         areas={references.areas} initialAreaId={initialAreaId} canSave={canSave} />
-      : references && <div className="report-empty panel">Selecione uma contratada para calcular ou consultar seu IPF por disciplinas.</div>}
+      : references && <div className="report-empty panel">Selecione uma contratada para calcular ou consultar seu IDS por disciplinas.</div>}
   </section>
 }
 
@@ -117,14 +117,14 @@ function CompositionWorkspace({ month, contractorId, areas, initialAreaId, canSa
 
   async function calculate(save: boolean) {
     if (save && !canSave) {
-      setError('Somente perfis Administrador e Gestor podem salvar o IPF por disciplinas.')
+      setError('Somente perfis Administrador e Gestor podem salvar o IDS por disciplinas.')
       return
     }
     if (!validWeights) {
       setError('Escolha de uma a quatro áreas distintas, com pesos entre 0% e 100% somando 100%.')
       return
     }
-    if (save && !window.confirm(`Salvar o IPF por disciplinas de ${month} para ${history?.contractor}? As médias serão recalculadas agora e o registro anterior deste mês será substituído, se existir.`)) return
+    if (save && !window.confirm(`Salvar a média IDS por disciplinas de ${month} para ${history?.contractor}? As médias serão recalculadas agora e o registro anterior deste mês será substituído, se existir.`)) return
     setIsBusy(true)
     setError('')
     setMessage('')
@@ -144,7 +144,7 @@ function CompositionWorkspace({ month, contractorId, areas, initialAreaId, canSa
           const values = months.flatMap(record => record.value === null ? [] : [record.value])
           return { ...current, months, annualAverage: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null }
         })
-        setMessage('IPF por disciplinas salvo com as médias e os pesos usados. Os registros manuais por formulário não foram alterados.')
+        setMessage('Média IDS por disciplinas salva. Ela será usada no campo Média IDS (%) do IPF manual.')
       } else if (calculated.value === null) {
         setMessage('Nenhuma área com peso positivo tem média válida neste mês. Não há nota para salvar.')
       }
@@ -201,21 +201,21 @@ function CompositionWorkspace({ month, contractorId, areas, initialAreaId, canSa
         {!validWeights && <p role="alert">Os pesos definidos devem somar 100%.</p>}
         <p className="ipf-composition-rule">Área sem média ou com peso 0% não participa. Os pesos das demais são ajustados proporcionalmente para 100%. Uma média válida igual a zero participa normalmente. Todas as notas usam a mesma escala do IDS, portanto a meta é atingida a partir de 0,85 (85%).</p>
         <div className="ipf-composition-actions">
-          <button className="outline-button" type="submit" disabled={!validWeights}>{isBusy ? 'Processando…' : 'Calcular IPF por disciplinas'}</button>
+          <button className="outline-button" type="submit" disabled={!validWeights}>{isBusy ? 'Processando…' : 'Calcular IDS por disciplinas'}</button>
           {canSave && <button className="primary-button" type="button" disabled={!validWeights || isBusy}
-            onClick={() => void calculate(true)}><Save size={16} />{isBusy ? 'Salvando…' : 'Salvar IPF por disciplinas'}</button>}
+            onClick={() => void calculate(true)}><Save size={16} />{isBusy ? 'Salvando…' : 'Salvar IDS por disciplinas'}</button>}
         </div>
         {!canSave && <p className="ipf-composition-rule">Você pode calcular e consultar. Somente Administrador e Gestor podem salvar a composição.</p>}
       </fieldset>
     </form>}
     {result && <CompositionDetails record={result} saved={resultIsSaved} onPdf={() => exportPdf(result)} />}
     {history && <section className="panel ipf-composition-history">
-      <div className="panel-heading"><div><h3>Histórico do IPF por disciplinas · {year}</h3><p>Valores salvos, independentes do IPF manual por formulário. As médias e os pesos históricos não mudam quando novas avaliações são criadas.</p></div></div>
+      <div className="panel-heading"><div><h3>Histórico do IDS por disciplinas · {year}</h3><p>Médias ponderadas usadas no relatório IPF. Os pesos históricos não mudam quando novas avaliações são criadas.</p></div></div>
       <div className="table-scroll"><table><thead><tr><th>Mês</th><th>IPF salvo</th><th>Disciplinas participantes</th><th>Detalhes</th></tr></thead><tbody>
-        {history.months.map(record => <tr key={record.month}><td>{String(record.month).padStart(2, '0')}/{year}</td><td><IndicatorResult kind="ipf" statusKind="ids" value={record.value} empty="Sem média" /></td>
+        {history.months.map(record => <tr key={record.month}><td>{String(record.month).padStart(2, '0')}/{year}</td><td><IndicatorResult kind="ids" value={record.value} empty="Sem média" /></td>
           <td>{record.areas.filter(area => area.status === 'included').map(area => `${area.areaName} (${formatValue(area.effectiveWeight)}%)`).join(' · ')}</td>
           <td><button className="quiet-button" type="button" onClick={() => setViewedMonth(record)}>Ver composição de {String(record.month).padStart(2, '0')}/{year}</button></td></tr>)}
-        {!history.months.length && <tr><td colSpan={4}>Nenhum IPF por disciplinas registrado neste ano.</td></tr>}
+        {!history.months.length && <tr><td colSpan={4}>Nenhum IDS por disciplinas registrado neste ano.</td></tr>}
       </tbody></table></div>
     </section>}
     {viewedMonth && <CompositionDetails record={viewedMonth} saved onPdf={() => exportPdf(viewedMonth)} />}
@@ -228,7 +228,7 @@ function CompositionDetails({ record, saved, onPdf }: { record: IpfComposition; 
       <p>{record.contractor}{record.updatedAtUtc ? ` · Salvo em ${new Date(record.updatedAtUtc).toLocaleString('pt-BR')}` : ''}</p></div>
       <button className="outline-button" type="button" onClick={onPdf}><FileDown size={16} />PDF da composição</button>
     </div>
-    <p className="ipf-composition-score">IPF final: <strong><IndicatorResult kind="ipf" statusKind="ids" value={record.value} empty="Sem média" /></strong></p>
+    <p className="ipf-composition-score">Média IDS ponderada: <strong><IndicatorResult kind="ids" value={record.value} empty="Sem média" /></strong></p>
     {record.areas.some(area => area.status === 'no-average' && area.weight > 0)
       && <p role="status">Há áreas sem média. Elas não participaram da nota; os pesos das áreas com média foram ajustados proporcionalmente.</p>}
     <div className="table-scroll"><table><thead><tr><th>Disciplina</th><th>Média IDS</th><th>Avaliações válidas / total</th><th>Peso definido</th><th>Peso aplicado</th><th>Contribuição</th><th>Situação</th></tr></thead><tbody>
@@ -237,6 +237,6 @@ function CompositionDetails({ record, saved, onPdf }: { record: IpfComposition; 
         <td>{area.contribution === null ? '—' : formatValue(area.contribution)}</td>
         <td>{area.status === 'included' ? 'Participou' : area.status === 'zero-weight' ? 'Sem peso' : 'Sem média — excluída'}</td></tr>)}
     </tbody></table></div>
-    <p>Fórmula: soma das médias × pesos definidos, dividida pela soma dos pesos das áreas participantes. O cálculo usa as médias sem arredondamento intermediário; o IPF final é arredondado a quatro casas.</p>
+    <p>Fórmula: soma das médias × pesos definidos, dividida pela soma dos pesos das áreas participantes. A média IDS final é arredondada a quatro casas.</p>
   </article>
 }
