@@ -198,7 +198,6 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
     setIsSaving(true)
 
     const request: EvaluationWriteRequest = {
-        clientOperationId: operationId.current,
         formVersionId,
         evaluationDate,
         evaluationTime: evaluationTime || null,

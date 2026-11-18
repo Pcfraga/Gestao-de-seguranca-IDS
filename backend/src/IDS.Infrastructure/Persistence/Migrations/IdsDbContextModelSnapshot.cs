@@ -501,9 +501,6 @@ namespace IDS.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ClientOrganizationId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("ClientOperationId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("CompanionName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -578,10 +575,6 @@ namespace IDS.Infrastructure.Persistence.Migrations
                     b.HasIndex("SubcontractorOrganizationId");
 
                     b.HasIndex("TenantId");
-
-                    b.HasIndex("TenantId", "ClientOperationId")
-                        .IsUnique()
-                        .HasFilter("\"ClientOperationId\" IS NOT NULL");
 
                     b.HasIndex("IslandId", "EvaluationDate");
 

@@ -21,8 +21,7 @@ public sealed record CreateEvaluationRequest(
     string? ImprovementOpportunities,
     IReadOnlyCollection<EvaluationObservationRequest> Observations,
     Guid? FormVersionId = null,
-    Guid? IslandId = null,
-    Guid? ClientOperationId = null);
+    Guid? IslandId = null);
 
 public sealed record EvaluationObservationDto(
     Guid ChecklistItemId,

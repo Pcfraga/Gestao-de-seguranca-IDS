@@ -30,21 +30,6 @@ public sealed class EvaluationApplicationServiceTests
     }
 
     [Fact]
-    public async Task ReusesDraftWhenClientRetriesSameOperation()
-    {
-        var repository = CreateRepository();
-        var service = new EvaluationApplicationService(repository);
-        var operationId = Guid.NewGuid();
-        var request = CreateRequest([]) with { ClientOperationId = operationId };
-
-        var created = await service.CreateDraftAsync(request, CancellationToken.None);
-        var retried = await service.CreateDraftAsync(request, CancellationToken.None);
-
-        Assert.Equal(created.Id, retried.Id);
-        Assert.Equal(1, repository.AddCount);
-    }
-
-    [Fact]
     public async Task SavesIncompletePairAndReturnsWarningInsteadOfDroppingDraft()
     {
         var repository = CreateRepository();
@@ -387,7 +372,6 @@ public sealed class EvaluationApplicationServiceTests
     private sealed class FakeEvaluationRepository(EvaluationReferenceData referenceData) : IEvaluationRepository
     {
         public Evaluation? SavedEvaluation { get; private set; }
-        public int AddCount { get; private set; }
         public IReadOnlyCollection<ConsolidationRecord>? ConsolidationRecords { get; set; }
 
         public Task<EvaluationReferenceData> LoadReferenceDataAsync(
@@ -396,16 +380,12 @@ public sealed class EvaluationApplicationServiceTests
 
         public Task AddAsync(Evaluation evaluation, CancellationToken cancellationToken)
         {
-            AddCount += 1;
             SavedEvaluation = evaluation;
             return Task.CompletedTask;
         }
 
         public Task<Evaluation?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(SavedEvaluation?.Id == id ? SavedEvaluation : null);
-
-        public Task<Evaluation?> GetByClientOperationIdAsync(Guid operationId, CancellationToken cancellationToken) =>
-            Task.FromResult(SavedEvaluation?.ClientOperationId == operationId ? SavedEvaluation : null);
 
         public Task<Evaluation?> GetForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(SavedEvaluation?.Id == id ? SavedEvaluation : null);

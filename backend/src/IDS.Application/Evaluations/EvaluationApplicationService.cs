@@ -9,15 +9,6 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         CreateEvaluationRequest request,
         CancellationToken cancellationToken)
     {
-        if (request.ClientOperationId.HasValue)
-        {
-            var existing = await repository.GetByClientOperationIdAsync(request.ClientOperationId.Value, cancellationToken);
-            if (existing is not null)
-            {
-                return ToDto(existing, await repository.GetDefaultAreaNameAsync(cancellationToken));
-            }
-        }
-
         var duplicateItems = request.Observations
             .GroupBy(observation => observation.ChecklistItemId)
             .Where(group => group.Count() > 1)
@@ -36,8 +27,7 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
 
         var evaluation = new Evaluation
         {
-            Status = EvaluationStatus.Draft,
-            ClientOperationId = request.ClientOperationId
+            Status = EvaluationStatus.Draft
         };
 
         ApplyRequest(evaluation, request, references);
@@ -56,13 +46,6 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
             return null;
         }
 
-        if (evaluation.Status == EvaluationStatus.Submitted
-            && request.ClientOperationId.HasValue
-            && request.ClientOperationId == evaluation.ClientOperationId)
-        {
-            return ToDto(evaluation, await repository.GetDefaultAreaNameAsync(cancellationToken));
-        }
-
         if (evaluation.Status != EvaluationStatus.Draft)
         {
             throw new EvaluationValidationException(["Somente avaliações em rascunho podem ser editadas."]);
@@ -79,8 +62,6 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         ValidateActiveReferences(request, references, evaluation);
         if (references.Island is { IsActive: false } && request.IslandId != evaluation.IslandId)
             throw new EvaluationValidationException(["A ilha selecionada está desativada."]);
-        if (request.ClientOperationId.HasValue)
-            evaluation.ClientOperationId = request.ClientOperationId;
         ApplyRequest(evaluation, request, references);
         await repository.SaveChangesAsync(cancellationToken);
         return ToDto(evaluation, await repository.GetDefaultAreaNameAsync(cancellationToken));

@@ -1,7 +1,6 @@
 import { apiRequest, getAccessTokenOwnerKey, ApiError, type EvaluationResult } from './api'
 
 export interface EvaluationWriteRequest {
-  clientOperationId?: string
   formVersionId: string | null
   evaluationDate: string
   evaluationTime: string | null
@@ -106,7 +105,7 @@ export async function queueEvaluation(
     operationId,
     ownerKey: getAccessTokenOwnerKey(),
     evaluationId,
-    request: { ...request, clientOperationId: operationId },
+    request,
     submit,
     createdAt: new Date().toISOString(),
     attempts: 0,

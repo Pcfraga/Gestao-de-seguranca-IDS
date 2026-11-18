@@ -2,8 +2,6 @@ namespace IDS.Domain.Entities;
 
 public sealed class Evaluation : TenantEntity
 {
-    public Guid? ClientOperationId { get; set; }
-
     public Guid? FormVersionId { get; set; }
 
     public InspectionFormVersion? FormVersion { get; set; }
