@@ -168,7 +168,7 @@ public sealed class AuthController(
             : BadRequest(new { errors = result.Errors.Select(error => error.Code == "PasswordMismatch" ? "Senha atual incorreta." : error.Description) });
     }
 
-    [Authorize(Roles = "ADMINISTRADOR")]
+    [Authorize(Roles = "ADMINISTRADOR,GESTOR")]
     [HttpGet("users")]
     public async Task<IActionResult> ListUsers(CancellationToken cancellationToken)
     {
@@ -182,6 +182,28 @@ public sealed class AuthController(
         }
 
         return Ok(result);
+    }
+
+    [Authorize(Roles = "ADMINISTRADOR,GESTOR")]
+    [HttpDelete("users/{id:guid}")]
+    public async Task<IActionResult> DeleteUser(Guid id, CancellationToken cancellationToken)
+    {
+        var user = await userManager.Users
+            .SingleOrDefaultAsync(user => user.Id == id && user.TenantId == userScope.TenantId, cancellationToken);
+        if (user is null)
+        {
+            return NotFound();
+        }
+
+        if (!await userManager.IsInRoleAsync(user, "AVALIADOR"))
+        {
+            return Conflict(new { message = "Somente usuários com perfil comum podem ser excluídos." });
+        }
+
+        var result = await userManager.DeleteAsync(user);
+        return result.Succeeded
+            ? NoContent()
+            : BadRequest(new { errors = result.Errors.Select(error => error.Description) });
     }
 
     [Authorize(Roles = "ADMINISTRADOR")]

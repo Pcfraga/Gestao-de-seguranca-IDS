@@ -621,6 +621,9 @@ th { color: #445449; font-size: 11px; }
 .users-row strong { display: block; color: #1f2f25; font-size: 14px; }
 .users-row small { color: #52655a; font-size: 12px; }
 .users-actions { display: flex; gap: 12px; align-items: center; }
+.users-actions .danger-button { display: inline-flex; align-items: center; gap: 5px; color: #a43b35; }
+.users-actions .danger-button:hover:not(:disabled) { color: #7f2b26; }
+.users-actions .danger-button:disabled { cursor: wait; opacity: .65; }
 .inspection-scope-filter {
   padding: 20px;
   margin-bottom: 20px;

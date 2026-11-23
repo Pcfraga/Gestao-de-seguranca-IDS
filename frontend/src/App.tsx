@@ -30,6 +30,7 @@ import {
   Send,
   Settings2,
   ShieldCheck,
+  Trash2,
   UserRound,
   UsersRound,
   WifiOff,
@@ -120,6 +121,7 @@ function App() {
   const [companyName, setCompanyName] = useState('')
   const [profileError, setProfileError] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [canManageUsers, setCanManageUsers] = useState(false)
   const [canManageCatalog, setCanManageCatalog] = useState(false)
   const [canSaveReports, setCanSaveReports] = useState(false)
   const [canWriteEvaluations, setCanWriteEvaluations] = useState(false)
@@ -137,6 +139,7 @@ function App() {
     const handleUnauthorized = () => {
       clearBranding()
       setIsAdmin(false)
+      setCanManageUsers(false)
       setCanManageCatalog(false)
       setCanSaveReports(false)
       setCanWriteEvaluations(false)
@@ -160,6 +163,7 @@ function App() {
       setDisplayName(me.displayName || 'Usuário')
       setCompanyName(me.companyName)
       setIsAdmin(me.roles.includes('ADMINISTRADOR'))
+      setCanManageUsers(me.roles.some(role => role === 'ADMINISTRADOR' || role === 'GESTOR'))
       setCanManageCatalog(me.roles.some(role => role === 'ADMINISTRADOR' || role === 'GESTOR'))
       setCanSaveReports(me.roles.some(role => role === 'ADMINISTRADOR' || role === 'GESTOR'))
       setCanWriteEvaluations(me.roles.some(role => role === 'ADMINISTRADOR' || role === 'GESTOR' || role === 'AVALIADOR'))
@@ -190,6 +194,7 @@ function App() {
     setProfileReady(false)
     setShowEvaluationForm(false)
     setIsAdmin(false)
+    setCanManageUsers(false)
     setCanManageCatalog(false)
     setCanSaveReports(false)
     setCanWriteEvaluations(false)
@@ -223,14 +228,14 @@ function App() {
           {canManageCatalog && <button className={`nav-link ${activeSection === 'catalog' ? 'active' : ''}`} onClick={() => { setShowEvaluationForm(false); setActiveSection('catalog') }} type="button">
             <Database size={18} strokeWidth={1.8} /><span>Cadastros</span>
           </button>}
-          {isAdmin && <>
+          {canManageUsers && <>
           <span className="nav-caption nav-caption-lower">ADMINISTRAÇÃO</span>
-          <button className={`nav-link ${activeSection === 'forms' ? 'active' : ''}`} onClick={() => { setShowEvaluationForm(false); setActiveSection('forms') }} type="button">
+          {isAdmin && <button className={`nav-link ${activeSection === 'forms' ? 'active' : ''}`} onClick={() => { setShowEvaluationForm(false); setActiveSection('forms') }} type="button">
             <ListChecks size={18} strokeWidth={1.8} /><span>Formulários de inspeção</span>
-          </button>
-          <button className={`nav-link ${activeSection === 'settings' ? 'active' : ''}`} onClick={() => setActiveSection('settings')} type="button">
+          </button>}
+          {isAdmin && <button className={`nav-link ${activeSection === 'settings' ? 'active' : ''}`} onClick={() => setActiveSection('settings')} type="button">
             <Settings2 size={18} strokeWidth={1.8} /><span>Configurações</span>
-          </button>
+          </button>}
           <button className={`nav-link ${activeSection === 'users' ? 'active' : ''}`} onClick={() => setActiveSection('users')} type="button">
             <UsersRound size={18} strokeWidth={1.8} /><span>Usuários e perfis</span>
           </button>
@@ -312,7 +317,7 @@ function App() {
           {activeSection === 'catalog' && canManageCatalog && <OperationalCatalog canCreateArea={isAdmin} />}
           {activeSection === 'forms' && isAdmin && <InspectionFormsEditor />}
           {activeSection === 'settings' && isAdmin && <SettingsView />}
-          {activeSection === 'users' && isAdmin && <div className="settings-grid"><UsersAdmin /></div>}
+          {activeSection === 'users' && canManageUsers && <div className="settings-grid"><UsersAdmin canAdminister={isAdmin} /></div>}
           {activeSection === 'account' && <div className="settings-grid"><AccountPassword /></div>}
           {activeSection === 'guide' && <UserGuide />}
 
@@ -1756,12 +1761,13 @@ function AccountPassword() {
 
 interface ManagedUser { id: string; email: string; displayName: string; role: string; blocked: boolean }
 
-function UsersAdmin() {
+function UsersAdmin({ canAdminister }: { canAdminister: boolean }) {
   const [users, setUsers] = useState<ManagedUser[]>([])
   const [form, setForm] = useState({ displayName: '', email: '', password: '', role: 'AVALIADOR' })
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -1794,9 +1800,22 @@ function UsersAdmin() {
     if (password) void run(() => apiRequest(`/api/auth/users/${user.id}/password`, { method: 'PUT', body: JSON.stringify({ password }) }), 'Senha redefinida.')
   }
 
+  async function deleteUser(user: ManagedUser) {
+    if (!window.confirm(`Excluir permanentemente o usuário "${user.displayName}"? Esta ação não pode ser desfeita.`)) return
+    setDeletingUserId(user.id)
+    try {
+      await run(
+        () => apiRequest(`/api/auth/users/${user.id}`, { method: 'DELETE' }),
+        'Usuário excluído.',
+      )
+    } finally {
+      setDeletingUserId(null)
+    }
+  }
+
   return <section className="panel users-card">
-    <div className="panel-heading"><div><h2>Usuários e perfis</h2><p>Administradores veem todas as avaliações da própria empresa. Usuários comuns veem e editam somente as próprias. As contas criadas aqui pertencem à sua empresa.</p></div></div>
-    <form className="users-form" onSubmit={(event) => void create(event)}>
+    <div className="panel-heading"><div><h2>Usuários e perfis</h2><p>{canAdminister ? 'Crie contas da sua empresa, altere acessos e exclua usuários comuns quando necessário.' : 'Consulte as contas da sua empresa e exclua usuários comuns quando necessário.'} Usuários comuns veem e editam somente as próprias avaliações.</p></div></div>
+    {canAdminister && <form className="users-form" onSubmit={(event) => void create(event)}>
       <label>Nome<input onChange={(event) => setForm({ ...form, displayName: event.target.value })} required value={form.displayName} /></label>
       <label>E-mail<input onChange={(event) => setForm({ ...form, email: event.target.value })} required type="email" value={form.email} /></label>
       <label>Senha inicial<input autoComplete="new-password" minLength={8} onChange={(event) => setForm({ ...form, password: event.target.value })} required type="password" value={form.password} /></label>
@@ -1807,15 +1826,23 @@ function UsersAdmin() {
         </select>
       </label>
       <button className="primary-button" type="submit">Criar usuário</button>
-    </form>
+    </form>}
     {error && <div className="form-error" role="alert">{error}</div>}
     {message && <div className="report-save-confirmation" role="status"><Check size={16} />{message}</div>}
     <div className="users-list">
       {users.map(user => <div className="users-row" key={user.id}>
         <div><strong>{user.displayName}</strong><small>{user.email} · {user.role === 'ADMINISTRADOR' ? 'Administrador' : user.role === 'AVALIADOR' ? 'Usuário comum' : user.role}{user.blocked ? ' · Bloqueado' : ''}</small></div>
         <div className="users-actions">
-          <button className="text-button" type="button" onClick={() => resetPassword(user)}>Redefinir senha</button>
-          <button className="text-button" type="button" onClick={() => void run(() => apiRequest(`/api/auth/users/${user.id}/active`, { method: 'PUT', body: JSON.stringify({ active: user.blocked }) }), user.blocked ? 'Usuário liberado.' : 'Usuário bloqueado.')}>{user.blocked ? 'Liberar' : 'Bloquear'}</button>
+          {canAdminister && <>
+            <button className="text-button" type="button" onClick={() => resetPassword(user)}>Redefinir senha</button>
+            <button className="text-button" type="button" onClick={() => void run(() => apiRequest(`/api/auth/users/${user.id}/active`, { method: 'PUT', body: JSON.stringify({ active: user.blocked }) }), user.blocked ? 'Usuário liberado.' : 'Usuário bloqueado.')}>{user.blocked ? 'Liberar' : 'Bloquear'}</button>
+          </>}
+          {user.role === 'AVALIADOR' && <button
+            className="text-button danger-button"
+            disabled={deletingUserId === user.id}
+            type="button"
+            onClick={() => void deleteUser(user)}
+          ><Trash2 size={14} />{deletingUserId === user.id ? 'Excluindo…' : 'Excluir'}</button>}
         </div>
       </div>)}
     </div>

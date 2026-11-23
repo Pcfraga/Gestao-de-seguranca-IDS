@@ -64,6 +64,51 @@ public sealed class CompanyIsolationTests
     }
 
     [Fact]
+    public async Task AdministratorsAndManagersCanDeleteOnlyCommonUsersFromTheirCompany()
+    {
+        using var factory = new CompanyApiFactory();
+        using var admin = factory.CreateClient();
+        using var manager = factory.CreateClient();
+        using var common = factory.CreateClient();
+        await RegisterAndLogin(admin, "Company A", "admin-delete@example.com");
+
+        var managerResponse = await admin.PostAsJsonAsync("/api/auth/users",
+            new { email = "manager-delete@example.com", displayName = "Manager", password = Password, role = "GESTOR" });
+        Assert.Equal(HttpStatusCode.Created, managerResponse.StatusCode);
+        var firstCommonResponse = await admin.PostAsJsonAsync("/api/auth/users",
+            new { email = "common-first@example.com", displayName = "Common First", password = Password, role = "AVALIADOR" });
+        Assert.Equal(HttpStatusCode.Created, firstCommonResponse.StatusCode);
+        var secondCommonResponse = await admin.PostAsJsonAsync("/api/auth/users",
+            new { email = "common-second@example.com", displayName = "Common Second", password = Password, role = "AVALIADOR" });
+        Assert.Equal(HttpStatusCode.Created, secondCommonResponse.StatusCode);
+        var requestingCommonResponse = await admin.PostAsJsonAsync("/api/auth/users",
+            new { email = "common-requester@example.com", displayName = "Common Requester", password = Password, role = "AVALIADOR" });
+        Assert.Equal(HttpStatusCode.Created, requestingCommonResponse.StatusCode);
+        var users = (await admin.GetFromJsonAsync<UserSummary[]>("/api/auth/users"))!;
+        var managerUser = Assert.Single(users, user => user.Role == "GESTOR");
+        var firstCommonUser = Assert.Single(users, user => user.Email == "common-first@example.com");
+        var secondCommonUser = Assert.Single(users, user => user.Email == "common-second@example.com");
+        var administrator = Assert.Single(users, user => user.Role == "ADMINISTRADOR");
+
+        await Login(manager, "manager-delete@example.com", Password);
+        await Login(common, "common-requester@example.com", Password);
+        Assert.Equal(HttpStatusCode.OK, (await manager.GetAsync("/api/auth/users")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await manager.DeleteAsync($"/api/auth/users/{firstCommonUser.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await manager.DeleteAsync($"/api/auth/users/{managerUser.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await manager.DeleteAsync($"/api/auth/users/{administrator.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync($"/api/auth/users/{secondCommonUser.Id}")).StatusCode);
+        Assert.DoesNotContain((await manager.GetFromJsonAsync<UserSummary[]>("/api/auth/users"))!,
+            user => user.Id == firstCommonUser.Id || user.Id == secondCommonUser.Id);
+
+        using var otherAdmin = factory.CreateClient();
+        await RegisterAndLogin(otherAdmin, "Company B", "other-admin-delete@example.com");
+        var otherUser = Assert.Single((await otherAdmin.GetFromJsonAsync<UserSummary[]>("/api/auth/users"))!);
+        Assert.Equal(HttpStatusCode.NotFound, (await manager.DeleteAsync($"/api/auth/users/{otherUser.Id}")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await common.DeleteAsync($"/api/auth/users/{administrator.Id}")).StatusCode);
+    }
+
+    [Fact]
     public async Task CatalogReportsAndBrandingAreCompanyScoped()
     {
         using var factory = new CompanyApiFactory();
