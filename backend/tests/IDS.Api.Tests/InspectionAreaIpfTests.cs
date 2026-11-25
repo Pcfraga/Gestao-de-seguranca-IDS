@@ -30,8 +30,8 @@ public sealed class InspectionAreaIpfTests
         Assert.Equal(HttpStatusCode.Created, siteResponse.StatusCode);
         var siteId = (await siteResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var form = await SaveForm(admin, Guid.Empty, "SST padrão");
-        var selected = await CreateEvaluation(admin, form, contractorId, 1, siteId);
-        var other = await CreateEvaluation(admin, form, contractorId, 5);
+        var selected = await CreateEvaluation(factory, admin, form, contractorId, 1, siteId);
+        var other = await CreateEvaluation(factory, admin, form, contractorId, 5);
         var request = new UpsertMonthlyIpfRequest(contractorId, siteId, 999m,
             MultiplicationFactor: 0.8m, AdditionalScore: 20m);
 
@@ -79,8 +79,8 @@ public sealed class InspectionAreaIpfTests
         Assert.True(defaultForm.IsDefault);
         Assert.False(areaForm.IsDefault);
 
-        var defaultEvaluation = await CreateEvaluation(adminA, defaultForm, contractorId, 1);
-        var areaEvaluation = await CreateEvaluation(adminA, areaForm, contractorId, 4);
+        var defaultEvaluation = await CreateEvaluation(factory, adminA, defaultForm, contractorId, 1);
+        var areaEvaluation = await CreateEvaluation(factory, adminA, areaForm, contractorId, 4);
         Assert.NotEqual(defaultEvaluation.Indicators.Ids, areaEvaluation.Indicators.Ids);
 
         var defaultUpsert = await adminA.PutAsJsonAsync("/api/reports/ipf/2026/10",
@@ -163,6 +163,7 @@ public sealed class InspectionAreaIpfTests
     }
 
     private static async Task<EvaluationDto> CreateEvaluation(
+        CompanyApiFactory factory,
         HttpClient client,
         InspectionFormDto form,
         Guid contractorId,
@@ -191,7 +192,12 @@ public sealed class InspectionAreaIpfTests
             form.VersionId);
         var response = await client.PostAsJsonAsync("/api/evaluations", request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        return (await response.Content.ReadFromJsonAsync<EvaluationDto>())!;
+        var evaluation = (await response.Content.ReadFromJsonAsync<EvaluationDto>())!;
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<IDS.Infrastructure.Persistence.IdsDbContext>();
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE \"Evaluations\" SET \"Status\" = 'Submitted' WHERE \"Id\" = {evaluation.Id}");
+        return evaluation;
     }
 
     private static async Task<HttpClient> Administrator(CompanyApiFactory factory, string suffix)

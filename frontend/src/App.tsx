@@ -1081,7 +1081,7 @@ function Indicators({ month, monthLabel, scopeQuery }: { month: string; monthLab
     ])
       .then(([evaluations, yearConsolidation, current, before]) => {
         if (!isCurrent) return
-        setYearEvaluations(evaluations)
+        setYearEvaluations(evaluations.filter(evaluation => evaluation.status === 'Submitted'))
         setYearData(yearConsolidation)
         setCurrentData(current)
         setPreviousData(before)
@@ -1118,7 +1118,6 @@ function Indicators({ month, monthLabel, scopeQuery }: { month: string; monthLab
   const best = scoredMonths.length ? scoredMonths.reduce((a, b) => (b.ids ?? 0) > (a.ids ?? 0) ? b : a) : null
   const worst = scoredMonths.length ? scoredMonths.reduce((a, b) => (b.ids ?? 0) < (a.ids ?? 0) ? b : a) : null
   const ytdIds = averageIds(yearEvaluations)
-  const draftCount = monthEvaluations.filter(evaluation => evaluation.status === 'Draft').length
   const itemMovement = (() => {
     const before = new Map((previousData?.items ?? []).map(item => [`${item.categoryCode}:${item.code}`, item.quantity]))
     return (currentData?.items ?? [])
@@ -1140,7 +1139,7 @@ function Indicators({ month, monthLabel, scopeQuery }: { month: string; monthLab
             <article className="metric-card"><p className="metric-label">IDS do mês</p><strong className="metric-value"><IndicatorResult kind="ids" value={current?.ids} /></strong><Delta current={current?.ids ?? null} previous={before?.ids ?? null} percentagePoints /></article>
             <article className="metric-card"><p className="metric-label">IDS acumulado no ano</p><strong className="metric-value"><IndicatorResult kind="ids" value={ytdIds} /></strong><span className="metric-note">Janeiro a {monthLong(month)}</span></article>
             <article className="metric-card"><p className="metric-label">Desvios por pessoa observada</p><strong className="metric-value">{deviationsPerPerson(currentData)?.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) ?? '—'}</strong><Delta current={deviationsPerPerson(currentData)} previous={deviationsPerPerson(previousData)} inverse /></article>
-            <article className="metric-card"><p className="metric-label">Avaliações no mês</p><strong className="metric-value">{current?.count ?? 0}</strong><Delta current={current?.count ?? 0} previous={before?.count ?? null} />{draftCount > 0 && <span className="metric-note">{draftCount} ainda em rascunho</span>}</article>
+            <article className="metric-card"><p className="metric-label">Avaliações no mês</p><strong className="metric-value">{current?.count ?? 0}</strong><Delta current={current?.count ?? 0} previous={before?.count ?? null} /><span className="metric-note">Somente avaliações concluídas</span></article>
           </section>
 
           <section className="indicator-insights" aria-label="Destaques">

@@ -11,7 +11,7 @@ public sealed class InspectionIslandsTests
     private const string Password = "Islands-Tests-Password-123!";
 
     [Fact]
-    public async Task EvaluationAndDashboardFiltersUseTheIndependentIslandAndPreserveDrafts()
+    public async Task EvaluationAndDashboardFiltersUseTheIndependentIslandButIndicatorsExcludeDrafts()
     {
         using var factory = new CompanyApiFactory();
         using var admin = await Administrator(factory, "filters");
@@ -30,8 +30,8 @@ public sealed class InspectionIslandsTests
         var list = (await admin.GetFromJsonAsync<EvaluationDto[]>($"/api/evaluations?islandId={first.Id}"))!;
         Assert.Single(list);
         Assert.Equal("Ilha A", list[0].Island);
-        Assert.Equal(1, (await admin.GetFromJsonAsync<DataConsolidationDto>($"/api/dashboard/data?islandId={first.Id}"))!.EvaluationCount);
-        Assert.Equal(1, (await admin.GetFromJsonAsync<DashboardSummaryDto>($"/api/dashboard/summary?islandId={first.Id}"))!.EvaluationCount);
+        Assert.Equal(0, (await admin.GetFromJsonAsync<DataConsolidationDto>($"/api/dashboard/data?islandId={first.Id}"))!.EvaluationCount);
+        Assert.Equal(0, (await admin.GetFromJsonAsync<DashboardSummaryDto>($"/api/dashboard/summary?islandId={first.Id}"))!.EvaluationCount);
         Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync($"/api/inspection-islands/{first.Id}", new { name = "Renomeada" })).StatusCode);
         Assert.Equal("Renomeada", (await admin.GetFromJsonAsync<EvaluationDto>($"/api/evaluations/{evaluation.Id}"))!.Island);
         Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync($"/api/inspection-islands/{first.Id}/active", new { isActive = false })).StatusCode);

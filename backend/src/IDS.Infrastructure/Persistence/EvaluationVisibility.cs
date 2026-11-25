@@ -16,4 +16,8 @@ internal static class EvaluationVisibility
                 || evaluation.CreatedByUserId == null)
             : query.Where(evaluation => evaluation.CreatedByUserId == userId);
     }
+
+    public static IQueryable<Evaluation> Submitted(
+        this IQueryable<Evaluation> query) =>
+        query.Where(evaluation => evaluation.Status == EvaluationStatus.Submitted);
 }

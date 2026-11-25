@@ -126,7 +126,7 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
         CancellationToken cancellationToken,
         EvaluationScope? scope = null)
     {
-        var evaluations = ApplyScope(Visible(dbContext.Evaluations.AsNoTracking()), scope);
+        var evaluations = ApplyScope(Visible(dbContext.Evaluations.AsNoTracking()).Submitted(), scope);
         if (from.HasValue)
         {
             evaluations = evaluations.Where(evaluation => evaluation.EvaluationDate >= from.Value);
@@ -189,7 +189,7 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
         CancellationToken cancellationToken,
         EvaluationScope? scope = null)
     {
-        var query = ApplyScope(QueryDetails(), scope);
+        var query = ApplyScope(QueryDetails().Submitted(), scope);
         if (from.HasValue)
         {
             query = query.Where(evaluation => evaluation.EvaluationDate >= from.Value);
@@ -233,7 +233,7 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
         CancellationToken cancellationToken,
         EvaluationScope? scope = null)
     {
-        var query = ApplyScope(QueryDetails(), scope);
+        var query = ApplyScope(QueryDetails().Submitted(), scope);
         if (from.HasValue) query = query.Where(evaluation => evaluation.EvaluationDate >= from.Value);
         if (to.HasValue) query = query.Where(evaluation => evaluation.EvaluationDate <= to.Value);
         if (siteId.HasValue) query = query.Where(evaluation => evaluation.SiteId == siteId.Value || evaluation.Site != null && evaluation.Site.CanonicalSiteId == siteId.Value);

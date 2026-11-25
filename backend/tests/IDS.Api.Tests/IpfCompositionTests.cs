@@ -73,7 +73,7 @@ public sealed class IpfCompositionTests
     }
 
     [Fact]
-    public async Task CombinesAllFormsAndLegacyDraftsPersistsSnapshotsAndKeepsOldHistories()
+    public async Task CombinesAllFormsAndLegacyEvaluationsButExcludesDraftsFromScores()
     {
         using var factory = new CompanyApiFactory();
         using var admin = await Administrator(factory, "snapshot");
@@ -93,10 +93,10 @@ public sealed class IpfCompositionTests
             var sstVersion = new InspectionFormVersion { Form = sstForm, Version = 1, Name = "SST customizado" };
             db.Evaluations.AddRange(
                 Evaluation(contractor, null, 2m), // legacy SST draft: 0.8
-                Evaluation(contractor, sstVersion, 0m), // another SST form: 1
+                Evaluation(contractor, sstVersion, 0m, submitted: false), // draft: excluded
                 Evaluation(contractor, version, 4m), // 0.6
                 Evaluation(contractor, otherVersion, 6m), // 0.4
-                Evaluation(contractor, version, 0m, 0m)); // unscored draft
+                Evaluation(contractor, version, 0m, 0m)); // submitted but unscored
             await db.SaveChangesAsync();
         }
 
@@ -104,13 +104,13 @@ public sealed class IpfCompositionTests
         var preview = await Preview(admin, request);
         Assert.Null(preview.Id);
         Assert.Null(preview.UpdatedAtUtc);
-        Assert.Equal(0.78m, preview.Value);
-        Assert.Equal(0.9m, preview.Areas.First().Average);
+        Assert.Equal(0.71m, preview.Value);
+        Assert.Equal(0.8m, preview.Areas.First().Average);
         Assert.Equal(0.5m, preview.Areas.Last().Average);
         Assert.Equal(3, preview.Areas.Last().EvaluationCount);
         Assert.Equal(2, preview.Areas.Last().ScoredEvaluationCount);
         var noAverage = await Preview(admin, Request(contractor, (Guid.Empty, 70m), (emptyArea, 30m)));
-        Assert.Equal(0.9m, noAverage.Value);
+        Assert.Equal(0.8m, noAverage.Value);
         Assert.Equal(100m, noAverage.Areas.First().EffectiveWeight);
         Assert.Equal("no-average", noAverage.Areas.Last().Status);
 
@@ -138,14 +138,14 @@ public sealed class IpfCompositionTests
         Assert.True((saved.UpdatedAtUtc!.Value - reloaded.UpdatedAtUtc!.Value).Duration() < TimeSpan.FromMilliseconds(1));
         Assert.Equal("Ambiente", reloaded.Areas.Last().AreaName);
         Assert.Equal("Contratada", reloaded.Contractor);
-        Assert.Equal(0.78m, history.AnnualAverage);
-        Assert.Equal(0.89m, (await Preview(admin, request)).Value);
+        Assert.Equal(0.71m, history.AnnualAverage);
+        Assert.Equal(0.855m, (await Preview(admin, request)).Value);
         var recalculated = await Save(admin, request);
         Assert.Equal(saved.Id, recalculated.Id);
-        Assert.Equal(0.89m, recalculated.Value);
+        Assert.Equal(0.855m, recalculated.Value);
         Assert.Equal("Área renomeada", recalculated.Areas.Last().AreaName);
         Assert.Equal("Contratada renomeada", recalculated.Contractor);
-        Assert.Equal(0.89m, Assert.Single((await History(admin, contractor)).Months).Value);
+        Assert.Equal(0.855m, Assert.Single((await History(admin, contractor)).Months).Value);
         await using (var db = new IdsDbContext(options, new TestScope(tenant)))
         {
             Assert.Single(await db.IpfCompositions.ToArrayAsync());
@@ -240,10 +240,16 @@ public sealed class IpfCompositionTests
             $"/api/reports/ipf-composition/2026?contractorId={contractor}")).StatusCode);
     }
 
-    private static Evaluation Evaluation(Guid contractor, InspectionFormVersion? version, decimal quantity, decimal people = 10m) => new()
+    private static Evaluation Evaluation(
+        Guid contractor,
+        InspectionFormVersion? version,
+        decimal quantity,
+        decimal people = 10m,
+        bool submitted = true) => new()
     {
         ContractorOrganizationId = contractor, FormVersion = version, EvaluationDate = new(2026, 10, 19),
         ObservedPeople = people,
+        Status = submitted ? EvaluationStatus.Submitted : EvaluationStatus.Draft,
         Observations = [new() { ChecklistItemId = Item, SeverityLevelId = Medium, Quantity = quantity }]
     };
 

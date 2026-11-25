@@ -152,7 +152,7 @@ export function UserGuide() {
         <li>Em <strong>Dados</strong>, selecione uma contratada para ver pessoas, desvios, impacto ponderado, totais por dia, categorias e itens.</li>
         <li>Em <strong>Indicadores</strong>, acompanhe as distribuições e comparações do período, observando o significado de cada indicador e os avisos da tela.</li>
       </ol>
-      <p>Avaliações enviadas entram nas consolidações da empresa. Rascunhos são privados e entram somente nas consolidações do autor; após o envio, passam a compor também a visão do administrador. Usuários comuns, gestores e consultas continuam limitados às próprias avaliações.</p>
+      <p>Somente avaliações enviadas entram nos indicadores, consolidações e cálculos de IPF. Rascunhos permanecem privados do autor e não alteram médias nem totais até serem enviados. Usuários comuns, gestores e consultas continuam limitados às próprias avaliações.</p>
       <p>A lista de avaliações retorna até 200 registros. As tabelas semanais de <strong>Dados</strong> e o histórico de IDS do <strong>Relatório IPF</strong> usam consolidações completas, sem esse limite da lista.</p>
       <p>As tabelas S1–S5 agrupam os dias 1–7, 8–14, 15–21, 22–28 e 29–31, excluindo domingos. Em <strong>Relatório IPF</strong>, use as abas <strong>Dados Relatório Mensal</strong> para consultar os dados e registrar o IPF, e <strong>Relatório IPF</strong> para consultar o histórico e imprimir o PDF.</p>
     </Chapter>
@@ -200,7 +200,7 @@ export function UserGuide() {
       </ol>
       <h3>Exemplo: Segurança com 70% e Meio Ambiente com 30%</h3>
       <p>Se Segurança tem média <strong>0,9</strong>, a parte dela na nota é <strong>0,63</strong>. Se Meio Ambiente tem média <strong>0,8</strong>, a parte ambiental é <strong>0,24</strong>. Juntando as duas partes, a média IDS é <strong>0,87</strong> (87%).</p>
-      <p>Dentro de cada disciplina, o sistema soma os IDS válidos das avaliações e divide pela quantidade dessas avaliações. Cada avaliação válida participa igualmente dessa média: não há peso adicional por tamanho do formulário ou número de pessoas. Avaliações sem IDS calculável são excluídas da média; rascunhos também participam quando têm nota calculável.</p>
+      <p>Dentro de cada disciplina, o sistema soma os IDS válidos das avaliações enviadas e divide pela quantidade dessas avaliações. Cada avaliação válida participa igualmente dessa média: não há peso adicional por tamanho do formulário ou número de pessoas. Avaliações sem IDS calculável e rascunhos são excluídos da média.</p>
       <h3>E se faltar uma média?</h3>
       <ul>
         <li><strong>Área sem média:</strong> fica fora e as demais recebem proporcionalmente toda a participação. No exemplo, sem média ambiental, Segurança passa a pesar 100% e a nota fica 0,9. Você pode avançar e salvar.</li>

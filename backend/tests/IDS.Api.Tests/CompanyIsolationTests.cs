@@ -59,11 +59,11 @@ public sealed class CompanyIsolationTests
         Assert.Equal(HttpStatusCode.NotFound, (await adminB.PutAsJsonAsync($"/api/evaluations/{evaluationA}", EvaluationRequest())).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await adminB.PostAsync($"/api/evaluations/{evaluationA}/submit", null)).StatusCode);
 
-        Assert.Equal(1, (await adminA.GetFromJsonAsync<JsonElement>("/api/dashboard/data")).GetProperty("evaluationCount").GetInt32());
-        Assert.Equal(1, (await adminB.GetFromJsonAsync<JsonElement>("/api/dashboard/data")).GetProperty("evaluationCount").GetInt32());
-        Assert.Equal(1, (await commonA.GetFromJsonAsync<JsonElement>("/api/dashboard/data")).GetProperty("evaluationCount").GetInt32());
-        Assert.Equal(1, (await adminA.GetFromJsonAsync<JsonElement>("/api/dashboard/summary")).GetProperty("evaluationCount").GetInt32());
-        Assert.Equal(1, (await adminB.GetFromJsonAsync<JsonElement>("/api/dashboard/summary")).GetProperty("evaluationCount").GetInt32());
+        Assert.Equal(0, (await adminA.GetFromJsonAsync<JsonElement>("/api/dashboard/data")).GetProperty("evaluationCount").GetInt32());
+        Assert.Equal(0, (await adminB.GetFromJsonAsync<JsonElement>("/api/dashboard/data")).GetProperty("evaluationCount").GetInt32());
+        Assert.Equal(0, (await commonA.GetFromJsonAsync<JsonElement>("/api/dashboard/data")).GetProperty("evaluationCount").GetInt32());
+        Assert.Equal(0, (await adminA.GetFromJsonAsync<JsonElement>("/api/dashboard/summary")).GetProperty("evaluationCount").GetInt32());
+        Assert.Equal(0, (await adminB.GetFromJsonAsync<JsonElement>("/api/dashboard/summary")).GetProperty("evaluationCount").GetInt32());
         Assert.Equal(HttpStatusCode.NotFound, (await adminA.PutAsJsonAsync($"/api/auth/users/{usersB[0].Id}/active", new { active = false })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await adminA.PutAsJsonAsync($"/api/auth/users/{usersB[0].Id}/password", new { password = "Other-Password-123!" })).StatusCode);
 

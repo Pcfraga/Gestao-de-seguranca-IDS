@@ -49,6 +49,12 @@ public sealed class InspectionFormsTests
         Assert.Equal(0.5m, evaluation.Indicators.LowSeverityShare);
         Assert.Equal(0.25m, evaluation.Indicators.MediumSeverityShare);
         Assert.Equal(0.25m, evaluation.Indicators.HighSeverityShare);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<IdsDbContext>();
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE \"Evaluations\" SET \"Status\" = 'Submitted' WHERE \"Id\" = {evaluation.Id}");
+        }
 
         var data = (await admin.GetFromJsonAsync<DataConsolidationDto>("/api/dashboard/data"))!;
         Assert.Equal(4m, data.TotalDeviations);

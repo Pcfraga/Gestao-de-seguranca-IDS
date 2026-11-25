@@ -65,6 +65,7 @@ public sealed class EfMonthlyIpfRepository(IdsDbContext dbContext, ICurrentUserS
         var evaluations = await dbContext.Evaluations
             .AsNoTracking()
             .VisibleTo(userScope)
+            .Submitted()
             .Where(evaluation => evaluation.ContractorOrganizationId == contractorId
                 && evaluation.EvaluationDate >= monthStart
                 && evaluation.EvaluationDate < nextMonthStart)

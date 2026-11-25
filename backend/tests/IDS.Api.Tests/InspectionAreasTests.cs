@@ -3,6 +3,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using IDS.Api.Controllers;
 using IDS.Application.Evaluations;
+using IDS.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace IDS.Api.Tests;
 
@@ -21,17 +24,17 @@ public sealed class InspectionAreasTests
         var water = await Form(client, "Água", environment.Id);
         var waste = await Form(client, "Resíduos", environment.Id);
         var product = await Form(client, "Produto", quality.Id);
-        await Evaluation(client, water.VersionId, water.Categories.First().Items.First().Id, 2);
-        await Evaluation(client, waste.VersionId, waste.Categories.First().Items.First().Id, 7);
-        await Evaluation(client, product.VersionId, product.Categories.First().Items.First().Id, 11);
+        await Evaluation(factory, client, water.VersionId, water.Categories.First().Items.First().Id, 2);
+        await Evaluation(factory, client, waste.VersionId, waste.Categories.First().Items.First().Id, 7);
+        await Evaluation(factory, client, product.VersionId, product.Categories.First().Items.First().Id, 11);
         var legacyItem = Guid.Parse("20000000-0000-0000-0000-000000000001");
-        await Evaluation(client, null, legacyItem, 3);
+        await Evaluation(factory, client, null, legacyItem, 3);
 
         var update = await client.PutAsJsonAsync($"/api/inspection-forms/{water.Id}",
             Definition("Água revisada", environment.Id, 1));
         Assert.Equal(HttpStatusCode.OK, update.StatusCode);
         var revision = (await update.Content.ReadFromJsonAsync<InspectionFormDto>())!;
-        await Evaluation(client, revision.VersionId, revision.Categories.First().Items.First().Id, 4);
+        await Evaluation(factory, client, revision.VersionId, revision.Categories.First().Items.First().Id, 4);
 
         await AssertScope(client, $"areaId={environment.Id}&formId={water.Id}", 2, 6);
         await AssertScope(client, $"areaId={environment.Id}&formId={waste.Id}", 1, 7);
@@ -47,7 +50,7 @@ public sealed class InspectionAreasTests
             Definition("Padrão revisado", Guid.Empty));
         Assert.Equal(HttpStatusCode.OK, defaultEdit.StatusCode);
         var defaultForm = (await defaultEdit.Content.ReadFromJsonAsync<InspectionFormDto>())!;
-        await Evaluation(client, defaultForm.VersionId, defaultForm.Categories.First().Items.First().Id, 5);
+        await Evaluation(factory, client, defaultForm.VersionId, defaultForm.Categories.First().Items.First().Id, 5);
         await AssertScope(client, $"areaId={Guid.Empty}&formId={Guid.Empty}", 2, 8);
         await AssertScope(client, $"areaId={Guid.Empty}&formId={defaultForm.Id}", 2, 8);
     }
@@ -125,12 +128,22 @@ public sealed class InspectionAreasTests
         return (await response.Content.ReadFromJsonAsync<InspectionAreaDto>())!;
     }
 
-    private static async Task Evaluation(HttpClient client, Guid? versionId, Guid itemId, decimal quantity)
+    private static async Task Evaluation(
+        CompanyApiFactory factory,
+        HttpClient client,
+        Guid? versionId,
+        Guid itemId,
+        decimal quantity)
     {
         var response = await client.PostAsJsonAsync("/api/evaluations",
             new CreateEvaluationRequest(new DateOnly(2026, 10, 19), null, null, null, null, null,
                 null, null, null, 10, null, null, [new(itemId, quantity, Low, null)], versionId));
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var id = (await response.Content.ReadFromJsonAsync<EvaluationDto>())!.Id;
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<IdsDbContext>();
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE \"Evaluations\" SET \"Status\" = 'Submitted' WHERE \"Id\" = {id}");
     }
 
     private static async Task<HttpClient> Admin(CompanyApiFactory factory, string suffix)

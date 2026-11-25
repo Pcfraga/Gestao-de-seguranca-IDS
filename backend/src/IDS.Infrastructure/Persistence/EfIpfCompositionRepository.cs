@@ -26,6 +26,7 @@ public sealed class EfIpfCompositionRepository(IdsDbContext dbContext, ICurrentU
         var end = start.AddMonths(1);
         var evaluations = await dbContext.Evaluations.AsNoTracking()
             .VisibleTo(userScope)
+            .Submitted()
             .Where(evaluation => evaluation.ContractorOrganizationId == contractorId
                 && evaluation.EvaluationDate >= start && evaluation.EvaluationDate < end)
             .Include(evaluation => evaluation.FormVersion)

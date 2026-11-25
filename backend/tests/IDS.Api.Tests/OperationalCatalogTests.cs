@@ -27,6 +27,8 @@ public sealed class OperationalCatalogTests
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<IdsDbContext>();
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE \"Evaluations\" SET \"Status\" = 'Submitted' WHERE \"Id\" IN ({first.Id}, {second.Id})");
             await db.Sites.IgnoreQueryFilters().Where(value => value.Id == alias)
                 .ExecuteUpdateAsync(setters => setters.SetProperty(value => value.CanonicalSiteId, canonical));
         }
@@ -42,7 +44,7 @@ public sealed class OperationalCatalogTests
         Assert.Equal(2, data.EvaluationCount);
         Assert.Single(data.MonthlyGroups);
         Assert.Equal(2, (await admin.GetFromJsonAsync<DashboardSummaryDto>($"/api/dashboard/summary?siteId={canonical}"))!.EvaluationCount);
-        Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync($"/api/evaluations/{second.Id}", Request(canonical))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync($"/api/evaluations/{second.Id}", Request(canonical))).StatusCode);
         Assert.NotEqual(first.Id, second.Id);
     }
 
