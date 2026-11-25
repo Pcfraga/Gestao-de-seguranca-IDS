@@ -498,9 +498,6 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
         if (string.IsNullOrWhiteSpace(evaluation.LeadAuditorName)) missingFields.Add("Auditor líder");
         if (!evaluation.ObservedPeople.HasValue) missingFields.Add("Pessoas observadas");
         if (string.IsNullOrWhiteSpace(evaluation.CompanionName)) missingFields.Add("Acompanhante");
-        if (string.IsNullOrWhiteSpace(evaluation.Strengths)) missingFields.Add("Pontos fortes");
-        if (string.IsNullOrWhiteSpace(evaluation.ImprovementOpportunities)) missingFields.Add("Oportunidades de melhoria");
-
         var errors = new List<string>();
         if (missingFields.Count > 0)
             errors.Add($"Preencha os campos obrigatórios: {string.Join(", ", missingFields)}.");

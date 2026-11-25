@@ -10,16 +10,8 @@ public sealed class EfEvaluationRepository(IdsDbContext dbContext, ICurrentUserS
         dbContext.Tenants.Where(tenant => tenant.Id == userScope.TenantId)
             .Select(tenant => tenant.DefaultAreaName).SingleAsync(cancellationToken);
 
-    private IQueryable<Evaluation> Visible(IQueryable<Evaluation> query)
-    {
-        if (userScope.IsAdministrator)
-        {
-            return query;
-        }
-
-        var userId = userScope.UserId ?? "-";
-        return query.Where(evaluation => evaluation.CreatedByUserId == userId);
-    }
+    private IQueryable<Evaluation> Visible(IQueryable<Evaluation> query) =>
+        query.VisibleTo(userScope);
 
     public async Task<EvaluationReferenceData> LoadReferenceDataAsync(
         CreateEvaluationRequest request,

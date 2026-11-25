@@ -266,6 +266,8 @@ public sealed class EvaluationApplicationServiceTests
 
         Assert.NotNull(submitted);
         Assert.Equal("Submitted", submitted.Status);
+        Assert.Null(submitted.Strengths);
+        Assert.Null(submitted.ImprovementOpportunities);
         var retried = await service.SubmitDraftAsync(created.Id, CancellationToken.None);
         Assert.Equal(submitted.Id, retried?.Id);
         Assert.Equal("Submitted", retried?.Status);
@@ -332,8 +334,8 @@ public sealed class EvaluationApplicationServiceTests
         evaluation.LeadAuditorName = "Auditor líder";
         evaluation.AuditorName = null;
         evaluation.CompanionName = "Acompanhante";
-        evaluation.Strengths = "Pontos fortes registrados";
-        evaluation.ImprovementOpportunities = "Oportunidades registradas";
+        evaluation.Strengths = null;
+        evaluation.ImprovementOpportunities = null;
     }
 
     private static FakeEvaluationRepository CreateRepository()

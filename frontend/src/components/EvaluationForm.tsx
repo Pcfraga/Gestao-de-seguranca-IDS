@@ -180,8 +180,6 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
         !leadAuditorName.trim() && 'Auditor líder',
         !observedPeople.trim() && 'Pessoas observadas',
         !companionName.trim() && 'Acompanhante',
-        !strengths.trim() && 'Pontos fortes',
-        !improvementOpportunities.trim() && 'Oportunidades de melhoria',
       ].filter((field): field is string => Boolean(field))
       const hasIncompleteObservation = catalog.categories.some(category => category.items.some(item => {
         const observation = observations[item.id]
@@ -339,12 +337,12 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
         </fieldset>
 
         <section className="form-section">
-          <div className="form-section-heading"><span>03</span><div><h3>Contexto</h3><p>Registre os pontos relevantes observados.</p></div></div>
-          <div className="form-fields form-fields-two"><label>Pontos fortes<textarea maxLength={4000} onChange={(event) => setStrengths(event.target.value)} rows={3} value={strengths} /></label><label>Oportunidades de melhoria<textarea maxLength={4000} onChange={(event) => setImprovementOpportunities(event.target.value)} rows={3} value={improvementOpportunities} /></label></div>
+          <div className="form-section-heading"><span>03</span><div><h3>Contexto</h3><p>Registre, se necessário, os pontos relevantes observados.</p></div></div>
+          <div className="form-fields form-fields-two"><label>Pontos fortes (opcional)<textarea maxLength={4000} onChange={(event) => setStrengths(event.target.value)} rows={3} value={strengths} /></label><label>Oportunidades de melhoria (opcional)<textarea maxLength={4000} onChange={(event) => setImprovementOpportunities(event.target.value)} rows={3} value={improvementOpportunities} /></label></div>
         </section>
 
         {submitError && <div className="form-error" role="alert">{submitError}</div>}
-        <div className="form-submit-row"><span>O auditor secundário e comentários são opcionais. Sem sinal, os dados ficam salvos neste aparelho até a sincronização.</span><div className="evaluation-actions"><button className="outline-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="draft"><Save size={16} />{isSaving ? 'Salvando…' : navigator.onLine ? 'Salvar rascunho' : 'Salvar offline'}</button><button className="primary-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="submit"><Check size={16} />{isSaving ? 'Enviando…' : navigator.onLine ? 'Enviar avaliação' : 'Enviar depois'}</button></div></div>
+        <div className="form-submit-row"><span>Auditor secundário, comentários, pontos fortes e oportunidades de melhoria são opcionais. Sem sinal, os dados ficam salvos neste aparelho até a sincronização.</span><div className="evaluation-actions"><button className="outline-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="draft"><Save size={16} />{isSaving ? 'Salvando…' : navigator.onLine ? 'Salvar rascunho' : 'Salvar offline'}</button><button className="primary-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="submit"><Check size={16} />{isSaving ? 'Enviando…' : navigator.onLine ? 'Enviar avaliação' : 'Enviar depois'}</button></div></div>
       </form>}
     </div>
   )

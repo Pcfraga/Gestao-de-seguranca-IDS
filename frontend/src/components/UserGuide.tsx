@@ -77,8 +77,8 @@ export function UserGuide() {
           <tr><th scope="row">Criar áreas e criar, editar ou duplicar formulários</th><td>Sim</td><td>Não</td></tr>
           <tr><th scope="row">Cadastrar clientes, contratadas, subcontratadas e locais</th><td>Sim</td><td>Não; solicitar ao administrador</td></tr>
           <tr><th scope="row">Criar e enviar avaliações</th><td>Sim</td><td>Sim</td></tr>
-          <tr><th scope="row">Consultar avaliações e suas consolidações</th><td>Todas as avaliações da própria empresa</td><td>Somente as próprias avaliações</td></tr>
-          <tr><th scope="row">Editar avaliações</th><td>Rascunhos visíveis da própria empresa</td><td>Somente os próprios rascunhos</td></tr>
+          <tr><th scope="row">Consultar avaliações e suas consolidações</th><td>Avaliações enviadas da empresa e os próprios rascunhos</td><td>Somente as próprias avaliações</td></tr>
+          <tr><th scope="row">Editar avaliações</th><td>Somente os próprios rascunhos</td><td>Somente os próprios rascunhos</td></tr>
           <tr><th scope="row">Consultar histórico salvo de IPF</th><td>Sim, na própria empresa</td><td>Sim, na própria empresa</td></tr>
           <tr><th scope="row">Calcular prévia de IDS por disciplinas</th><td>Sim, com as avaliações da empresa</td><td>Sim, somente com as próprias avaliações</td></tr>
           <tr><th scope="row">Salvar IPF manual ou IDS por disciplinas</th><td>Sim</td><td>Não</td></tr>
@@ -86,7 +86,7 @@ export function UserGuide() {
           <tr><th scope="row">Trocar a própria senha e consultar este guia</th><td>Sim</td><td>Sim</td></tr>
         </tbody>
       </table></div>
-      <p><strong>Perfis técnicos adicionais:</strong> a API também reconhece GESTOR e CONSULTA, embora o cadastro da interface ofereça apenas Administrador e Usuário comum. GESTOR pode cadastrar organizações/locais, registrar avaliações e salvar IPF, mas não gerencia usuários, áreas ou modelos; a consulta de avaliações fica limitada às próprias. CONSULTA não pode gravar avaliações, cadastros ou IPF; a consulta de avaliações também fica limitada às próprias. Esses perfis não concedem acesso global.</p>
+      <p><strong>Perfis técnicos adicionais:</strong> a API também reconhece GESTOR e CONSULTA, embora o cadastro da interface ofereça apenas Administrador e Usuário comum. GESTOR pode cadastrar organizações/locais, registrar avaliações e salvar IPF, mas não gerencia usuários, áreas ou modelos; a consulta e a edição ficam limitadas às próprias avaliações e aos próprios rascunhos. CONSULTA não pode gravar avaliações, cadastros ou IPF; a consulta de avaliações também fica limitada às próprias. Esses perfis não concedem acesso global.</p>
       <div className="guide-note"><Info size={18} aria-hidden="true" /><p>As permissões são conferidas no servidor. Um botão aparecer na tela não significa que seu perfil pode concluir a operação. Nenhum administrador tem acesso aos dados de outra empresa.</p></div>
     </Chapter>
 
@@ -135,8 +135,8 @@ export function UserGuide() {
         <li>Confira data, hora, local, cliente, contratada e responsáveis, conforme o registro.</li>
         <li>Informe o número de <strong>Pessoas observadas</strong>. Esse número é a base da conta do IDS e precisa ser maior que zero para haver uma nota calculável.</li>
         <li>Em <strong>Observações</strong>, informe a quantidade do desvio e a severidade do item. Use o comentário para explicar o que foi visto.</li>
-        <li>Preencha pontos fortes e oportunidades de melhoria para contextualizar o resultado.</li>
-        <li>Use <strong>Salvar rascunho</strong> para continuar depois. Para enviar, preencha todos os campos da avaliação; auditor secundário e comentários são opcionais. Quantidade e severidade devem ser preenchidas juntas nos itens iniciados.</li>
+        <li>Preencha, se necessário, pontos fortes e oportunidades de melhoria para contextualizar o resultado.</li>
+        <li>Use <strong>Salvar rascunho</strong> para continuar depois. Para enviar, preencha os campos obrigatórios da avaliação; auditor secundário, comentários, pontos fortes e oportunidades de melhoria são opcionais. Quantidade e severidade devem ser preenchidas juntas nos itens iniciados.</li>
         <li>Use a ação de envio para concluir. Depois de enviada, a avaliação fica somente para leitura.</li>
       </ol>
       <p>Na lista de <strong>Avaliações</strong>, localize o registro e use a ação de edição enquanto estiver em rascunho. Uma avaliação salva não pode trocar de modelo ou versão; se escolheu o modelo errado, crie uma nova avaliação.</p>
@@ -152,7 +152,7 @@ export function UserGuide() {
         <li>Em <strong>Dados</strong>, selecione uma contratada para ver pessoas, desvios, impacto ponderado, totais por dia, categorias e itens.</li>
         <li>Em <strong>Indicadores</strong>, acompanhe as distribuições e comparações do período, observando o significado de cada indicador e os avisos da tela.</li>
       </ol>
-      <p>Rascunhos e avaliações enviadas entram nas consolidações atuais. Os resultados respeitam seu acesso: o administrador consulta a empresa inteira; o usuário comum consulta suas próprias avaliações. Dois perfis podem, portanto, enxergar médias diferentes no mesmo período.</p>
+      <p>Avaliações enviadas entram nas consolidações da empresa. Rascunhos são privados e entram somente nas consolidações do autor; após o envio, passam a compor também a visão do administrador. Usuários comuns, gestores e consultas continuam limitados às próprias avaliações.</p>
       <p>A lista de avaliações retorna até 200 registros. As tabelas semanais de <strong>Dados</strong> e o histórico de IDS do <strong>Relatório IPF</strong> usam consolidações completas, sem esse limite da lista.</p>
       <p>As tabelas S1–S5 agrupam os dias 1–7, 8–14, 15–21, 22–28 e 29–31, excluindo domingos. Em <strong>Relatório IPF</strong>, use as abas <strong>Dados Relatório Mensal</strong> para consultar os dados e registrar o IPF, e <strong>Relatório IPF</strong> para consultar o histórico e imprimir o PDF.</p>
     </Chapter>

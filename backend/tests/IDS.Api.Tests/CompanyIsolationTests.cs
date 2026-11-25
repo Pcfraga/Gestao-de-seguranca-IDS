@@ -44,23 +44,55 @@ public sealed class CompanyIsolationTests
         var evaluationA = await CreateEvaluation(adminA);
         var commonEvaluation = await CreateEvaluation(commonA);
         var evaluationB = await CreateEvaluation(adminB);
-        Assert.Equal(2, (await adminA.GetFromJsonAsync<JsonElement[]>("/api/evaluations"))!.Length);
+        var adminList = (await adminA.GetFromJsonAsync<JsonElement[]>("/api/evaluations"))!;
+        Assert.Single(adminList);
+        Assert.Equal(evaluationA, adminList[0].GetProperty("id").GetGuid());
         Assert.Single((await adminB.GetFromJsonAsync<JsonElement[]>("/api/evaluations"))!);
         var commonList = (await commonA.GetFromJsonAsync<JsonElement[]>("/api/evaluations"))!;
         Assert.Single(commonList);
         Assert.Equal(commonEvaluation, commonList[0].GetProperty("id").GetGuid());
+        Assert.Equal(HttpStatusCode.NotFound, (await adminA.GetAsync($"/api/evaluations/{commonEvaluation}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await adminA.PutAsJsonAsync($"/api/evaluations/{commonEvaluation}", EvaluationRequest())).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await adminA.PostAsync($"/api/evaluations/{commonEvaluation}/submit", null)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await adminA.GetAsync($"/api/evaluations/{evaluationB}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await commonA.GetAsync($"/api/evaluations/{evaluationA}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await adminB.PutAsJsonAsync($"/api/evaluations/{evaluationA}", EvaluationRequest())).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await adminB.PostAsync($"/api/evaluations/{evaluationA}/submit", null)).StatusCode);
 
-        Assert.Equal(2, (await adminA.GetFromJsonAsync<JsonElement>("/api/dashboard/data")).GetProperty("evaluationCount").GetInt32());
+        Assert.Equal(1, (await adminA.GetFromJsonAsync<JsonElement>("/api/dashboard/data")).GetProperty("evaluationCount").GetInt32());
         Assert.Equal(1, (await adminB.GetFromJsonAsync<JsonElement>("/api/dashboard/data")).GetProperty("evaluationCount").GetInt32());
         Assert.Equal(1, (await commonA.GetFromJsonAsync<JsonElement>("/api/dashboard/data")).GetProperty("evaluationCount").GetInt32());
-        Assert.Equal(2, (await adminA.GetFromJsonAsync<JsonElement>("/api/dashboard/summary")).GetProperty("evaluationCount").GetInt32());
+        Assert.Equal(1, (await adminA.GetFromJsonAsync<JsonElement>("/api/dashboard/summary")).GetProperty("evaluationCount").GetInt32());
         Assert.Equal(1, (await adminB.GetFromJsonAsync<JsonElement>("/api/dashboard/summary")).GetProperty("evaluationCount").GetInt32());
         Assert.Equal(HttpStatusCode.NotFound, (await adminA.PutAsJsonAsync($"/api/auth/users/{usersB[0].Id}/active", new { active = false })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await adminA.PutAsJsonAsync($"/api/auth/users/{usersB[0].Id}/password", new { password = "Other-Password-123!" })).StatusCode);
+
+    }
+
+    [Fact]
+    public async Task ManagersCannotViewOrMutateAnotherUsersDraft()
+    {
+        using var factory = new CompanyApiFactory();
+        using var admin = factory.CreateClient();
+        using var manager = factory.CreateClient();
+        using var common = factory.CreateClient();
+        await RegisterAndLogin(admin, "Company A", "admin-drafts@example.com");
+
+        var managerResponse = await admin.PostAsJsonAsync("/api/auth/users",
+            new { email = "manager-drafts@example.com", displayName = "Manager", password = Password, role = "GESTOR" });
+        Assert.Equal(HttpStatusCode.Created, managerResponse.StatusCode);
+        var commonResponse = await admin.PostAsJsonAsync("/api/auth/users",
+            new { email = "common-drafts@example.com", displayName = "Common", password = Password, role = "AVALIADOR" });
+        Assert.Equal(HttpStatusCode.Created, commonResponse.StatusCode);
+        await Login(manager, "manager-drafts@example.com", Password);
+        await Login(common, "common-drafts@example.com", Password);
+
+        var draftId = await CreateEvaluation(common);
+        Assert.Empty((await manager.GetFromJsonAsync<JsonElement[]>("/api/evaluations"))!);
+        Assert.Equal(HttpStatusCode.NotFound, (await manager.GetAsync($"/api/evaluations/{draftId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await manager.PutAsJsonAsync($"/api/evaluations/{draftId}", EvaluationRequest())).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await manager.PostAsync($"/api/evaluations/{draftId}/submit", null)).StatusCode);
+        Assert.Single((await common.GetFromJsonAsync<JsonElement[]>("/api/evaluations"))!);
     }
 
     [Fact]
