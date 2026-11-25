@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Activity, BarChart3, FileDown, UsersRound } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { apiRequest, type DataConsolidation, type InspectionArea, type InspectionScope, inspectionScopeQuery } from '../lib/api'
+import { ApiError, apiRequest, type DataConsolidation, type InspectionArea, type InspectionScope, inspectionScopeQuery } from '../lib/api'
 import { IndicatorResult } from './IndicatorResult'
 import { formatPercent, severityWithPercentages } from '../lib/severityChart'
 import { formatIds } from '../lib/indicatorFormat'
@@ -15,6 +15,10 @@ const weekdayLabels = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábad
 
 type MonthlyGroup = DataConsolidation['monthlyGroups'][number]
 type MonthlyCloseGroup = MonthlyGroup & { disciplineId: string; disciplineName: string }
+interface MonthlyCloseComposition {
+  siteId: string
+  areas: Array<{ areaId: string; weight: number }>
+}
 const pdfColorFields: Array<{ key: PdfColorKey; label: string }> = [
   { key: 'low', label: 'Severidade baixa' },
   { key: 'medium', label: 'Severidade média' },
@@ -41,6 +45,20 @@ function formatNumber(value: number) {
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 }
 
+function defaultDisciplineWeights(areas: InspectionArea[]) {
+  const participating = areas.slice(0, 4)
+  const equal = Math.floor(10000 / Math.max(participating.length, 1)) / 100
+  return areas.reduce<Record<string, string>>((result, area, index) => {
+    const participatingIndex = participating.indexOf(area)
+    result[area.id] = participatingIndex < 0
+      ? '0'
+      : String(index === participating.length - 1
+        ? Math.round((100 - equal * (participating.length - 1)) * 100) / 100
+        : equal)
+    return result
+  }, {})
+}
+
 function companyKey(group: MonthlyGroup) {
   return group.contractorId ?? group.contractor ?? 'unknown-company'
 }
@@ -62,7 +80,7 @@ function groupLabel(group: MonthlyGroup) {
   return `${group.site ?? 'Projeto não informado'} · ${group.projectOrIsland ?? 'Ilha não informada'}`
 }
 
-export function MonthlyCloseReport({ month, scope }: { month: string; scope: InspectionScope }) {
+export function MonthlyCloseReport({ month, scope, canSave }: { month: string; scope: InspectionScope; canSave: boolean }) {
   const [groups, setGroups] = useState<MonthlyCloseGroup[]>([])
   const [areas, setAreas] = useState<InspectionArea[]>([])
   const [weights, setWeights] = useState<Record<string, string>>({})
@@ -71,11 +89,15 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
   const [selectedCompany, setSelectedCompany] = useState('')
   const [selectedProject, setSelectedProject] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
-  const [includeAllDisciplines, setIncludeAllDisciplines] = useState(false)
+  const [disciplineMode, setDisciplineMode] = useState<'selected' | 'all-weighted' | 'all-simple'>('selected')
+  const [compositionProject, setCompositionProject] = useState('')
+  const [isSavingComposition, setIsSavingComposition] = useState(false)
+  const [compositionMessage, setCompositionMessage] = useState('')
   const [exportError, setExportError] = useState('')
   const [pdfSettings, setPdfSettings] = useState(readPdfOptions)
   const scopedQuery = inspectionScopeQuery(scope)
-  const query = includeAllDisciplines ? 'all-disciplines' : scopedQuery
+  const includeAllDisciplines = disciplineMode !== 'selected'
+  const query = includeAllDisciplines ? disciplineMode : scopedQuery
   const requestKey = `${month}:${query}`
 
   useEffect(() => {
@@ -110,13 +132,7 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
         setGroups(loadedGroups)
         setWeights(current => {
           if (loadedAreas.every(area => current[area.id] !== undefined)) return current
-          const equal = Math.floor(10000 / Math.max(loadedAreas.length, 1)) / 100
-          return loadedAreas.reduce<Record<string, string>>((result, area, index) => {
-            result[area.id] = String(index === loadedAreas.length - 1
-              ? Math.round((100 - equal * (loadedAreas.length - 1)) * 100) / 100
-              : equal)
-            return result
-          }, {})
+          return defaultDisciplineWeights(loadedAreas)
         })
       })
       .catch((loadError: unknown) => {
@@ -215,13 +231,71 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
       .filter(area => area.average !== null && area.weight > 0)
       .reduce((sum, area) => sum + area.average! * area.weight, 0) / participatingWeight
     : null
-  const averageIds = includeAllDisciplines ? weightedAverageIds : simpleAverageIds
+  const averageIds = disciplineMode === 'all-weighted' ? weightedAverageIds : simpleAverageIds
   const evaluationCount = sumGroups(visibleGroups, group => group.evaluationCount)
   const observedPeople = sumGroups(visibleGroups, group => group.observedPeople)
   const totalDeviations = sumGroups(visibleGroups, group => group.totalDeviations)
   const weightedDeviation = sumGroups(visibleGroups, group => group.weightedDeviationTotal)
   const isLoading = loadedKey !== requestKey
   const error = loadError?.key === requestKey ? loadError.message : ''
+
+  useEffect(() => {
+    if (!activeProject || !areas.length || activeProject.startsWith('unknown')) {
+      setCompositionProject('')
+      return
+    }
+    let active = true
+    setCompositionMessage('')
+    apiRequest<MonthlyCloseComposition>(`/api/monthly-close-compositions/${activeProject}`)
+      .then(composition => {
+        if (!active) return
+        setWeights(current => {
+          const next = { ...current }
+          composition.areas.forEach(area => { next[area.areaId] = String(area.weight) })
+          areas.forEach(area => {
+            if (!composition.areas.some(value => value.areaId === area.id)) next[area.id] = '0'
+          })
+          return next
+        })
+        setCompositionProject(activeProject)
+        setDisciplineMode(current => current === 'selected' ? 'all-weighted' : current)
+        setCompositionMessage('Composição salva deste projeto carregada.')
+      })
+      .catch(requestError => {
+        if (!active) return
+        if (requestError instanceof ApiError && requestError.status === 404) {
+          setWeights(defaultDisciplineWeights(areas))
+          setCompositionProject(activeProject)
+          setCompositionMessage('Este projeto ainda não tem uma composição salva.')
+          return
+        }
+        setExportError(requestError instanceof Error ? requestError.message : 'Não foi possível carregar a composição do projeto.')
+      })
+    return () => { active = false }
+  }, [activeProject, areas])
+
+  async function saveComposition() {
+    if (!activeProject || !validDisciplineWeights || !canSave) return
+    setIsSavingComposition(true)
+    setExportError('')
+    setCompositionMessage('')
+    try {
+      await apiRequest<MonthlyCloseComposition>(`/api/monthly-close-compositions/${activeProject}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          areas: areas
+            .filter(area => (Number(weights[area.id]) || 0) > 0)
+            .map(area => ({ areaId: area.id, weight: Number(weights[area.id]) })),
+        }),
+      })
+      setCompositionProject(activeProject)
+      setCompositionMessage('Composição do projeto salva. Ela será aplicada nos próximos fechamentos.')
+    } catch (requestError) {
+      setExportError(requestError instanceof Error ? requestError.message : 'Não foi possível salvar a composição do projeto.')
+    } finally {
+      setIsSavingComposition(false)
+    }
+  }
 
   function updatePdfOptions(options: MonthlyClosePdfOptions) {
     try {
@@ -239,7 +313,9 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
       company: activeCompany ? visibleGroups[0]?.contractor ?? (pdfSettings.options.language === 'en' ? 'Company not specified' : 'Empresa não informada') : null,
       project: activeProject ? visibleGroups[0]?.site ?? (pdfSettings.options.language === 'en' ? 'Project not specified' : 'Projeto não informado') : null,
       island: scope.islandName ?? null,
-      area: includeAllDisciplines ? 'Todas as disciplinas' : scope.areaName,
+      area: includeAllDisciplines
+        ? disciplineMode === 'all-weighted' ? 'Todas as disciplinas · composição ponderada' : 'Todas as disciplinas · média simples'
+        : scope.areaName,
       form: includeAllDisciplines ? 'Todos os formulários' : scope.formName,
       ids: averageIds,
       evaluations: evaluationCount,
@@ -267,16 +343,20 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
       </div>
         : <>
           <section className="metric-grid" aria-label="Resumo do fechamento mensal">
-            <article className="metric-card"><p className="metric-label">IDS médio</p><strong className="metric-value"><IndicatorResult kind="ids" value={averageIds} /></strong><span className="metric-note">{includeAllDisciplines ? 'Média ponderada pelas disciplinas' : 'Média das avaliações com IDS calculado'}</span></article>
+            <article className="metric-card"><p className="metric-label">IDS médio</p><strong className="metric-value"><IndicatorResult kind="ids" value={averageIds} /></strong><span className="metric-note">{disciplineMode === 'all-weighted' ? 'Média ponderada pelas disciplinas' : 'Média das avaliações com IDS calculado'}</span></article>
             <article className="metric-card"><p className="metric-label">Avaliações</p><strong className="metric-value">{evaluationCount.toLocaleString('pt-BR')}</strong><span className="metric-note">No recorte selecionado</span></article>
             <article className="metric-card"><p className="metric-label">Pessoas observadas</p><strong className="metric-value">{formatNumber(observedPeople)}</strong><span className="metric-note">Total do mês</span></article>
             <article className="metric-card"><p className="metric-label">Desvios registrados</p><strong className="metric-value">{formatNumber(totalDeviations)}</strong><span className="metric-note">Todas as severidades</span></article>
           </section>
 
           <section className="monthly-close-filters panel" aria-label="Filtros por empresa e projeto">
-            <label>Disciplinas<select value={includeAllDisciplines ? 'all' : 'selected'} onChange={event => setIncludeAllDisciplines(event.target.value === 'all')}>
+            <label>Disciplinas<select value={disciplineMode} onChange={event => {
+              const value = event.target.value
+              if (value === 'selected' || value === 'all-weighted' || value === 'all-simple') setDisciplineMode(value)
+            }}>
               <option value="selected">{scope.areaName} · {scope.formName}</option>
-              <option value="all">Todas as disciplinas</option>
+              <option value="all-weighted">Todas com composição do projeto</option>
+              <option value="all-simple">Todas sem composição</option>
             </select></label>
             <label>Empresa<select value={activeCompany} onChange={event => {
               setSelectedCompany(event.target.value)
@@ -293,16 +373,26 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
             <button type="button" className="outline-button" onClick={exportSummary}><FileDown size={16} />PDF para apresentação</button>
           </section>
 
-          {includeAllDisciplines && <section className="panel ipf-composition-fields" aria-label="Pesos das disciplinas">
+          {disciplineMode === 'all-simple' && <p className="metric-note panel">Exibindo a média simples das avaliações concluídas de todas as disciplinas, sem aplicar percentuais.</p>}
+
+          {disciplineMode === 'all-weighted' && <section className="panel ipf-composition-fields" aria-label="Pesos das disciplinas">
             <div className="panel-heading"><div><h2>Pesos das disciplinas</h2><p>O IDS final usa a média de cada disciplina com os percentuais definidos. Áreas sem média não participam e os pesos são ajustados proporcionalmente.</p></div></div>
             <div className="ipf-weight-row">
               {areas.map(area => <label key={area.id}>{area.name}
-                <input type="number" min={0} max={100} step="0.01" value={weights[area.id] ?? '0'}
+                <input type="number" min={0} max={100} step="0.01" disabled={!canSave} value={weights[area.id] ?? '0'}
                   onChange={event => setWeights(current => ({ ...current, [area.id]: event.target.value }))} />
               </label>)}
             </div>
             <strong>Total definido: {totalDisciplineWeight.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</strong>
             {!validDisciplineWeights && <p role="alert">Defina de uma a quatro disciplinas com peso positivo e totalize 100%.</p>}
+            {!activeProject && <p role="status">Selecione um projeto para carregar ou salvar sua composição.</p>}
+            {compositionMessage && <p role="status">{compositionMessage}</p>}
+            <div className="ipf-composition-actions">
+              <button type="button" className="outline-button"
+                disabled={!canSave || !activeProject || activeProject.startsWith('unknown') || !validDisciplineWeights || isSavingComposition || compositionProject !== activeProject}
+                onClick={() => void saveComposition()}>Salvar composição do projeto</button>
+              {!canSave && <p className="ipf-composition-rule">Somente Administrador e Gestor podem salvar a composição do projeto.</p>}
+            </div>
           </section>}
 
           <details className="panel monthly-close-pdf-options">

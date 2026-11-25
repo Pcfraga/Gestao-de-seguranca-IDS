@@ -45,6 +45,8 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
     public DbSet<IpfComposition> IpfCompositions => Set<IpfComposition>();
 
     public DbSet<IpfCompositionArea> IpfCompositionAreas => Set<IpfCompositionArea>();
+    public DbSet<MonthlyCloseComposition> MonthlyCloseCompositions => Set<MonthlyCloseComposition>();
+    public DbSet<MonthlyCloseCompositionArea> MonthlyCloseCompositionAreas => Set<MonthlyCloseCompositionArea>();
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
@@ -81,6 +83,8 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
         ConfigureTenant<MonthlyIpfRecord>(builder);
         ConfigureTenant<IpfComposition>(builder);
         ConfigureTenant<IpfCompositionArea>(builder);
+        ConfigureTenant<MonthlyCloseComposition>(builder);
+        ConfigureTenant<MonthlyCloseCompositionArea>(builder);
         ConfigureTenant<ReportSettings>(builder);
         ConfigureTenant<AuditEvent>(builder);
         ConfigureTenant<InspectionForm>(builder);
@@ -279,6 +283,25 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
             entity.Property(value => value.Tagline).HasMaxLength(160).IsRequired();
             entity.Property(value => value.PrimaryColor).HasMaxLength(7).IsRequired();
             entity.HasIndex(value => value.TenantId).IsUnique();
+            entity.ConfigureAuditFields();
+        });
+
+        builder.Entity<MonthlyCloseComposition>(entity =>
+        {
+            entity.ToTable("monthly_close_compositions");
+            entity.HasIndex(value => new { value.TenantId, value.SiteId }).IsUnique();
+            entity.HasOne(value => value.Site).WithMany()
+                .HasForeignKey(value => value.SiteId).OnDelete(DeleteBehavior.Cascade);
+            entity.ConfigureAuditFields();
+        });
+
+        builder.Entity<MonthlyCloseCompositionArea>(entity =>
+        {
+            entity.ToTable("monthly_close_composition_areas");
+            entity.Property(value => value.Weight).HasPrecision(5, 2);
+            entity.HasIndex(value => new { value.CompositionId, value.AreaId }).IsUnique();
+            entity.HasOne(value => value.Composition).WithMany(value => value.Areas)
+                .HasForeignKey(value => value.CompositionId).OnDelete(DeleteBehavior.Cascade);
             entity.ConfigureAuditFields();
         });
 

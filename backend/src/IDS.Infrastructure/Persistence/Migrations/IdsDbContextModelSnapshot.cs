@@ -940,6 +940,85 @@ namespace IDS.Infrastructure.Persistence.Migrations
                     b.ToTable("ipf_composition_areas", (string)null);
                 });
 
+            modelBuilder.Entity("IDS.Domain.Entities.MonthlyCloseComposition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<Guid>("SiteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SiteId");
+
+                    b.HasIndex("TenantId", "SiteId")
+                        .IsUnique();
+
+                    b.ToTable("monthly_close_compositions", (string)null);
+                });
+
+            modelBuilder.Entity("IDS.Domain.Entities.MonthlyCloseCompositionArea", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AreaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompositionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<decimal>("Weight")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("CompositionId", "AreaId")
+                        .IsUnique();
+
+                    b.ToTable("monthly_close_composition_areas", (string)null);
+                });
+
             modelBuilder.Entity("IDS.Domain.Entities.MonthlyIpfRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1794,6 +1873,40 @@ namespace IDS.Infrastructure.Persistence.Migrations
                     b.Navigation("Composition");
                 });
 
+            modelBuilder.Entity("IDS.Domain.Entities.MonthlyCloseComposition", b =>
+                {
+                    b.HasOne("IDS.Domain.Entities.Site", "Site")
+                        .WithMany()
+                        .HasForeignKey("SiteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("IDS.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Site");
+                });
+
+            modelBuilder.Entity("IDS.Domain.Entities.MonthlyCloseCompositionArea", b =>
+                {
+                    b.HasOne("IDS.Domain.Entities.MonthlyCloseComposition", "Composition")
+                        .WithMany("Areas")
+                        .HasForeignKey("CompositionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("IDS.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Composition");
+                });
+
             modelBuilder.Entity("IDS.Domain.Entities.MonthlyIpfRecord", b =>
                 {
                     b.HasOne("IDS.Domain.Entities.InspectionArea", null)
@@ -1953,6 +2066,11 @@ namespace IDS.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("IDS.Domain.Entities.IpfComposition", b =>
+                {
+                    b.Navigation("Areas");
+                });
+
+            modelBuilder.Entity("IDS.Domain.Entities.MonthlyCloseComposition", b =>
                 {
                     b.Navigation("Areas");
                 });

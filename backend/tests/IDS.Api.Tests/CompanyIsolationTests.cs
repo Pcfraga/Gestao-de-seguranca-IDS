@@ -96,6 +96,41 @@ public sealed class CompanyIsolationTests
     }
 
     [Fact]
+    public async Task MonthlyCloseCompositionPersistsPerProjectAndIsCompanyScoped()
+    {
+        using var factory = new CompanyApiFactory();
+        using var admin = factory.CreateClient();
+        using var other = factory.CreateClient();
+        await RegisterAndLogin(admin, "Company A", "composition-a@example.com");
+        await RegisterAndLogin(other, "Company B", "composition-b@example.com");
+
+        var siteResponse = await admin.PostAsJsonAsync("/api/catalog/sites", new { name = "Projeto A" });
+        Assert.Equal(HttpStatusCode.Created, siteResponse.StatusCode);
+        var siteId = (await siteResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var areaResponse = await admin.PostAsJsonAsync("/api/inspection-areas", new { name = "Meio Ambiente" });
+        Assert.Equal(HttpStatusCode.Created, areaResponse.StatusCode);
+        var areaId = (await areaResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var request = new
+        {
+            areas = new[]
+            {
+                new { areaId = Guid.Empty, weight = 60m },
+                new { areaId, weight = 40m }
+            }
+        };
+
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync($"/api/monthly-close-compositions/{siteId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync($"/api/monthly-close-compositions/{siteId}", request)).StatusCode);
+        var saved = await admin.GetFromJsonAsync<JsonElement>($"/api/monthly-close-compositions/{siteId}");
+        Assert.Equal(2, saved.GetProperty("areas").GetArrayLength());
+        Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync($"/api/monthly-close-compositions/{siteId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await other.PutAsJsonAsync($"/api/monthly-close-compositions/{siteId}", request)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync(
+            $"/api/monthly-close-compositions/{siteId}",
+            new { areas = new[] { new { areaId = Guid.Empty, weight = 99m } } })).StatusCode);
+    }
+
+    [Fact]
     public async Task AdministratorsAndManagersCanDeleteOnlyCommonUsersFromTheirCompany()
     {
         using var factory = new CompanyApiFactory();
