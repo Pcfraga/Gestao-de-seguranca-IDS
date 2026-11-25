@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Activity, BarChart3, FileDown, UsersRound } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { apiRequest, type DataConsolidation, type InspectionScope, inspectionScopeQuery } from '../lib/api'
+import { apiRequest, type DataConsolidation, type InspectionArea, type InspectionScope, inspectionScopeQuery } from '../lib/api'
 import { IndicatorResult } from './IndicatorResult'
 import { formatPercent, severityWithPercentages } from '../lib/severityChart'
 import { formatIds } from '../lib/indicatorFormat'
@@ -14,6 +14,7 @@ const categoryColors = ['#4472c4', '#ed7d31', '#a5a5a5', '#ffc000', '#5b9bd5', '
 const weekdayLabels = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 
 type MonthlyGroup = DataConsolidation['monthlyGroups'][number]
+type MonthlyCloseGroup = MonthlyGroup & { disciplineId: string; disciplineName: string }
 const pdfColorFields: Array<{ key: PdfColorKey; label: string }> = [
   { key: 'low', label: 'Severidade baixa' },
   { key: 'medium', label: 'Severidade média' },
@@ -53,7 +54,8 @@ function sumGroups(groups: MonthlyGroup[], pick: (group: MonthlyGroup) => number
 }
 
 function groupIdentity(group: MonthlyGroup) {
-  return `${companyKey(group)}|${projectKey(group)}|${group.projectOrIsland ?? ''}`
+  const discipline = 'disciplineId' in group ? String(group.disciplineId) : ''
+  return `${discipline}|${companyKey(group)}|${projectKey(group)}|${group.projectOrIsland ?? ''}`
 }
 
 function groupLabel(group: MonthlyGroup) {
@@ -61,27 +63,65 @@ function groupLabel(group: MonthlyGroup) {
 }
 
 export function MonthlyCloseReport({ month, scope }: { month: string; scope: InspectionScope }) {
-  const [data, setData] = useState<DataConsolidation | null>(null)
+  const [groups, setGroups] = useState<MonthlyCloseGroup[]>([])
+  const [areas, setAreas] = useState<InspectionArea[]>([])
+  const [weights, setWeights] = useState<Record<string, string>>({})
   const [loadedKey, setLoadedKey] = useState('')
   const [loadError, setLoadError] = useState<{ key: string; message: string } | null>(null)
   const [selectedCompany, setSelectedCompany] = useState('')
   const [selectedProject, setSelectedProject] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
+  const [includeAllDisciplines, setIncludeAllDisciplines] = useState(false)
   const [exportError, setExportError] = useState('')
   const [pdfSettings, setPdfSettings] = useState(readPdfOptions)
-  const query = inspectionScopeQuery(scope)
+  const scopedQuery = inspectionScopeQuery(scope)
+  const query = includeAllDisciplines ? 'all-disciplines' : scopedQuery
   const requestKey = `${month}:${query}`
 
   useEffect(() => {
     let active = true
     const parameters = new URLSearchParams(monthRange(month))
-    apiRequest<DataConsolidation>(`/api/dashboard/data?${parameters}&${query}`)
-      .then(result => {
-        if (active) setData(result)
+    Promise.all([
+      apiRequest<InspectionArea[]>('/api/inspection-areas'),
+      !includeAllDisciplines
+        ? apiRequest<DataConsolidation>(`/api/dashboard/data?${parameters}&${scopedQuery}`)
+          .then(result => result.monthlyGroups.map(group => ({
+            ...group, disciplineId: scope.areaId, disciplineName: scope.areaName,
+          })))
+        : apiRequest<InspectionArea[]>('/api/inspection-areas').then(async loadedAreas => {
+          const base = new URLSearchParams()
+          if (scope.islandId) base.set('islandId', scope.islandId)
+          if (scope.siteId) base.set('siteId', scope.siteId)
+          if (scope.contractorId) base.set('contractorId', scope.contractorId)
+          const byArea = await Promise.all(loadedAreas.map(async area => {
+            const areaParameters = new URLSearchParams(parameters)
+            areaParameters.set('areaId', area.id)
+            const data = await apiRequest<DataConsolidation>(`/api/dashboard/data?${areaParameters}&${base}`)
+            return data.monthlyGroups.map(group => ({
+              ...group, disciplineId: area.id, disciplineName: area.name,
+            }))
+          }))
+          return byArea.flat()
+        }),
+    ])
+      .then(([loadedAreas, loadedGroups]) => {
+        if (!active) return
+        setAreas(loadedAreas)
+        setGroups(loadedGroups)
+        setWeights(current => {
+          if (loadedAreas.every(area => current[area.id] !== undefined)) return current
+          const equal = Math.floor(10000 / Math.max(loadedAreas.length, 1)) / 100
+          return loadedAreas.reduce<Record<string, string>>((result, area, index) => {
+            result[area.id] = String(index === loadedAreas.length - 1
+              ? Math.round((100 - equal * (loadedAreas.length - 1)) * 100) / 100
+              : equal)
+            return result
+          }, {})
+        })
       })
       .catch((loadError: unknown) => {
         if (active) {
-          setData(null)
+          setGroups([])
           setLoadError({
             key: requestKey,
             message: loadError instanceof Error ? loadError.message : 'Não foi possível carregar o fechamento mensal.',
@@ -92,9 +132,8 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
         if (active) setLoadedKey(requestKey)
       })
     return () => { active = false }
-  }, [month, query, requestKey])
+  }, [includeAllDisciplines, month, requestKey, scope.areaId, scope.areaName, scope.contractorId, scope.islandId, scope.siteId, scopedQuery])
 
-  const groups = data?.monthlyGroups ?? []
   const companies = [...new Map(groups.map(group => [companyKey(group), group.contractor ?? 'Empresa não informada'])).entries()]
     .sort((left, right) => left[1].localeCompare(right[1], 'pt-BR'))
   const activeCompany = companies.some(([key]) => key === selectedCompany) ? selectedCompany : ''
@@ -147,9 +186,36 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
   const categoryChartData = [...categoryTotals.values()].filter(item => item.quantity > 0)
   const itemChartData = [...itemTotals.values()].filter(item => item.quantity > 0)
   const scoredEvaluationCount = sumGroups(visibleGroups, group => group.scoredEvaluationCount)
-  const averageIds = scoredEvaluationCount
+  const simpleAverageIds = scoredEvaluationCount
     ? visibleGroups.reduce((sum, group) => sum + (group.idsAverage ?? 0) * group.scoredEvaluationCount, 0) / scoredEvaluationCount
     : null
+  const totalDisciplineWeight = areas.reduce((sum, area) => sum + (Number(weights[area.id]) || 0), 0)
+  const validDisciplineWeights = Math.abs(totalDisciplineWeight - 100) < 0.001
+    && areas.every(area => {
+      const value = Number(weights[area.id])
+      return Number.isFinite(value) && value >= 0 && value <= 100
+    })
+    && areas.filter(area => (Number(weights[area.id]) || 0) > 0).length <= 4
+  const disciplineAverages = areas.map(area => {
+    const areaGroups = visibleGroups.filter(group => group.disciplineId === area.id)
+    const scored = sumGroups(areaGroups, group => group.scoredEvaluationCount)
+    return {
+      id: area.id,
+      weight: Number(weights[area.id]) || 0,
+      average: scored
+        ? areaGroups.reduce((sum, group) => sum + (group.idsAverage ?? 0) * group.scoredEvaluationCount, 0) / scored
+        : null,
+    }
+  })
+  const participatingWeight = disciplineAverages
+    .filter(area => area.average !== null && area.weight > 0)
+    .reduce((sum, area) => sum + area.weight, 0)
+  const weightedAverageIds = validDisciplineWeights && participatingWeight > 0
+    ? disciplineAverages
+      .filter(area => area.average !== null && area.weight > 0)
+      .reduce((sum, area) => sum + area.average! * area.weight, 0) / participatingWeight
+    : null
+  const averageIds = includeAllDisciplines ? weightedAverageIds : simpleAverageIds
   const evaluationCount = sumGroups(visibleGroups, group => group.evaluationCount)
   const observedPeople = sumGroups(visibleGroups, group => group.observedPeople)
   const totalDeviations = sumGroups(visibleGroups, group => group.totalDeviations)
@@ -173,8 +239,8 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
       company: activeCompany ? visibleGroups[0]?.contractor ?? (pdfSettings.options.language === 'en' ? 'Company not specified' : 'Empresa não informada') : null,
       project: activeProject ? visibleGroups[0]?.site ?? (pdfSettings.options.language === 'en' ? 'Project not specified' : 'Projeto não informado') : null,
       island: scope.islandName ?? null,
-      area: scope.areaName,
-      form: scope.formName,
+      area: includeAllDisciplines ? 'Todas as disciplinas' : scope.areaName,
+      form: includeAllDisciplines ? 'Todos os formulários' : scope.formName,
       ids: averageIds,
       evaluations: evaluationCount,
       observedPeople,
@@ -201,13 +267,17 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
       </div>
         : <>
           <section className="metric-grid" aria-label="Resumo do fechamento mensal">
-            <article className="metric-card"><p className="metric-label">IDS médio</p><strong className="metric-value"><IndicatorResult kind="ids" value={averageIds} /></strong><span className="metric-note">Média das avaliações com IDS calculado</span></article>
+            <article className="metric-card"><p className="metric-label">IDS médio</p><strong className="metric-value"><IndicatorResult kind="ids" value={averageIds} /></strong><span className="metric-note">{includeAllDisciplines ? 'Média ponderada pelas disciplinas' : 'Média das avaliações com IDS calculado'}</span></article>
             <article className="metric-card"><p className="metric-label">Avaliações</p><strong className="metric-value">{evaluationCount.toLocaleString('pt-BR')}</strong><span className="metric-note">No recorte selecionado</span></article>
             <article className="metric-card"><p className="metric-label">Pessoas observadas</p><strong className="metric-value">{formatNumber(observedPeople)}</strong><span className="metric-note">Total do mês</span></article>
             <article className="metric-card"><p className="metric-label">Desvios registrados</p><strong className="metric-value">{formatNumber(totalDeviations)}</strong><span className="metric-note">Todas as severidades</span></article>
           </section>
 
           <section className="monthly-close-filters panel" aria-label="Filtros por empresa e projeto">
+            <label>Disciplinas<select value={includeAllDisciplines ? 'all' : 'selected'} onChange={event => setIncludeAllDisciplines(event.target.value === 'all')}>
+              <option value="selected">{scope.areaName} · {scope.formName}</option>
+              <option value="all">Todas as disciplinas</option>
+            </select></label>
             <label>Empresa<select value={activeCompany} onChange={event => {
               setSelectedCompany(event.target.value)
               setSelectedProject('')
@@ -222,6 +292,18 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
             <span className="monthly-close-count"><Activity size={15} />{visibleGroups.length} combinação(ões) empresa/projeto</span>
             <button type="button" className="outline-button" onClick={exportSummary}><FileDown size={16} />PDF para apresentação</button>
           </section>
+
+          {includeAllDisciplines && <section className="panel ipf-composition-fields" aria-label="Pesos das disciplinas">
+            <div className="panel-heading"><div><h2>Pesos das disciplinas</h2><p>O IDS final usa a média de cada disciplina com os percentuais definidos. Áreas sem média não participam e os pesos são ajustados proporcionalmente.</p></div></div>
+            <div className="ipf-weight-row">
+              {areas.map(area => <label key={area.id}>{area.name}
+                <input type="number" min={0} max={100} step="0.01" value={weights[area.id] ?? '0'}
+                  onChange={event => setWeights(current => ({ ...current, [area.id]: event.target.value }))} />
+              </label>)}
+            </div>
+            <strong>Total definido: {totalDisciplineWeight.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</strong>
+            {!validDisciplineWeights && <p role="alert">Defina de uma a quatro disciplinas com peso positivo e totalize 100%.</p>}
+          </section>}
 
           <details className="panel monthly-close-pdf-options">
             <summary>Idioma e cores do PDF para apresentação</summary>
@@ -245,11 +327,12 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
           <article className="panel data-table-panel monthly-close-table-panel">
             <div className="panel-heading"><div><h2>Fechamento por empresa e projeto</h2><p>IDS semanal e indicadores consolidados do mês selecionado.</p></div></div>
             <div className="table-scroll"><table><thead><tr>
-              <th>Empresa</th><th>Projeto / local</th><th>Ilha</th>{Array.from({ length: 5 }, (_, index) => <th key={index}>IDS S{index + 1}</th>)}
+              <th>Disciplina</th><th>Empresa</th><th>Projeto / local</th><th>Ilha</th>{Array.from({ length: 5 }, (_, index) => <th key={index}>IDS S{index + 1}</th>)}
               <th>IDS médio</th><th>Pessoas</th><th>Desvios</th><th>Risco ponderado</th><th>Baixa</th><th>Média</th><th>Alta</th>
               <th>Baixa (%)</th><th>Média (%)</th><th>Alta (%)</th>
             </tr></thead><tbody>
               {visibleGroups.map(group => <tr key={groupIdentity(group)}>
+                <td>{group.disciplineName}</td>
                 <td>{group.contractor ?? 'Empresa não informada'}</td>
                 <td>{group.site ?? 'Projeto não informado'}</td><td>{group.projectOrIsland ?? 'Não informada'}</td>
                 {Array.from({ length: 5 }, (_, index) => <td key={index}>{formatIds(group.weeks.find(week => week.weekNumber === index + 1)?.idsAverage)}</td>)}
