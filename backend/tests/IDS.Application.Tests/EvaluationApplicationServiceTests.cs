@@ -266,6 +266,7 @@ public sealed class EvaluationApplicationServiceTests
 
         Assert.NotNull(submitted);
         Assert.Equal("Submitted", submitted.Status);
+        Assert.Null(submitted.CompanionName);
         Assert.Null(submitted.Strengths);
         Assert.Null(submitted.ImprovementOpportunities);
         var retried = await service.SubmitDraftAsync(created.Id, CancellationToken.None);
@@ -333,7 +334,7 @@ public sealed class EvaluationApplicationServiceTests
         evaluation.ContractorOrganizationId = Guid.NewGuid();
         evaluation.LeadAuditorName = "Auditor líder";
         evaluation.AuditorName = null;
-        evaluation.CompanionName = "Acompanhante";
+        evaluation.CompanionName = null;
         evaluation.Strengths = null;
         evaluation.ImprovementOpportunities = null;
     }

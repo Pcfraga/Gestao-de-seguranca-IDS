@@ -179,7 +179,6 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
         !contractorId && 'Contratada',
         !leadAuditorName.trim() && 'Auditor líder',
         !observedPeople.trim() && 'Pessoas observadas',
-        !companionName.trim() && 'Acompanhante',
       ].filter((field): field is string => Boolean(field))
       const hasIncompleteObservation = catalog.categories.some(category => category.items.some(item => {
         const observation = observations[item.id]
@@ -312,7 +311,7 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
             <label>Contratada<select value={contractorId} onChange={event => setContractorId(event.target.value)}><option value="">Selecionar contratada</option>{catalog.organizations.filter(organization => organization.kind === 'Contractor' && (organization.isActive || organization.id === contractorId)).map(organization => <option key={organization.id} value={organization.id}>{organization.name}{!organization.isActive ? ' (desativada)' : ''}</option>)}</select></label>
             <label>Auditor líder<input onChange={(event) => setLeadAuditorName(event.target.value)} value={leadAuditorName} /></label>
             <label>Auditor secundário (opcional)<input onChange={(event) => setAuditorName(event.target.value)} value={auditorName} /></label>
-            <label>Acompanhante<input onChange={(event) => setCompanionName(event.target.value)} value={companionName} /></label>
+            <label>Acompanhante (opcional)<input onChange={(event) => setCompanionName(event.target.value)} value={companionName} /></label>
           </div>
         </section>
 
@@ -342,7 +341,7 @@ export function EvaluationForm({ evaluationId, initialScope, canCreateCatalog, o
         </section>
 
         {submitError && <div className="form-error" role="alert">{submitError}</div>}
-        <div className="form-submit-row"><span>Auditor secundário, comentários, pontos fortes e oportunidades de melhoria são opcionais. Sem sinal, os dados ficam salvos neste aparelho até a sincronização.</span><div className="evaluation-actions"><button className="outline-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="draft"><Save size={16} />{isSaving ? 'Salvando…' : navigator.onLine ? 'Salvar rascunho' : 'Salvar offline'}</button><button className="primary-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="submit"><Check size={16} />{isSaving ? 'Enviando…' : navigator.onLine ? 'Enviar avaliação' : 'Enviar depois'}</button></div></div>
+        <div className="form-submit-row"><span>Auditor secundário, acompanhante, comentários, pontos fortes e oportunidades de melhoria são opcionais. Sem sinal, os dados ficam salvos neste aparelho até a sincronização.</span><div className="evaluation-actions"><button className="outline-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="draft"><Save size={16} />{isSaving ? 'Salvando…' : navigator.onLine ? 'Salvar rascunho' : 'Salvar offline'}</button><button className="primary-button" disabled={isSaving || isChangingForm} name="intent" type="submit" value="submit"><Check size={16} />{isSaving ? 'Enviando…' : navigator.onLine ? 'Enviar avaliação' : 'Enviar depois'}</button></div></div>
       </form>}
     </div>
   )
