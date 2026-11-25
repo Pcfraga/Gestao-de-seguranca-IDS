@@ -45,6 +45,10 @@ function formatNumber(value: number) {
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 }
 
+function roundIds(value: number) {
+  return Math.round((value + Number.EPSILON) * 10000) / 10000
+}
+
 function defaultDisciplineWeights(areas: InspectionArea[]) {
   const participating = areas.slice(0, 4)
   const equal = Math.floor(10000 / Math.max(participating.length, 1)) / 100
@@ -227,9 +231,9 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
     .filter(area => area.average !== null && area.weight > 0)
     .reduce((sum, area) => sum + area.weight, 0)
   const weightedAverageIds = activeProject && validDisciplineWeights && participatingWeight > 0
-    ? disciplineAverages
+    ? roundIds(disciplineAverages
       .filter(area => area.average !== null && area.weight > 0)
-      .reduce((sum, area) => sum + area.average! * area.weight, 0) / participatingWeight
+      .reduce((sum, area) => sum + area.average! * area.weight, 0) / participatingWeight)
     : null
   const averageIds = disciplineMode === 'all-weighted' ? weightedAverageIds : simpleAverageIds
   const evaluationCount = sumGroups(visibleGroups, group => group.evaluationCount)
@@ -384,6 +388,18 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
               </label>)}
             </div>
             <strong>Total definido: {totalDisciplineWeight.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</strong>
+            <div className="table-scroll"><table><thead><tr><th>Disciplina</th><th>Peso definido</th><th>Média usada</th><th>Contribuição</th></tr></thead><tbody>
+              {disciplineAverages.filter(area => area.weight > 0).map(area => {
+                const effectiveWeight = area.average === null ? 0 : area.weight * 100 / participatingWeight
+                const contribution = area.average === null ? null : area.average * area.weight / participatingWeight
+                return <tr key={area.id}>
+                  <td>{areas.find(value => value.id === area.id)?.name ?? 'Disciplina'}</td>
+                  <td>{formatNumber(area.weight)}%</td>
+                  <td>{formatIds(area.average)}</td>
+                  <td>{effectiveWeight === 0 ? 'Não participa' : formatIds(contribution)}</td>
+                </tr>
+              })}
+            </tbody></table></div>
             {!validDisciplineWeights && <p role="alert">Defina de uma a quatro disciplinas com peso positivo e totalize 100%.</p>}
             {!activeProject && <div className="form-error" role="status">Selecione um projeto / local antes de calcular ou salvar. A composição não é calculada por contratada.</div>}
             {compositionMessage && <p role="status">{compositionMessage}</p>}
