@@ -135,6 +135,10 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
             record.EvaluationDate,
             IdsCalculator.Calculate(record.Observations, record.ObservedPeople ?? 0m).Score,
             record.SiteId)).ToArray();
+        var validIds = trend
+            .Where(point => point.Ids.HasValue)
+            .Select(point => point.Ids!.Value)
+            .ToArray();
         return new DashboardSummaryDto(
             totals.EvaluationCount,
             totals.ObservedPeopleTotal,
@@ -145,8 +149,8 @@ public sealed class EvaluationApplicationService(IEvaluationRepository repositor
             CalculateShare(totals.LowSeverityDeviations, totals.TotalDeviations),
             CalculateShare(totals.MediumSeverityDeviations, totals.TotalDeviations),
             CalculateShare(totals.HighSeverityDeviations, totals.TotalDeviations),
-            null,
-            "requires-calendar-rule-validation",
+            validIds.Length > 0 ? validIds.Average() : null,
+            validIds.Length > 0 ? "average-of-submitted-evaluations" : "no-scored-evaluations",
             trend);
     }
 

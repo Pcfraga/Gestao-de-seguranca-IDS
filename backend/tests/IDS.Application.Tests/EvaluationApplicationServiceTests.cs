@@ -92,7 +92,8 @@ public sealed class EvaluationApplicationServiceTests
         Assert.Equal(2m, totals.LowSeverityDeviations);
         Assert.Equal(0m, totals.MediumSeverityDeviations);
         Assert.Equal(0m, totals.HighSeverityDeviations);
-        Assert.Null(totals.Ids);
+        Assert.Equal(0.7m, totals.Ids);
+        Assert.Equal("average-of-submitted-evaluations", totals.IdsStatus);
         Assert.Equal(0.7m, totals.Trend.Single().Ids);
     }
 

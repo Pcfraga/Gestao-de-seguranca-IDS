@@ -253,7 +253,7 @@ Os nomes são contratos candidatos, sujeitos à validação do modelo e das regr
 | Avaliações | `GET /api/evaluations`, `POST /api/evaluations`, `GET /api/evaluations/{id}`, `PUT /api/evaluations/{id}`, `POST /api/evaluations/{id}/submit` | Consultar, criar, editar e finalizar uma avaliação |
 | Catálogos | `GET /api/categories`, `GET /api/checklist-items`, `GET /api/severities`, `GET/POST/PUT /api/sites` | Listas usadas em formulário e configuração autorizada |
 | Indicadores | `GET /api/evaluations/{id}/indicators`, `GET /api/indicators/summary` | Resultado diário e indicadores filtrados |
-| Dashboard | `GET /api/dashboard/summary?from=&to=&siteId=&contractorId=`, `GET /api/dashboard/data?from=&to=&siteId=&contractorId=` | KPIs e consolidação por data, categoria, item e severidade; agrupamento semanal pendente de regra validada |
+| Dashboard | `GET /api/dashboard/summary?from=&to=&siteId=&contractorId=`, `GET /api/dashboard/data?from=&to=&siteId=&contractorId=` | KPIs e consolidação por data, categoria, item e severidade; IDS do período calculado pela média das avaliações enviadas com nota |
 | Relatório IPF | `GET /api/reports/ipf/{year}?contractorId=`, `PUT /api/reports/ipf/{year}/{month}` | Consultar histórico anual e registrar IPF mensal manual; sem cálculo automático ou geração PDF |
 | Histórico | `GET /api/indicator-history?indicator=&from=&to=` | Consultar histórico calculado e importado com origem |
 | Exportação | `POST /api/exports/evaluations`, `POST /api/exports/reports/{year}/{month}` | Gerar Excel/PDF/impressão após as regras estarem validadas |

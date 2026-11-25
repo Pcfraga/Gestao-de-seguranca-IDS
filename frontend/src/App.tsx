@@ -452,7 +452,7 @@ function Dashboard({ month, monthLabel, onOpenEvaluations, scopeQuery }: { month
         {metrics.map(({ label, icon: Icon, note, tone }, index) => (
           <article className="metric-card" key={label}>
             <div className="metric-topline"><span className={`metric-icon ${tone}`}><Icon size={18} strokeWidth={1.9} /></span><span className="metric-index">0{index + 1}</span></div>
-            <p className="metric-label">{label}</p><strong className="metric-value">{isLoadingSummary ? '…' : index === 0 ? <IndicatorResult kind="ids" value={summary?.ids} /> : metricValues[index]}</strong><span className="metric-note">{index === 0 ? 'Consolidação mensal pendente de regra validada' : note}</span>
+            <p className="metric-label">{label}</p><strong className="metric-value">{isLoadingSummary ? '…' : index === 0 ? <IndicatorResult kind="ids" value={summary?.ids} /> : metricValues[index]}</strong><span className="metric-note">{index === 0 ? 'Média das avaliações enviadas no período' : note}</span>
           </article>
         ))}
       </section>
