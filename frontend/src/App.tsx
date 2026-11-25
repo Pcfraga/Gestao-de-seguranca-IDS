@@ -310,7 +310,7 @@ function App() {
           {inspectionScope && activeSection === 'overview' && <Dashboard key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} onOpenEvaluations={() => setActiveSection('evaluations')} />}
           {inspectionScope && activeSection === 'evaluations' && <Evaluations scopeQuery={scopeQuery} key={`${evaluationRefresh}-${scopeQuery}`} search={search} month={selectedMonth} canWrite={canWriteEvaluations} onCreate={() => { setEditingEvaluationId(null); setShowEvaluationForm(true) }} onEdit={(id) => { setEditingEvaluationId(id); setShowEvaluationForm(true) }} />}
           {inspectionScope && activeSection === 'data' && <DataView key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} />}
-          {inspectionScope && activeSection === 'monthlyClose' && <MonthlyCloseReport key={scopeQuery} scope={inspectionScope} month={selectedMonth} canSave={canSaveReports} />}
+          {inspectionScope && activeSection === 'monthlyClose' && <MonthlyCloseReport key={scopeQuery} scope={inspectionScope} month={selectedMonth} />}
           {inspectionScope && activeSection === 'indicators' && <Indicators key={scopeQuery} scopeQuery={scopeQuery} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} />}
           {inspectionScope && activeSection === 'reports' && reportMode === 'manual' && <Reports key={scopeQuery} scope={inspectionScope} month={selectedMonth} monthLabel={formatMonth(selectedMonth)} canSave={canSaveReports} />}
           {activeSection === 'reports' && reportMode === 'composition' && <IpfCompositionReport month={selectedMonth} initialAreaId={inspectionScope?.areaId} canSave={canSaveReports} />}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Activity, BarChart3, FileDown, UsersRound } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ApiError, apiRequest, type DataConsolidation, type InspectionArea, type InspectionScope, inspectionScopeQuery } from '../lib/api'
+import { ApiError, apiRequest, type DataConsolidation, type InspectionArea, type InspectionScope, type IpfCompositionHistory, inspectionScopeQuery } from '../lib/api'
 import { IndicatorResult } from './IndicatorResult'
 import { formatPercent, severityWithPercentages } from '../lib/severityChart'
 import { formatIds } from '../lib/indicatorFormat'
@@ -15,10 +15,6 @@ const weekdayLabels = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábad
 
 type MonthlyGroup = DataConsolidation['monthlyGroups'][number]
 type MonthlyCloseGroup = MonthlyGroup & { disciplineId: string; disciplineName: string }
-interface MonthlyCloseComposition {
-  siteId: string
-  areas: Array<{ areaId: string; weight: number }>
-}
 const pdfColorFields: Array<{ key: PdfColorKey; label: string }> = [
   { key: 'low', label: 'Severidade baixa' },
   { key: 'medium', label: 'Severidade média' },
@@ -84,7 +80,7 @@ function groupLabel(group: MonthlyGroup) {
   return `${group.site ?? 'Projeto não informado'} · ${group.projectOrIsland ?? 'Ilha não informada'}`
 }
 
-export function MonthlyCloseReport({ month, scope, canSave }: { month: string; scope: InspectionScope; canSave: boolean }) {
+export function MonthlyCloseReport({ month, scope }: { month: string; scope: InspectionScope }) {
   const [groups, setGroups] = useState<MonthlyCloseGroup[]>([])
   const [areas, setAreas] = useState<InspectionArea[]>([])
   const [weights, setWeights] = useState<Record<string, string>>({})
@@ -94,8 +90,6 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
   const [selectedProject, setSelectedProject] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
   const [disciplineMode, setDisciplineMode] = useState<'selected' | 'all-weighted' | 'all-simple'>('selected')
-  const [compositionProject, setCompositionProject] = useState('')
-  const [isSavingComposition, setIsSavingComposition] = useState(false)
   const [compositionMessage, setCompositionMessage] = useState('')
   const [exportError, setExportError] = useState('')
   const [pdfSettings, setPdfSettings] = useState(readPdfOptions)
@@ -235,7 +229,7 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
       .filter(area => area.average !== null && area.weight > 0)
       .reduce((sum, area) => sum + area.average! * area.weight, 0) / participatingWeight)
     : null
-  const averageIds = disciplineMode === 'all-weighted' ? weightedAverageIds : simpleAverageIds
+  const averageIds = simpleAverageIds
   const evaluationCount = sumGroups(visibleGroups, group => group.evaluationCount)
   const observedPeople = sumGroups(visibleGroups, group => group.observedPeople)
   const totalDeviations = sumGroups(visibleGroups, group => group.totalDeviations)
@@ -244,15 +238,21 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
   const error = loadError?.key === requestKey ? loadError.message : ''
 
   useEffect(() => {
-    if (!activeProject || !areas.length || activeProject.startsWith('unknown')) {
-      setCompositionProject('')
+    if (disciplineMode !== 'all-weighted' || !activeCompany || !areas.length || activeCompany.startsWith('unknown')) {
+      setCompositionMessage('')
       return
     }
     let active = true
     setCompositionMessage('')
-    apiRequest<MonthlyCloseComposition>(`/api/monthly-close-compositions/${activeProject}`)
-      .then(composition => {
+    apiRequest<IpfCompositionHistory>(`/api/reports/ipf-composition/${month.slice(0, 4)}?contractorId=${activeCompany}`)
+      .then(history => {
         if (!active) return
+        const composition = history.months.find(record => record.month === Number(month.slice(5, 7)))
+        if (!composition) {
+          setWeights(defaultDisciplineWeights(areas))
+          setCompositionMessage('Não há composição salva no IDS por disciplinas para esta contratada e mês. Salve-a no relatório IDS antes de usar esta visão.')
+          return
+        }
         setWeights(current => {
           const next = { ...current }
           composition.areas.forEach(area => { next[area.areaId] = String(area.weight) })
@@ -261,45 +261,18 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
           })
           return next
         })
-        setCompositionProject(activeProject)
-        setDisciplineMode(current => current === 'selected' ? 'all-weighted' : current)
-        setCompositionMessage('Composição salva deste projeto carregada.')
+        setCompositionMessage('Composição definida no IDS por disciplinas carregada para comparação.')
       })
       .catch(requestError => {
         if (!active) return
-        if (requestError instanceof ApiError && requestError.status === 404) {
-          setWeights(defaultDisciplineWeights(areas))
-          setCompositionProject(activeProject)
-          setCompositionMessage('Este projeto ainda não tem uma composição salva.')
+        if (requestError instanceof ApiError && requestError.status === 400) {
+          setCompositionMessage('Selecione a contratada da composição salva no IDS por disciplinas.')
           return
         }
         setExportError(requestError instanceof Error ? requestError.message : 'Não foi possível carregar a composição do projeto.')
       })
     return () => { active = false }
-  }, [activeProject, areas])
-
-  async function saveComposition() {
-    if (!activeProject || !validDisciplineWeights || !canSave) return
-    setIsSavingComposition(true)
-    setExportError('')
-    setCompositionMessage('')
-    try {
-      await apiRequest<MonthlyCloseComposition>(`/api/monthly-close-compositions/${activeProject}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          areas: areas
-            .filter(area => (Number(weights[area.id]) || 0) > 0)
-            .map(area => ({ areaId: area.id, weight: Number(weights[area.id]) })),
-        }),
-      })
-      setCompositionProject(activeProject)
-      setCompositionMessage('Composição do projeto salva. Ela será aplicada nos próximos fechamentos.')
-    } catch (requestError) {
-      setExportError(requestError instanceof Error ? requestError.message : 'Não foi possível salvar a composição do projeto.')
-    } finally {
-      setIsSavingComposition(false)
-    }
-  }
+  }, [activeCompany, areas, disciplineMode, month])
 
   function updatePdfOptions(options: MonthlyClosePdfOptions) {
     try {
@@ -318,7 +291,7 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
       project: activeProject ? visibleGroups[0]?.site ?? (pdfSettings.options.language === 'en' ? 'Project not specified' : 'Projeto não informado') : null,
       island: scope.islandName ?? null,
       area: includeAllDisciplines
-        ? disciplineMode === 'all-weighted' ? 'Todas as disciplinas · composição ponderada' : 'Todas as disciplinas · média simples'
+        ? disciplineMode === 'all-weighted' ? 'Todas as disciplinas · comparação com composição do IDS' : 'Todas as disciplinas · média simples'
         : scope.areaName,
       form: includeAllDisciplines ? 'Todos os formulários' : scope.formName,
       ids: averageIds,
@@ -347,7 +320,7 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
       </div>
         : <>
           <section className="metric-grid" aria-label="Resumo do fechamento mensal">
-            <article className="metric-card"><p className="metric-label">IDS médio</p><strong className="metric-value"><IndicatorResult kind="ids" value={averageIds} /></strong><span className="metric-note">{disciplineMode === 'all-weighted' ? 'Composição do projeto selecionado' : 'Média das avaliações com IDS calculado'}</span></article>
+            <article className="metric-card"><p className="metric-label">IDS médio do fechamento</p><strong className="metric-value"><IndicatorResult kind="ids" value={averageIds} /></strong><span className="metric-note">Fórmula original: média das avaliações com IDS calculado</span></article>
             <article className="metric-card"><p className="metric-label">Avaliações</p><strong className="metric-value">{evaluationCount.toLocaleString('pt-BR')}</strong><span className="metric-note">No recorte selecionado</span></article>
             <article className="metric-card"><p className="metric-label">Pessoas observadas</p><strong className="metric-value">{formatNumber(observedPeople)}</strong><span className="metric-note">Total do mês</span></article>
             <article className="metric-card"><p className="metric-label">Desvios registrados</p><strong className="metric-value">{formatNumber(totalDeviations)}</strong><span className="metric-note">Todas as severidades</span></article>
@@ -359,7 +332,7 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
               if (value === 'selected' || value === 'all-weighted' || value === 'all-simple') setDisciplineMode(value)
             }}>
               <option value="selected">{scope.areaName} · {scope.formName}</option>
-              <option value="all-weighted">Todas com composição do projeto</option>
+              <option value="all-weighted">Todas com composição definida no IDS</option>
               <option value="all-simple">Todas sem composição</option>
             </select></label>
             <label>Empresa<select value={activeCompany} onChange={event => {
@@ -380,11 +353,11 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
           {disciplineMode === 'all-simple' && <p className="metric-note panel">Exibindo a média simples das avaliações concluídas de todas as disciplinas, sem aplicar percentuais.</p>}
 
           {disciplineMode === 'all-weighted' && <section className="panel ipf-composition-fields" aria-label="Pesos das disciplinas">
-            <div className="panel-heading"><div><h2>Composição do projeto</h2><p>Os pesos pertencem ao projeto selecionado, não à contratada. O IDS final usa a média de cada disciplina; áreas sem média não participam e os pesos são ajustados proporcionalmente.</p></div></div>
+            <div className="panel-heading"><div><h2>Comparação com a composição do IDS</h2><p>Os pesos são carregados do IDS por disciplinas da contratada e mês selecionados. Eles não são editados nem salvos aqui.</p></div></div>
+            <article className="metric-card"><p className="metric-label">IDS com composição do IDS</p><strong className="metric-value"><IndicatorResult kind="ids" value={weightedAverageIds} /></strong><span className="metric-note">Indicador adicional; o IDS médio do fechamento permanece na fórmula original</span></article>
             <div className="ipf-weight-row">
               {areas.map(area => <label key={area.id}>{area.name}
-                <input type="number" min={0} max={100} step="0.01" disabled={!canSave} value={weights[area.id] ?? '0'}
-                  onChange={event => setWeights(current => ({ ...current, [area.id]: event.target.value }))} />
+                <input type="number" min={0} max={100} step="0.01" disabled value={weights[area.id] ?? '0'} />
               </label>)}
             </div>
             <strong>Total definido: {totalDisciplineWeight.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</strong>
@@ -401,14 +374,8 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
               })}
             </tbody></table></div>
             {!validDisciplineWeights && <p role="alert">Defina de uma a quatro disciplinas com peso positivo e totalize 100%.</p>}
-            {!activeProject && <div className="form-error" role="status">Selecione um projeto / local antes de calcular ou salvar. A composição não é calculada por contratada.</div>}
+            {!activeCompany && <div className="form-error" role="status">Selecione a contratada para carregar a composição salva no IDS por disciplinas.</div>}
             {compositionMessage && <p role="status">{compositionMessage}</p>}
-            <div className="ipf-composition-actions">
-              <button type="button" className="outline-button"
-                disabled={!canSave || !activeProject || activeProject.startsWith('unknown') || !validDisciplineWeights || isSavingComposition || compositionProject !== activeProject}
-                onClick={() => void saveComposition()}>Salvar composição do projeto</button>
-              {!canSave && <p className="ipf-composition-rule">Somente Administrador e Gestor podem salvar a composição do projeto.</p>}
-            </div>
           </section>}
 
           <details className="panel monthly-close-pdf-options">
