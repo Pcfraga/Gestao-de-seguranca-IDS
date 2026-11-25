@@ -226,7 +226,7 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
   const participatingWeight = disciplineAverages
     .filter(area => area.average !== null && area.weight > 0)
     .reduce((sum, area) => sum + area.weight, 0)
-  const weightedAverageIds = validDisciplineWeights && participatingWeight > 0
+  const weightedAverageIds = activeProject && validDisciplineWeights && participatingWeight > 0
     ? disciplineAverages
       .filter(area => area.average !== null && area.weight > 0)
       .reduce((sum, area) => sum + area.average! * area.weight, 0) / participatingWeight
@@ -343,7 +343,7 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
       </div>
         : <>
           <section className="metric-grid" aria-label="Resumo do fechamento mensal">
-            <article className="metric-card"><p className="metric-label">IDS médio</p><strong className="metric-value"><IndicatorResult kind="ids" value={averageIds} /></strong><span className="metric-note">{disciplineMode === 'all-weighted' ? 'Média ponderada pelas disciplinas' : 'Média das avaliações com IDS calculado'}</span></article>
+            <article className="metric-card"><p className="metric-label">IDS médio</p><strong className="metric-value"><IndicatorResult kind="ids" value={averageIds} /></strong><span className="metric-note">{disciplineMode === 'all-weighted' ? 'Composição do projeto selecionado' : 'Média das avaliações com IDS calculado'}</span></article>
             <article className="metric-card"><p className="metric-label">Avaliações</p><strong className="metric-value">{evaluationCount.toLocaleString('pt-BR')}</strong><span className="metric-note">No recorte selecionado</span></article>
             <article className="metric-card"><p className="metric-label">Pessoas observadas</p><strong className="metric-value">{formatNumber(observedPeople)}</strong><span className="metric-note">Total do mês</span></article>
             <article className="metric-card"><p className="metric-label">Desvios registrados</p><strong className="metric-value">{formatNumber(totalDeviations)}</strong><span className="metric-note">Todas as severidades</span></article>
@@ -369,14 +369,14 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
               <option value="">Todos os projetos</option>
               {projects.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
             </select></label>
-            <span className="monthly-close-count"><Activity size={15} />{visibleGroups.length} combinação(ões) empresa/projeto</span>
+            <span className="monthly-close-count"><Activity size={15} />{visibleGroups.length} combinação(ões) contratada/projeto</span>
             <button type="button" className="outline-button" onClick={exportSummary}><FileDown size={16} />PDF para apresentação</button>
           </section>
 
           {disciplineMode === 'all-simple' && <p className="metric-note panel">Exibindo a média simples das avaliações concluídas de todas as disciplinas, sem aplicar percentuais.</p>}
 
           {disciplineMode === 'all-weighted' && <section className="panel ipf-composition-fields" aria-label="Pesos das disciplinas">
-            <div className="panel-heading"><div><h2>Pesos das disciplinas</h2><p>O IDS final usa a média de cada disciplina com os percentuais definidos. Áreas sem média não participam e os pesos são ajustados proporcionalmente.</p></div></div>
+            <div className="panel-heading"><div><h2>Composição do projeto</h2><p>Os pesos pertencem ao projeto selecionado, não à contratada. O IDS final usa a média de cada disciplina; áreas sem média não participam e os pesos são ajustados proporcionalmente.</p></div></div>
             <div className="ipf-weight-row">
               {areas.map(area => <label key={area.id}>{area.name}
                 <input type="number" min={0} max={100} step="0.01" disabled={!canSave} value={weights[area.id] ?? '0'}
@@ -385,7 +385,7 @@ export function MonthlyCloseReport({ month, scope, canSave }: { month: string; s
             </div>
             <strong>Total definido: {totalDisciplineWeight.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</strong>
             {!validDisciplineWeights && <p role="alert">Defina de uma a quatro disciplinas com peso positivo e totalize 100%.</p>}
-            {!activeProject && <p role="status">Selecione um projeto para carregar ou salvar sua composição.</p>}
+            {!activeProject && <div className="form-error" role="status">Selecione um projeto / local antes de calcular ou salvar. A composição não é calculada por contratada.</div>}
             {compositionMessage && <p role="status">{compositionMessage}</p>}
             <div className="ipf-composition-actions">
               <button type="button" className="outline-button"
