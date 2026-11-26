@@ -1044,6 +1044,10 @@ namespace IDS.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("FormId")
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("IdsAverage")
+                        .HasPrecision(28, 16)
+                        .HasColumnType("numeric(28,16)");
+
                     b.Property<int>("Month")
                         .HasColumnType("integer");
 
@@ -1051,6 +1055,7 @@ namespace IDS.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric");
 
                     b.Property<Guid?>("SiteId")
+                        .IsConcurrencyToken()
                         .HasColumnType("uuid");
 
                     b.Property<string>("Source")
@@ -1087,22 +1092,38 @@ namespace IDS.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "ContractorOrganizationId", "Year", "Month")
                         .IsUnique()
-                        .HasFilter("\"AreaId\" IS NULL AND \"FormId\" IS NULL");
+                        .HasFilter("\"SiteId\" IS NULL AND \"AreaId\" IS NULL AND \"FormId\" IS NULL");
 
                     b.HasIndex("TenantId", "ContractorOrganizationId", "Year", "Month", "AreaId")
                         .IsUnique()
                         .HasDatabaseName("IX_monthly_ipf_records_TenantId_ContractorOrganizationId_Year~1")
-                        .HasFilter("\"AreaId\" IS NOT NULL AND \"FormId\" IS NULL");
+                        .HasFilter("\"SiteId\" IS NULL AND \"AreaId\" IS NOT NULL AND \"FormId\" IS NULL");
 
                     b.HasIndex("TenantId", "ContractorOrganizationId", "Year", "Month", "FormId")
                         .IsUnique()
                         .HasDatabaseName("IX_monthly_ipf_records_TenantId_ContractorOrganizationId_Year~2")
-                        .HasFilter("\"AreaId\" IS NULL AND \"FormId\" IS NOT NULL");
+                        .HasFilter("\"SiteId\" IS NULL AND \"AreaId\" IS NULL AND \"FormId\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "ContractorOrganizationId", "Year", "Month", "AreaId", "FormId")
                         .IsUnique()
                         .HasDatabaseName("IX_monthly_ipf_records_TenantId_ContractorOrganizationId_Year~3")
-                        .HasFilter("\"AreaId\" IS NOT NULL AND \"FormId\" IS NOT NULL");
+                        .HasFilter("\"SiteId\" IS NULL AND \"AreaId\" IS NOT NULL AND \"FormId\" IS NOT NULL");
+
+                    b.HasIndex(new[] { "TenantId", "ContractorOrganizationId", "Year", "Month", "SiteId" }, "IX_ipf_project")
+                        .IsUnique()
+                        .HasFilter("\"SiteId\" IS NOT NULL AND \"AreaId\" IS NULL AND \"FormId\" IS NULL");
+
+                    b.HasIndex(new[] { "TenantId", "ContractorOrganizationId", "Year", "Month", "SiteId", "AreaId" }, "IX_ipf_project_area")
+                        .IsUnique()
+                        .HasFilter("\"SiteId\" IS NOT NULL AND \"AreaId\" IS NOT NULL AND \"FormId\" IS NULL");
+
+                    b.HasIndex(new[] { "TenantId", "ContractorOrganizationId", "Year", "Month", "SiteId", "AreaId", "FormId" }, "IX_ipf_project_area_form")
+                        .IsUnique()
+                        .HasFilter("\"SiteId\" IS NOT NULL AND \"AreaId\" IS NOT NULL AND \"FormId\" IS NOT NULL");
+
+                    b.HasIndex(new[] { "TenantId", "ContractorOrganizationId", "Year", "Month", "SiteId", "FormId" }, "IX_ipf_project_form")
+                        .IsUnique()
+                        .HasFilter("\"SiteId\" IS NOT NULL AND \"AreaId\" IS NULL AND \"FormId\" IS NOT NULL");
 
                     b.ToTable("monthly_ipf_records", null, t =>
                         {

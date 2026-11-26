@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { calculateMonthlyIpf } from './monthlyIpf.ts'
+import { calculateMonthlyIpf, monthlyIdsForReport } from './monthlyIpf.ts'
 
 test('applies the exact user formula using IDS as a percentage', () => {
   assert.equal(calculateMonthlyIpf(0.8831, '0.8', '20'), 6.2389)
@@ -26,4 +26,12 @@ test('does not turn absent data or incomplete inputs into an IPF', () => {
   ]) {
     assert.equal(calculateMonthlyIpf(ids, factor, additional), null)
   }
+})
+
+test('preserves the saved IDS until recalculation is requested', () => {
+  assert.equal(monthlyIdsForReport({ idsAverage: 0.8 }, 0.9, false), 0.8)
+  assert.equal(monthlyIdsForReport({ idsAverage: 0.8 }, 0.9, true), 0.9)
+  assert.equal(monthlyIdsForReport({ idsAverage: 0 }, 0.9, false), 0)
+  assert.equal(monthlyIdsForReport({ idsAverage: null }, 0.9, false), null)
+  assert.equal(monthlyIdsForReport(null, 0.9, false), 0.9)
 })

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Activity, BarChart3, FileDown, UsersRound } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ApiError, apiRequest, type DataConsolidation, type InspectionArea, type InspectionScope, type IpfCompositionHistory, inspectionScopeQuery } from '../lib/api'
+import { ApiError, apiRequest, type DataConsolidation, type InspectionArea, type InspectionScope, type IpfAnnualHistory, inspectionScopeQuery } from '../lib/api'
 import { IndicatorResult } from './IndicatorResult'
 import { formatPercent, severityWithPercentages } from '../lib/severityChart'
 import { formatIds } from '../lib/indicatorFormat'
 import { monthlyClosePdf } from '../lib/monthlyClosePdf'
+import { monthlyIdsForReport } from '../lib/monthlyIpf'
 import { openPrintWindow } from '../lib/pdf'
 import { defaultPdfOptions, parsePdfOptions, pdfOptionsStorageKey, type MonthlyClosePdfOptions, type PdfColorKey } from '../lib/monthlyClosePdfOptions'
 
@@ -41,24 +42,6 @@ function formatNumber(value: number) {
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 }
 
-function roundIds(value: number) {
-  return Math.round((value + Number.EPSILON) * 10000) / 10000
-}
-
-function defaultDisciplineWeights(areas: InspectionArea[]) {
-  const participating = areas.slice(0, 4)
-  const equal = Math.floor(10000 / Math.max(participating.length, 1)) / 100
-  return areas.reduce<Record<string, string>>((result, area, index) => {
-    const participatingIndex = participating.indexOf(area)
-    result[area.id] = participatingIndex < 0
-      ? '0'
-      : String(index === participating.length - 1
-        ? Math.round((100 - equal * (participating.length - 1)) * 100) / 100
-        : equal)
-    return result
-  }, {})
-}
-
 function companyKey(group: MonthlyGroup) {
   return group.contractorId ?? group.contractor ?? 'unknown-company'
 }
@@ -89,8 +72,9 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
   const [selectedCompany, setSelectedCompany] = useState('')
   const [selectedProject, setSelectedProject] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
-  const [disciplineMode, setDisciplineMode] = useState<'selected' | 'all-weighted' | 'all-simple'>('selected')
+  const [disciplineMode, setDisciplineMode] = useState<'selected' | 'all-weighted' | 'all-simple'>('all-weighted')
   const [compositionMessage, setCompositionMessage] = useState('')
+  const [projectScore, setProjectScore] = useState<{ key: string; value: number | null; preview: number | null; saved: boolean } | null>(null)
   const [exportError, setExportError] = useState('')
   const [pdfSettings, setPdfSettings] = useState(readPdfOptions)
   const scopedQuery = inspectionScopeQuery(scope)
@@ -128,10 +112,7 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
         if (!active) return
         setAreas(loadedAreas)
         setGroups(loadedGroups)
-        setWeights(current => {
-          if (loadedAreas.every(area => current[area.id] !== undefined)) return current
-          return defaultDisciplineWeights(loadedAreas)
-        })
+        setWeights({})
       })
       .catch((loadError: unknown) => {
         if (active) {
@@ -224,12 +205,9 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
   const participatingWeight = disciplineAverages
     .filter(area => area.average !== null && area.weight > 0)
     .reduce((sum, area) => sum + area.weight, 0)
-  const weightedAverageIds = activeProject && validDisciplineWeights && participatingWeight > 0
-    ? roundIds(disciplineAverages
-      .filter(area => area.average !== null && area.weight > 0)
-      .reduce((sum, area) => sum + area.average! * area.weight, 0) / participatingWeight)
-    : null
-  const averageIds = simpleAverageIds
+  const projectScoreKey = `${month}:${activeCompany}:${activeProject}`
+  const activeProjectScore = projectScore?.key === projectScoreKey ? projectScore : null
+  const averageIds = disciplineMode === 'all-weighted' ? activeProjectScore?.value ?? null : simpleAverageIds
   const evaluationCount = sumGroups(visibleGroups, group => group.evaluationCount)
   const observedPeople = sumGroups(visibleGroups, group => group.observedPeople)
   const totalDeviations = sumGroups(visibleGroups, group => group.totalDeviations)
@@ -238,21 +216,31 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
   const error = loadError?.key === requestKey ? loadError.message : ''
 
   useEffect(() => {
-    if (disciplineMode !== 'all-weighted' || !activeCompany || !areas.length || activeCompany.startsWith('unknown')) {
+    if (disciplineMode !== 'all-weighted' || !areas.length) {
+      setProjectScore(null)
       setCompositionMessage('')
       return
     }
+    if (!activeCompany || !activeProject || activeCompany.startsWith('unknown') || activeProject.startsWith('unknown')) {
+      setProjectScore(null)
+      setWeights({})
+      setCompositionMessage('Selecione uma contratada e um projeto para aplicar a composição.')
+      return
+    }
     let active = true
-    setCompositionMessage('')
-    apiRequest<IpfCompositionHistory>(`/api/reports/ipf-composition/${month.slice(0, 4)}?contractorId=${activeCompany}`)
-      .then(history => {
+    const key = `${month}:${activeCompany}:${activeProject}`
+    setWeights({})
+    setProjectScore(null)
+    setCompositionMessage('Carregando composição do projeto…')
+    Promise.all([
+      apiRequest<{ siteId: string; areas: Array<{ areaId: string; weight: number }> }>(`/api/monthly-close-compositions/${activeProject}`),
+      apiRequest<{ value: number | null }>(`/api/monthly-close-compositions/${activeProject}/average/${month.slice(0, 4)}/${Number(month.slice(5, 7))}?contractorId=${activeCompany}`),
+      apiRequest<IpfAnnualHistory>(`/api/reports/ipf/${month.slice(0, 4)}?contractorId=${activeCompany}&siteId=${activeProject}`),
+    ])
+      .then(([composition, preview, history]) => {
         if (!active) return
-        const composition = history.months.find(record => record.month === Number(month.slice(5, 7)))
-        if (!composition) {
-          setWeights(defaultDisciplineWeights(areas))
-          setCompositionMessage('Não há composição salva no IDS por disciplinas para esta contratada e mês. Salve-a no relatório IDS antes de usar esta visão.')
-          return
-        }
+        const saved = history.months.find(record => record.month === Number(month.slice(5, 7)))
+        setProjectScore({ key, value: monthlyIdsForReport(saved, preview.value, false), preview: preview.value, saved: Boolean(saved) })
         setWeights(current => {
           const next = { ...current }
           composition.areas.forEach(area => { next[area.areaId] = String(area.weight) })
@@ -261,18 +249,19 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
           })
           return next
         })
-        setCompositionMessage('Composição definida no IDS por disciplinas carregada para comparação.')
+        setCompositionMessage('')
       })
       .catch(requestError => {
         if (!active) return
-        if (requestError instanceof ApiError && requestError.status === 400) {
-          setCompositionMessage('Selecione a contratada da composição salva no IDS por disciplinas.')
+        if (requestError instanceof ApiError && requestError.status === 404) {
+          setCompositionMessage('Não há composição salva para este projeto. Configure os pesos em IDS por disciplinas e pesos.')
           return
         }
+        setCompositionMessage('Não foi possível aplicar a composição do projeto.')
         setExportError(requestError instanceof Error ? requestError.message : 'Não foi possível carregar a composição do projeto.')
       })
     return () => { active = false }
-  }, [activeCompany, areas, disciplineMode, month])
+  }, [activeCompany, activeProject, areas, disciplineMode, month])
 
   function updatePdfOptions(options: MonthlyClosePdfOptions) {
     try {
@@ -320,7 +309,7 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
       </div>
         : <>
           <section className="metric-grid" aria-label="Resumo do fechamento mensal">
-            <article className="metric-card"><p className="metric-label">IDS médio do fechamento</p><strong className="metric-value"><IndicatorResult kind="ids" value={averageIds} /></strong><span className="metric-note">Fórmula original: média das avaliações com IDS calculado</span></article>
+            <article className="metric-card"><p className="metric-label">IDS médio do fechamento</p><strong className="metric-value"><IndicatorResult kind="ids" value={averageIds} /></strong><span className="metric-note">{disciplineMode === 'all-weighted' ? activeProjectScore?.saved ? 'Média preservada no IPF salvo' : 'Prévia ponderada da contratada no projeto' : 'Média das avaliações com IDS calculado'}</span></article>
             <article className="metric-card"><p className="metric-label">Avaliações</p><strong className="metric-value">{evaluationCount.toLocaleString('pt-BR')}</strong><span className="metric-note">No recorte selecionado</span></article>
             <article className="metric-card"><p className="metric-label">Pessoas observadas</p><strong className="metric-value">{formatNumber(observedPeople)}</strong><span className="metric-note">Total do mês</span></article>
             <article className="metric-card"><p className="metric-label">Desvios registrados</p><strong className="metric-value">{formatNumber(totalDeviations)}</strong><span className="metric-note">Todas as severidades</span></article>
@@ -353,15 +342,17 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
           {disciplineMode === 'all-simple' && <p className="metric-note panel">Exibindo a média simples das avaliações concluídas de todas as disciplinas, sem aplicar percentuais.</p>}
 
           {disciplineMode === 'all-weighted' && <section className="panel ipf-composition-fields" aria-label="Pesos das disciplinas">
-            <div className="panel-heading"><div><h2>Comparação com a composição do IDS</h2><p>Os pesos são carregados do IDS por disciplinas da contratada e mês selecionados. Eles não são editados nem salvos aqui.</p></div></div>
-            <article className="metric-card"><p className="metric-label">IDS com composição do IDS</p><strong className="metric-value"><IndicatorResult kind="ids" value={weightedAverageIds} /></strong><span className="metric-note">Indicador adicional; o IDS médio do fechamento permanece na fórmula original</span></article>
+            <div className="panel-heading"><div><h2>Composição do projeto</h2><p>Os pesos são definidos por projeto em IDS por disciplinas e pesos.</p></div></div>
+            {scope.islandId && <p role="status">O IDS do fechamento considera todas as ilhas do projeto; a ilha selecionada filtra os dados de apoio.</p>}
+            <article className="metric-card"><p className="metric-label">Prévia com pesos atuais</p><strong className="metric-value"><IndicatorResult kind="ids" value={activeProjectScore?.preview} /></strong><span className="metric-note">Os resultados salvos não mudam automaticamente.</span></article>
+            {activeProjectScore?.saved && activeProjectScore.value === null && <p role="status">O IPF antigo não possui a média IDS utilizada; ela não pode ser recuperada automaticamente.</p>}
             <div className="ipf-weight-row">
               {areas.map(area => <label key={area.id}>{area.name}
                 <input type="number" min={0} max={100} step="0.01" disabled value={weights[area.id] ?? '0'} />
               </label>)}
             </div>
             <strong>Total definido: {totalDisciplineWeight.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</strong>
-            <div className="table-scroll"><table><thead><tr><th>Disciplina</th><th>Peso definido</th><th>Média usada</th><th>Contribuição</th></tr></thead><tbody>
+            <div className="table-scroll"><table><thead><tr><th>Disciplina</th><th>Peso definido</th><th>Média no recorte exibido</th><th>Contribuição no recorte</th></tr></thead><tbody>
               {disciplineAverages.filter(area => area.weight > 0).map(area => {
                 const effectiveWeight = area.average === null ? 0 : area.weight * 100 / participatingWeight
                 const contribution = area.average === null ? null : area.average * area.weight / participatingWeight
@@ -373,8 +364,8 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
                 </tr>
               })}
             </tbody></table></div>
-            {!validDisciplineWeights && <p role="alert">Defina de uma a quatro disciplinas com peso positivo e totalize 100%.</p>}
-            {!activeCompany && <div className="form-error" role="status">Selecione a contratada para carregar a composição salva no IDS por disciplinas.</div>}
+            {!validDisciplineWeights && activeCompany && activeProject && !compositionMessage && <p role="alert">A composição carregada deve ter de uma a quatro disciplinas e totalizar 100%.</p>}
+            {!activeCompany && <div className="form-error" role="status">Selecione a contratada e o projeto.</div>}
             {compositionMessage && <p role="status">{compositionMessage}</p>}
           </section>}
 
@@ -398,10 +389,10 @@ export function MonthlyCloseReport({ month, scope }: { month: string; scope: Ins
           </details>
 
           <article className="panel data-table-panel monthly-close-table-panel">
-            <div className="panel-heading"><div><h2>Fechamento por empresa e projeto</h2><p>IDS semanal e indicadores consolidados do mês selecionado.</p></div></div>
+            <div className="panel-heading"><div><h2>Detalhamento por empresa e projeto</h2><p>IDS simples de cada disciplina e ilha; a média ponderada da contratada no projeto aparece no resumo acima.</p></div></div>
             <div className="table-scroll"><table><thead><tr>
               <th>Disciplina</th><th>Empresa</th><th>Projeto / local</th><th>Ilha</th>{Array.from({ length: 5 }, (_, index) => <th key={index}>IDS S{index + 1}</th>)}
-              <th>IDS médio</th><th>Pessoas</th><th>Desvios</th><th>Risco ponderado</th><th>Baixa</th><th>Média</th><th>Alta</th>
+              <th>IDS médio da disciplina</th><th>Pessoas</th><th>Desvios</th><th>Risco ponderado</th><th>Baixa</th><th>Média</th><th>Alta</th>
               <th>Baixa (%)</th><th>Média (%)</th><th>Alta (%)</th>
             </tr></thead><tbody>
               {visibleGroups.map(group => <tr key={groupIdentity(group)}>

@@ -20,6 +20,8 @@ public sealed class MonthlyIpfRecord : TenantEntity
 
     public decimal Value { get; set; }
 
+    public decimal? IdsAverage { get; set; }
+
     public decimal? MultiplicationFactor { get; set; }
 
     public decimal? AdditionalScore { get; set; }

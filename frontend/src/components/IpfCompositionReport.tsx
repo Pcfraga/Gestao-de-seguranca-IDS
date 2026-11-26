@@ -1,24 +1,20 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { FileDown, Plus, Save, Trash2 } from 'lucide-react'
-import {
-  apiRequest, defaultInspectionId, type ChecklistCatalog, type InspectionArea,
-  type IpfComposition, type IpfCompositionHistory,
-} from '../lib/api'
-import { ipfCompositionPdf, openPrintWindow } from '../lib/pdf'
-import { IndicatorResult } from './IndicatorResult'
+import { Plus, Save, Trash2 } from 'lucide-react'
+import { ApiError, apiRequest, defaultInspectionId, type ChecklistCatalog, type InspectionArea } from '../lib/api'
 
 interface WeightDraft {
   areaId: string
   weight: string
 }
 
-function formatValue(value: number | null) {
-  return value === null ? 'Sem média' : value.toLocaleString('pt-BR', { maximumFractionDigits: 4 })
+interface ProjectComposition {
+  siteId: string
+  areas: Array<{ areaId: string; weight: number }>
 }
 
-export function IpfCompositionReport({ month, initialAreaId, canSave }: { month: string; initialAreaId?: string; canSave: boolean }) {
+export function IpfCompositionReport({ initialAreaId, canSave }: { month: string; initialAreaId?: string; canSave: boolean }) {
   const [references, setReferences] = useState<{ areas: InspectionArea[]; catalog: ChecklistCatalog } | null>(null)
-  const [contractorId, setContractorId] = useState('')
+  const [siteId, setSiteId] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -29,7 +25,7 @@ export function IpfCompositionReport({ month, initialAreaId, canSave }: { month:
     ]).then(([areas, catalog]) => {
       if (active) setReferences({ areas, catalog })
     }).catch((loadError: unknown) => {
-      if (active) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar as áreas e contratadas.')
+      if (active) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar as disciplinas e projetos.')
     })
     return () => { active = false }
   }, [])
@@ -37,145 +33,95 @@ export function IpfCompositionReport({ month, initialAreaId, canSave }: { month:
   return <section className="report-layout">
     <div className="report-intro"><div>
       <span className="report-step">IDS POR DISCIPLINAS</span>
-      <h2>Compor a média IDS da contratada</h2>
-      <p>Escolha de uma a quatro áreas. A média ponderada salva será usada no campo Média IDS (%) do IPF manual.</p>
+      <h2>Composição das disciplinas por projeto</h2>
+      <p>Defina os pesos de cada projeto. Eles são usados nos novos cálculos de cada contratada e permanecem válidos até serem alterados.</p>
     </div></div>
     {error && <div className="form-error" role="alert">{error}</div>}
-    {!references && !error && <p role="status">Carregando áreas e contratadas…</p>}
-    <div className="form-fields panel ipf-composition-filter"><label>Contratada do IDS por disciplinas
-      <select disabled={!references} value={contractorId} onChange={event => setContractorId(event.target.value)}>
-        <option value="">Selecionar contratada</option>
-        {references?.catalog.organizations.filter(organization => organization.kind === 'Contractor')
-          .map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
+    {!references && !error && <p role="status">Carregando disciplinas e projetos…</p>}
+    <div className="form-fields panel ipf-composition-filter"><label>Projeto
+      <select disabled={!references} value={siteId} onChange={event => setSiteId(event.target.value)}>
+        <option value="">Selecionar projeto</option>
+        {references?.catalog.sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
       </select>
     </label></div>
-    {references && contractorId
-      ? <CompositionWorkspace key={`${contractorId}-${month}`} month={month} contractorId={contractorId}
-        areas={references.areas} initialAreaId={initialAreaId} canSave={canSave} />
-      : references && <div className="report-empty panel">Selecione uma contratada para calcular ou consultar seu IDS por disciplinas.</div>}
+    {references && siteId
+      ? <ProjectWeights key={siteId} siteId={siteId} areas={references.areas} initialAreaId={initialAreaId} canSave={canSave} />
+      : references && <div className="report-empty panel">Selecione um projeto para definir a composição.</div>}
   </section>
 }
 
-function CompositionWorkspace({ month, contractorId, areas, initialAreaId, canSave }: {
-  month: string
-  contractorId: string
+function ProjectWeights({ siteId, areas, initialAreaId, canSave }: {
+  siteId: string
   areas: InspectionArea[]
   initialAreaId?: string
   canSave: boolean
 }) {
-  const year = Number(month.slice(0, 4))
-  const monthNumber = Number(month.slice(5, 7))
-  const [history, setHistory] = useState<IpfCompositionHistory | null>(null)
   const [draft, setDraft] = useState<WeightDraft[]>([])
-  const [result, setResult] = useState<IpfComposition | null>(null)
-  const [resultIsSaved, setResultIsSaved] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [isBusy, setIsBusy] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
-  const [viewedMonth, setViewedMonth] = useState<IpfComposition | null>(null)
 
   useEffect(() => {
     let active = true
-    apiRequest<IpfCompositionHistory>(`/api/reports/ipf-composition/${year}?contractorId=${contractorId}`)
-      .then(loaded => {
-        if (!active) return
-        setHistory(loaded)
-        const saved = loaded.months.find(record => record.month === monthNumber)
-        const previous = loaded.months.filter(record => record.month < monthNumber)
-          .sort((left, right) => right.month - left.month)[0]
-        const configuration = saved ?? previous
-        setDraft(configuration ? configuration.areas.map(area => ({ areaId: area.areaId, weight: String(area.weight) }))
-          : [{ areaId: areas.find(area => area.id === initialAreaId)?.id ?? defaultInspectionId, weight: '100' }])
-        setResult(saved ?? null)
-        setResultIsSaved(Boolean(saved))
-        if (!saved && previous) setMessage('Pesos copiados do último mês registrado. Calcule para consultar as médias do mês atual.')
+    apiRequest<ProjectComposition>(`/api/monthly-close-compositions/${siteId}`)
+      .then(composition => {
+        if (active) setDraft(composition.areas.map(area => ({ areaId: area.areaId, weight: String(area.weight) })))
       })
       .catch((loadError: unknown) => {
-        if (active) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar o histórico por disciplinas.')
+        if (!active) return
+        if (loadError instanceof ApiError && loadError.status === 404) {
+          setDraft([{ areaId: areas.find(area => area.id === initialAreaId)?.id ?? areas[0]?.id ?? defaultInspectionId, weight: '100' }])
+          setMessage('Este projeto ainda não possui composição salva.')
+        } else {
+          setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar a composição do projeto.')
+        }
       })
       .finally(() => { if (active) setIsLoading(false) })
     return () => { active = false }
-  }, [year, monthNumber, contractorId, areas, initialAreaId])
+  }, [siteId, areas, initialAreaId])
 
   function changeDraft(updated: WeightDraft[]) {
     setDraft(updated)
-    setResult(null)
-    setResultIsSaved(false)
-    setError('')
     setMessage('')
-    setViewedMonth(null)
+    setError('')
   }
 
-  const totalWeight = draft.reduce((total, row) => total + (Number(row.weight) || 0), 0)
-  const weightHundredths = draft.map(row => Math.round(Number(row.weight) * 100))
-  const validWeights = draft.length >= 1 && draft.length <= 4
-    && draft.every(row => row.weight.trim() !== '' && Number.isFinite(Number(row.weight))
-      && /^\d+(\.\d{1,2})?$/.test(row.weight) && Number(row.weight) >= 0 && Number(row.weight) <= 100)
-    && weightHundredths.reduce((total, weight) => total + weight, 0) === 10000
+  const total = draft.reduce((sum, row) => sum + (Number(row.weight) || 0), 0)
+  const valid = draft.length >= 1 && draft.length <= 4
+    && draft.every(row => row.weight.trim() !== '' && /^\d+(\.\d{1,2})?$/.test(row.weight)
+      && Number(row.weight) >= 0 && Number(row.weight) <= 100)
+    && draft.reduce((sum, row) => sum + Math.round(Number(row.weight) * 100), 0) === 10000
     && new Set(draft.map(row => row.areaId)).size === draft.length
 
-  async function calculate(save: boolean) {
-    if (save && !canSave) {
-      setError('Somente perfis Administrador e Gestor podem salvar o IDS por disciplinas.')
-      return
-    }
-    if (!validWeights) {
-      setError('Escolha de uma a quatro áreas distintas, com pesos entre 0% e 100% somando 100%.')
-      return
-    }
-    if (save && !window.confirm(`Salvar a média IDS por disciplinas de ${month} para ${history?.contractor}? As médias serão recalculadas agora e o registro anterior deste mês será substituído, se existir.`)) return
-    setIsBusy(true)
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!valid || !canSave) return
+    setIsSaving(true)
     setError('')
     setMessage('')
-    setViewedMonth(null)
     try {
-      const calculated = await apiRequest<IpfComposition>(`/api/reports/ipf-composition/${year}/${monthNumber}${save ? '' : '/preview'}`, {
-        method: save ? 'PUT' : 'POST',
-        body: JSON.stringify({ contractorOrganizationId: contractorId, areas: draft.map(row => ({ areaId: row.areaId, weight: Number(row.weight) })) }),
+      await apiRequest<ProjectComposition>(`/api/monthly-close-compositions/${siteId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ areas: draft.map(row => ({ areaId: row.areaId, weight: Number(row.weight) })) }),
       })
-      setResult(calculated)
-      setResultIsSaved(save)
-      if (save) {
-        setHistory(current => {
-          if (!current) return current
-          const months = [...current.months.filter(record => record.month !== calculated.month), calculated]
-            .sort((left, right) => left.month - right.month)
-          const values = months.flatMap(record => record.value === null ? [] : [record.value])
-          return { ...current, months, annualAverage: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null }
-        })
-        setMessage('Média IDS por disciplinas salva. Ela será usada no campo Média IDS (%) do IPF manual.')
-      } else if (calculated.value === null) {
-        setMessage('Nenhuma área com peso positivo tem média válida neste mês. Não há nota para salvar.')
-      }
-    } catch (requestError) {
-      setResult(null)
-      setResultIsSaved(false)
-      setError(requestError instanceof Error ? requestError.message : 'Não foi possível calcular ou salvar o IPF.')
+      setMessage('Composição salva. Os fechamentos já salvos permanecem inalterados até serem recalculados e salvos novamente.')
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Não foi possível salvar a composição.')
     } finally {
-      setIsBusy(false)
+      setIsSaving(false)
     }
   }
 
-  function exportPdf(record: IpfComposition) {
-    const pdf = ipfCompositionPdf(record)
-    if (!openPrintWindow(pdf.title, pdf.content)) setError('O navegador bloqueou o PDF. Permita pop-ups para este site e tente novamente.')
-  }
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    void calculate(false)
-  }
-
+  if (isLoading) return <p role="status">Carregando composição do projeto…</p>
   return <>
-    {isLoading && <p role="status">Carregando histórico por disciplinas…</p>}
     {error && <div className="form-error" role="alert">{error}</div>}
     {message && <div className="report-save-confirmation" role="status">{message}</div>}
-    {history && <form className="report-entry-card" onSubmit={submit}>
-      <div className="report-entry-heading"><div><span className="report-step">PESOS DAS DISCIPLINAS</span><h3>{history.contractor} · {month}</h3>
-        <p>Sem divisão, mantenha uma única área com 100%. Com divisão, distribua 100% entre até quatro áreas.</p>
+    {draft.length > 0 && <form className="report-entry-card" onSubmit={event => void save(event)}>
+      <div className="report-entry-heading"><div><span className="report-step">PESOS DAS DISCIPLINAS</span>
+        <h3>Composição do projeto</h3><p>Distribua 100% entre uma a quatro disciplinas.</p>
       </div></div>
-      <fieldset disabled={isBusy} className="ipf-composition-fields">
+      <fieldset disabled={isSaving || !canSave} className="ipf-composition-fields">
         {draft.map((row, index) => <div className="ipf-weight-row" key={index}>
           <label>Disciplina {index + 1}<select value={row.areaId} onChange={event =>
             changeDraft(draft.map((entry, position) => position === index ? { ...entry, areaId: event.target.value } : entry))}>
@@ -196,47 +142,13 @@ function CompositionWorkspace({ month, contractorId, areas, initialAreaId, canSa
               const next = areas.find(area => !draft.some(row => row.areaId === area.id))
               if (next) changeDraft([...draft, { areaId: next.id, weight: '0' }])
             }}><Plus size={16} />Adicionar disciplina</button>
-          <strong>Total definido: {totalWeight.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</strong>
+          <strong>Total definido: {total.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%</strong>
         </div>
-        {!validWeights && <p role="alert">Os pesos definidos devem somar 100%.</p>}
-        <p className="ipf-composition-rule">Área sem média ou com peso 0% não participa. Os pesos das demais são ajustados proporcionalmente para 100%. Uma média válida igual a zero participa normalmente. Todas as notas usam a mesma escala do IDS, portanto a meta é atingida a partir de 0,85 (85%).</p>
-        <div className="ipf-composition-actions">
-          <button className="outline-button" type="submit" disabled={!validWeights}>{isBusy ? 'Processando…' : 'Calcular IDS por disciplinas'}</button>
-          {canSave && <button className="primary-button" type="button" disabled={!validWeights || isBusy}
-            onClick={() => void calculate(true)}><Save size={16} />{isBusy ? 'Salvando…' : 'Salvar IDS por disciplinas'}</button>}
-        </div>
-        {!canSave && <p className="ipf-composition-rule">Você pode calcular e consultar. Somente Administrador e Gestor podem salvar a composição.</p>}
+        {!valid && <p role="alert">Selecione disciplinas distintas e informe pesos que somem 100%.</p>}
+        <p className="ipf-composition-rule">Disciplinas sem média ou com peso zero não participam. Os demais pesos são redistribuídos proporcionalmente; uma média igual a zero participa normalmente.</p>
+        {canSave && <button className="primary-button" type="submit" disabled={!valid || isSaving}><Save size={16} />{isSaving ? 'Salvando…' : 'Salvar composição do projeto'}</button>}
       </fieldset>
+      {!canSave && <p className="ipf-composition-rule">Somente Administrador e Gestor podem salvar a composição.</p>}
     </form>}
-    {result && <CompositionDetails record={result} saved={resultIsSaved} onPdf={() => exportPdf(result)} />}
-    {history && <section className="panel ipf-composition-history">
-      <div className="panel-heading"><div><h3>Histórico do IDS por disciplinas · {year}</h3><p>Médias ponderadas usadas no relatório IPF. Os pesos históricos não mudam quando novas avaliações são criadas.</p></div></div>
-      <div className="table-scroll"><table><thead><tr><th>Mês</th><th>IPF salvo</th><th>Disciplinas participantes</th><th>Detalhes</th></tr></thead><tbody>
-        {history.months.map(record => <tr key={record.month}><td>{String(record.month).padStart(2, '0')}/{year}</td><td><IndicatorResult kind="ids" value={record.value} empty="Sem média" /></td>
-          <td>{record.areas.filter(area => area.status === 'included').map(area => `${area.areaName} (${formatValue(area.effectiveWeight)}%)`).join(' · ')}</td>
-          <td><button className="quiet-button" type="button" onClick={() => setViewedMonth(record)}>Ver composição de {String(record.month).padStart(2, '0')}/{year}</button></td></tr>)}
-        {!history.months.length && <tr><td colSpan={4}>Nenhum IDS por disciplinas registrado neste ano.</td></tr>}
-      </tbody></table></div>
-    </section>}
-    {viewedMonth && <CompositionDetails record={viewedMonth} saved onPdf={() => exportPdf(viewedMonth)} />}
   </>
-}
-
-function CompositionDetails({ record, saved, onPdf }: { record: IpfComposition; saved: boolean; onPdf: () => void }) {
-  return <article className="panel ipf-composition-result">
-    <div className="panel-heading"><div><h3>{saved ? 'Composição salva' : 'Prévia — ainda não salva'} · {String(record.month).padStart(2, '0')}/{record.year}</h3>
-      <p>{record.contractor}{record.updatedAtUtc ? ` · Salvo em ${new Date(record.updatedAtUtc).toLocaleString('pt-BR')}` : ''}</p></div>
-      <button className="outline-button" type="button" onClick={onPdf}><FileDown size={16} />PDF da composição</button>
-    </div>
-    <p className="ipf-composition-score">Média IDS ponderada: <strong><IndicatorResult kind="ids" value={record.value} empty="Sem média" /></strong></p>
-    {record.areas.some(area => area.status === 'no-average' && area.weight > 0)
-      && <p role="status">Há áreas sem média. Elas não participaram da nota; os pesos das áreas com média foram ajustados proporcionalmente.</p>}
-    <div className="table-scroll"><table><thead><tr><th>Disciplina</th><th>Média IDS</th><th>Avaliações válidas / total</th><th>Peso definido</th><th>Peso aplicado</th><th>Contribuição</th><th>Situação</th></tr></thead><tbody>
-      {record.areas.map(area => <tr key={area.areaId}><td>{area.areaName}</td><td><IndicatorResult kind="ids" value={area.average} originalScale empty="Sem média" /></td>
-        <td>{area.scoredEvaluationCount} / {area.evaluationCount}</td><td>{formatValue(area.weight)}%</td><td>{formatValue(area.effectiveWeight)}%</td>
-        <td>{area.contribution === null ? '—' : formatValue(area.contribution)}</td>
-        <td>{area.status === 'included' ? 'Participou' : area.status === 'zero-weight' ? 'Sem peso' : 'Sem média — excluída'}</td></tr>)}
-    </tbody></table></div>
-    <p>Fórmula: soma das médias × pesos definidos, dividida pela soma dos pesos das áreas participantes. A média IDS final é arredondada a quatro casas.</p>
-  </article>
 }

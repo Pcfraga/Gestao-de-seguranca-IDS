@@ -337,11 +337,12 @@ public sealed class IpfReportsController(MonthlyIpfApplicationService reportServ
         [FromQuery] Guid contractorId,
         [FromQuery] Guid? areaId,
         [FromQuery] Guid? formId,
+        [FromQuery] Guid? siteId,
         CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await reportService.GetYearAsync(year, contractorId, cancellationToken, areaId, formId));
+            return Ok(await reportService.GetYearAsync(year, contractorId, cancellationToken, areaId, formId, siteId));
         }
         catch (IpfReportValidationException exception)
         {
@@ -356,11 +357,43 @@ public sealed class IpfReportsController(MonthlyIpfApplicationService reportServ
         [FromQuery] Guid contractorId,
         [FromQuery] Guid? areaId,
         [FromQuery] Guid? formId,
+        [FromQuery] Guid? siteId,
         CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await reportService.GetMonthlySuggestionAsync(year, month, contractorId, cancellationToken, areaId, formId));
+            return Ok(await reportService.GetMonthlySuggestionAsync(year, month, contractorId, cancellationToken, areaId, formId, siteId));
+        }
+
+        catch (IpfReportValidationException exception)
+        {
+            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]> { ["report"] = exception.Errors.ToArray() }));
+        }
+    }
+
+    /// <summary>Associa todos os registros gerais da contratada ao projeto, sem recalcular valores.</summary>
+    [HttpPost("associate-legacy")]
+    [Authorize(Roles = "ADMINISTRADOR,GESTOR")]
+    public async Task<ActionResult<AssociateLegacyIpfResult>> AssociateLegacy(
+        AssociateLegacyIpfRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await reportService.AssociateLegacyAsync(request.ContractorId, request.SiteId, cancellationToken);
+            if (result.Conflicts.Count > 0)
+            {
+                var periods = string.Join(", ", result.Conflicts
+                    .Select(conflict => $"{conflict.Month:00}/{conflict.Year}")
+                    .Distinct());
+                return Conflict(new
+                {
+                    message = $"Há registros no projeto para {periods}. Nenhum IPF antigo foi associado.",
+                    result.SiteId,
+                    result.Count,
+                    result.Conflicts
+                });
+            }
+            return Ok(result);
         }
         catch (IpfReportValidationException exception)
         {
@@ -380,9 +413,13 @@ public sealed class IpfReportsController(MonthlyIpfApplicationService reportServ
         {
             return Ok(await reportService.UpsertAsync(year, month, request, cancellationToken));
         }
+
         catch (IpfReportValidationException exception)
         {
             return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]> { ["report"] = exception.Errors.ToArray() }));
         }
     }
+
+    /// <summary>Contratada e projeto para associação dos registros gerais existentes.</summary>
+    public sealed record AssociateLegacyIpfRequest(Guid ContractorId, Guid SiteId);
 }

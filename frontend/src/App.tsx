@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { calculateMonthlyIpf } from './lib/monthlyIpf'
+import { calculateMonthlyIpf, monthlyIdsForReport } from './lib/monthlyIpf'
 import { formatIds, formatIdsNumber, formatIpf } from './lib/indicatorFormat'
 import { indicatorStatus } from './lib/indicatorStatus'
 import { IndicatorResult } from './components/IndicatorResult'
@@ -50,7 +50,7 @@ import {
 import { LoginScreen } from './components/LoginScreen'
 import { EvaluationForm } from './components/EvaluationForm'
 import { InspectionFormsEditor } from './components/InspectionFormsEditor'
-import { ApiError, apiRequest, clearAccessToken, getAccessToken, type ChecklistCatalog, type DashboardSummary, type DataConsolidation, type EvaluationResult, type EvaluationSummary, type IpfAnnualHistory, type IpfCompositionHistory, type IpfMonthlySuggestion } from './lib/api'
+import { ApiError, apiRequest, clearAccessToken, getAccessToken, type ChecklistCatalog, type DashboardSummary, type DataConsolidation, type EvaluationResult, type EvaluationSummary, type IpfAnnualHistory } from './lib/api'
 import { evaluationPdf, monthlyIpfReportPdf, openPrintWindow, writePrintWindow } from './lib/pdf'
 import { buildWorkbookCharts } from './lib/workbookReport'
 import { clearBranding, defaultPrimaryColor, fetchBranding, loadBranding, readLogoFile, saveBranding, type ReportBranding } from './lib/branding'
@@ -302,7 +302,7 @@ function App() {
           </div>
 
           {activeSection === 'reports' && <div className="ipf-report-modes" role="group" aria-label="Tipo de relatório IPF">
-            <button type="button" className={reportMode === 'manual' ? 'primary-button' : 'outline-button'} aria-pressed={reportMode === 'manual'} onClick={() => setReportMode('manual')}>IPF manual por formulário</button>
+            <button type="button" className={reportMode === 'manual' ? 'primary-button' : 'outline-button'} aria-pressed={reportMode === 'manual'} onClick={() => setReportMode('manual')}>IPF manual por projeto</button>
             <button type="button" className={reportMode === 'composition' ? 'primary-button' : 'outline-button'} aria-pressed={reportMode === 'composition'} onClick={() => setReportMode('composition')}>IDS por disciplinas e pesos</button>
           </div>}
           {['overview', 'evaluations', 'data', 'indicators', 'reports', 'monthlyClose'].includes(activeSection)
@@ -1215,17 +1215,19 @@ function RankingTable({ title, subtitle, rows }: { title: string; subtitle: stri
 }
 
 function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLabel: string; scope: InspectionScope; canSave: boolean }) {
-  const scopeQuery = inspectionScopeQuery({ ...scope, islandId: undefined })
-  const dataScopeQuery = inspectionScopeQuery(scope)
+  const scopeQuery = inspectionScopeQuery({ ...scope, islandId: undefined, siteId: undefined, contractorId: undefined })
+  const dataScopeQuery = inspectionScopeQuery({ ...scope, siteId: undefined, contractorId: undefined })
   const [reportTab, setReportTab] = useState<'monthly-data' | 'ipf-report'>('monthly-data')
   const [catalog, setCatalog] = useState<ChecklistCatalog | null>(null)
   const [contractorId, setContractorId] = useState('')
   const [siteId, setSiteId] = useState('')
   const [history, setHistory] = useState<IpfAnnualHistory | null>(null)
-  const [suggestion, setSuggestion] = useState<IpfMonthlySuggestion | null>(null)
+  const [legacyHistory, setLegacyHistory] = useState<IpfAnnualHistory | null>(null)
+  const [historyRevision, setHistoryRevision] = useState(0)
+  const [associationMessage, setAssociationMessage] = useState('')
   const [yearSummary, setYearSummary] = useState<DashboardSummary | null>(null)
-  const [generalYearSummary, setGeneralYearSummary] = useState<DashboardSummary | null>(null)
   const [disciplineIdsAverage, setDisciplineIdsAverage] = useState<number | null>(null)
+  const [compositionMissing, setCompositionMissing] = useState(false)
   const [monthlyData, setMonthlyData] = useState<DataConsolidation | null>(null)
   const [reportIssuedAt, setReportIssuedAt] = useState<Date | null>(null)
   const [multiplicationFactor, setMultiplicationFactor] = useState('0.8')
@@ -1252,30 +1254,28 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
   }, [])
 
   useEffect(() => {
-    if (!contractorId) {
+    if (!contractorId || !siteId) {
       setHistory(null)
-      setSuggestion(null)
+      setLegacyHistory(null)
       setYearSummary(null)
-      setGeneralYearSummary(null)
       setDisciplineIdsAverage(null)
+      setCompositionMissing(false)
       setMultiplicationFactor('0.8')
       setAdditionalScore('20')
       setIsFormulaDirty(false)
-      setSiteId('')
       setIsHistoryLoading(false)
       return
     }
 
     let isCurrent = true
     setHistory(null)
-    setSuggestion(null)
+    setLegacyHistory(null)
     setYearSummary(null)
-    setGeneralYearSummary(null)
     setDisciplineIdsAverage(null)
+    setCompositionMissing(false)
     setMultiplicationFactor('0.8')
     setAdditionalScore('20')
     setIsFormulaDirty(false)
-    setSiteId('')
     setIsHistoryLoading(true)
     setError('')
     setSaveConfirmation('')
@@ -1283,20 +1283,27 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
       from: `${year}-01-01`,
       to: `${year}-12-31`,
       contractorId,
+      siteId,
     })
     Promise.all([
-      apiRequest<IpfAnnualHistory>(`/api/reports/ipf/${year}?contractorId=${contractorId}&${scopeQuery}`),
-      apiRequest<IpfMonthlySuggestion>(`/api/reports/ipf/${year}/${monthNumber}/suggestion?contractorId=${contractorId}&${scopeQuery}`),
+      apiRequest<IpfAnnualHistory>(`/api/reports/ipf/${year}?contractorId=${contractorId}&siteId=${siteId}`),
+      scope.areaId !== '00000000-0000-0000-0000-000000000000' || scope.formId !== '00000000-0000-0000-0000-000000000000'
+        ? apiRequest<IpfAnnualHistory>(`/api/reports/ipf/${year}?contractorId=${contractorId}&siteId=${siteId}&${scopeQuery}`)
+        : Promise.resolve(null),
       apiRequest<DashboardSummary>(`/api/dashboard/summary?${evaluationQuery}&${scopeQuery}`),
       scope.islandId ? apiRequest<DashboardSummary>(`/api/dashboard/summary?${evaluationQuery}&${dataScopeQuery}`) : Promise.resolve(null),
-      apiRequest<IpfCompositionHistory>(`/api/reports/ipf-composition/${year}?contractorId=${contractorId}`),
+      apiRequest<{ value: number | null }>(`/api/monthly-close-compositions/${siteId}/average/${year}/${monthNumber}?contractorId=${contractorId}`)
+        .catch((requestError: unknown) => {
+          if (requestError instanceof ApiError && requestError.status === 404) return null
+          throw requestError
+        }),
     ])
-      .then(([result, monthlySuggestion, summary, filteredSummary, disciplineHistory]) => {
+      .then(([result, scopedLegacy, summary, filteredSummary, composition]) => {
         if (!isCurrent) return
         setHistory(result)
-        setSuggestion(monthlySuggestion)
-        setGeneralYearSummary(summary)
-        setDisciplineIdsAverage(disciplineHistory.months.find(record => record.month === monthNumber)?.value ?? null)
+        setLegacyHistory(scopedLegacy)
+        setDisciplineIdsAverage(composition?.value ?? null)
+        setCompositionMissing(composition === null)
         setYearSummary(filteredSummary ?? summary)
         const currentValue = result.months.find(record => record.month === monthNumber)
         setMultiplicationFactor((currentValue?.multiplicationFactor ?? 0.8).toString())
@@ -1305,13 +1312,13 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
       .catch((loadError: unknown) => { if (isCurrent) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar o histórico IPF.') })
       .finally(() => { if (isCurrent) setIsHistoryLoading(false) })
     return () => { isCurrent = false }
-  }, [contractorId, month, monthNumber, year, scopeQuery, dataScopeQuery, scope.islandId])
+  }, [contractorId, siteId, month, monthNumber, year, scopeQuery, dataScopeQuery, scope.areaId, scope.formId, scope.islandId, historyRevision])
 
   useEffect(() => {
     let active = true
     setMonthlyData(null)
     setReportDataError('')
-    if (!contractorId) {
+    if (!contractorId || !siteId) {
       setIsReportDataLoading(false)
       return
     }
@@ -1337,8 +1344,12 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
       setError('Selecione uma contratada antes de salvar o IPF.')
       return
     }
-    if (monthlyIdsAverage === null) {
-      setError('Não há avaliações com IDS calculável neste mês e recorte para calcular o IPF.')
+    if (!siteId) {
+      setError('Selecione um projeto antes de salvar o IPF.')
+      return
+    }
+    if (disciplineIdsAverage === null) {
+      setError('Configure a composição do projeto e registre avaliações com IDS calculável para esta contratada e mês.')
       return
     }
     if (calculatedIpf === null) {
@@ -1353,10 +1364,9 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
       const savedRecord = await apiRequest<IpfAnnualHistory['months'][number]>(`/api/reports/ipf/${year}/${monthNumber}`, {
         method: 'PUT',
         body: JSON.stringify({
-          contractorOrganizationId: contractorId, siteId: null, value,
-          areaId: scope.areaId, formId: scope.formId,
+          contractorOrganizationId: contractorId, siteId, value,
           multiplicationFactor: Number(multiplicationFactor), additionalScore: Number(additionalScore),
-          useDisciplineAverage: disciplineIdsAverage !== null,
+          useDisciplineAverage: true,
         }),
       })
       setHistory((current) => {
@@ -1370,10 +1380,10 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
           contractor: savedRecord.contractor,
           annualAverage: months.reduce((total, record) => total + record.value, 0) / months.length,
           months,
-          areaId: scope.areaId,
-          areaName: scope.areaName,
-          formId: scope.formId,
-          formName: scope.formName,
+          areaId: null,
+          areaName: current?.areaName ?? scope.areaName,
+          formId: null,
+          formName: current?.formName ?? scope.formName,
         }
       })
       setIsFormulaDirty(false)
@@ -1382,6 +1392,27 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
       setError(saveError instanceof ApiError && saveError.status === 403
         ? 'Seu perfil não tem permissão para registrar IPF. Solicite acesso de ADMINISTRADOR ou GESTOR.'
         : saveError instanceof Error ? saveError.message : 'Não foi possível salvar o valor IPF.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function associateLegacy() {
+    if (!contractorId || !siteId || !canSave) return
+    const project = catalog?.sites.find(site => site.id === siteId)?.name ?? 'projeto selecionado'
+    if (!window.confirm(`Associar todos os IPFs gerais antigos desta contratada ao projeto ${project}, em todos os anos? Os valores não serão recalculados. Esta associação não pode ser desfeita nesta tela.`)) return
+    setIsSaving(true)
+    setError('')
+    setAssociationMessage('')
+    try {
+      const result = await apiRequest<{ count: number }>('/api/reports/ipf/associate-legacy', {
+        method: 'POST',
+        body: JSON.stringify({ contractorId, siteId }),
+      })
+      setHistoryRevision(current => current + 1)
+      setAssociationMessage(`${result.count} registro(s) antigo(s) associado(s) ao projeto, sem alterar os valores.`)
+    } catch (associateError) {
+      setError(associateError instanceof Error ? associateError.message : 'Não foi possível associar os registros antigos.')
     } finally {
       setIsSaving(false)
     }
@@ -1405,10 +1436,6 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
       : metadata?.[field] ?? []
     return distinctMetadata(values)
   }
-  const monthIds = Array.from({ length: 12 }, (_, index) => {
-    const key = `${year}-${String(index + 1).padStart(2, '0')}`
-    return { month: index + 1, value: averageTrendIds(yearTrend.filter(point => point.date.startsWith(key))) }
-  })
   const weekdayIds = reportWeekdays.map(({ index, label }) => {
     const values = Array.from({ length: 5 }, (_, week) => averageTrendIds(yearTrend.filter(point => {
       const date = new Date(`${point.date}T12:00:00`)
@@ -1434,11 +1461,16 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
       })(),
     },
   ]
-  const evaluationIdsAverage = averageTrendIds((generalYearSummary?.trend ?? []).filter(point => point.date.startsWith(month)))
-  const monthlyIdsAverage = disciplineIdsAverage ?? evaluationIdsAverage
-  const calculatedIpf = calculateMonthlyIpf(monthlyIdsAverage, multiplicationFactor, additionalScore)
-  const savedIpf = history?.months.find(record => record.month === monthNumber)?.value ?? null
-  const legacyIpfMonths = history?.months.filter(record => record.siteId !== null).map(record => record.month) ?? []
+  const currentRecord = history?.months.find(record => record.month === monthNumber)
+  const monthlyIdsAverage = monthlyIdsForReport(currentRecord, disciplineIdsAverage, isFormulaDirty)
+  const calculatedIpf = calculateMonthlyIpf(disciplineIdsAverage, multiplicationFactor, additionalScore)
+  const savedIpf = currentRecord?.value ?? null
+  const monthIds = Array.from({ length: 12 }, (_, index) => {
+    const reportMonth = index + 1
+    const saved = history?.months.find(record => record.month === reportMonth)
+    return { month: reportMonth, value: reportMonth === monthNumber ? monthlyIdsAverage : saved?.idsAverage ?? null }
+  })
+  const legacyIpfMonths: number[] = []
   const enteredIpf = isFormulaDirty ? calculatedIpf : savedIpf ?? calculatedIpf
   const reportIpfMonths = Array.from({ length: 12 }, (_, index) => {
     const reportMonth = index + 1
@@ -1460,7 +1492,7 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
       projectOrIsland: reportMetadata('projectOrIslands'),
       site: catalog?.sites.find(site => site.id === siteId)?.name ?? reportMetadata('sites'),
       client: reportMetadata('clients'),
-      discipline: scope.areaName,
+      discipline: `${scope.areaName} (dados de apoio); IPF: composição do projeto`,
       legacyIpfMonths,
       evaluatedBy: reportMetadata('evaluators'),
       issuedAt: reportIssuedAt.toISOString(),
@@ -1491,8 +1523,8 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
   }
 
   return <section className="report-layout">
-    {scope.islandId && <div className="form-error" role="status">A ilha filtra os dados de apoio. O IPF continua geral da contratada, em todos os projetos e ilhas.</div>}
-    {legacyIpfMonths.length > 0 && <div className="form-error" role="status">O histórico contém IPFs antigos associados a projeto nos meses {legacyIpfMonths.join(', ')}. Eles são preservados até serem recalculados e salvos novamente como IPF geral da contratada.</div>}
+    {scope.islandId && <div className="form-error" role="status">A ilha filtra os dados de apoio. O IPF considera todas as ilhas do projeto selecionado.</div>}
+    {compositionMissing && <div className="form-error" role="status">Configure os pesos deste projeto em IDS por disciplinas e pesos para calcular o IPF.</div>}
     <div className="report-intro">
       <div>
         <span className="summary-kicker"><FileBarChart size={16} /> {reportTab === 'monthly-data' ? 'DADOS DO RELATÓRIO MENSAL' : 'RELATÓRIO IPF'}</span>
@@ -1519,19 +1551,19 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
       <div className="report-controls">
         <label>
           Contratada
-          <select disabled={isLoading || isSaving} onChange={(event) => { setContractorId(event.target.value); setSaveConfirmation(''); setError('') }} value={contractorId}>
+          <select disabled={isLoading || isSaving} onChange={(event) => { setContractorId(event.target.value); setSiteId(''); setSaveConfirmation(''); setAssociationMessage(''); setError('') }} value={contractorId}>
             <option value="">Selecionar contratada</option>
             {catalog?.organizations.filter(organization => organization.kind === 'Contractor').map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
           </select>
           <small>Escolha para consultar o histórico anual.</small>
         </label>
         <label>
-          Local / site <span className="report-optional">(opcional)</span>
-          <select disabled={!contractorId || isHistoryLoading || isSaving} onChange={(event) => { setSiteId(event.target.value); setSaveConfirmation(''); setError('') }} value={siteId}>
-            <option value="">Sem local específico</option>
+          Projeto
+          <select disabled={!contractorId || isSaving} onChange={(event) => { setSiteId(event.target.value); setSaveConfirmation(''); setAssociationMessage(''); setError('') }} value={siteId}>
+            <option value="">Selecionar projeto</option>
             {catalog?.sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
           </select>
-          <small>Filtra os gráficos e dados de apoio, sem alterar o cálculo do IPF.</small>
+          <small>O cálculo e o histórico são separados por contratada e projeto.</small>
         </label>
       </div>
       <div className="report-controls report-formula-controls">
@@ -1543,9 +1575,10 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
             value={monthlyIdsAverage === null ? '' : formatIdsNumber(monthlyIdsAverage * 100)}
           />
           {indicatorStatus('ids', monthlyIdsAverage) && <IndicatorResult kind="ids" value={monthlyIdsAverage} />}
-          <small>{disciplineIdsAverage !== null
-            ? 'Média IDS ponderada pelas disciplinas, salva para esta contratada e mês.'
-            : 'Média das avaliações válidas da contratada no mês, em todos os projetos e ilhas.'}</small>
+          <small>{currentRecord && !isFormulaDirty
+            ? 'Média usada no IPF salvo; registros antigos podem não ter esta informação.'
+            : 'Prévia ponderada pelas disciplinas do projeto para esta contratada e mês.'}</small>
+          {currentRecord && !isFormulaDirty && <button className="quiet-button" type="button" onClick={() => setIsFormulaDirty(true)}>Recalcular com os pesos atuais</button>}
         </label>
         <label>
           Fator multiplicador
@@ -1561,7 +1594,7 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
           <small>Campo correspondente ao 0,8 do exemplo.</small>
         </label>
         <label>
-          Parcela adicional
+          Frequência (parcela adicional)
           <input
             disabled={!contractorId || isHistoryLoading || isSaving}
             inputMode="decimal"
@@ -1579,15 +1612,13 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
           {indicatorStatus('ipf', enteredIpf) && <IndicatorResult kind="ipf" value={enteredIpf} />}
           <small id="report-ipf-help">((Média do IDS (%) × 60 × fator) / 100 + parcela adicional) / 10. A classificação usa o valor completo, antes do arredondamento.</small>
           {savedIpf !== null && !isFormulaDirty && <small>IPF salvo preservado. Altere os campos ou salve para recalcular com a média atual.</small>}
-          {suggestion && <small className="report-suggestion-note">
-            {monthlyIdsAverage !== null
-              ? 'O cálculo usa a média completa, sem arredondamento intermediário. O resultado é salvo com quatro casas decimais.'
-              : suggestion.evaluationCount > 0
-                ? 'Não há IDS calculável no recorte selecionado.'
-                : 'Este mês ainda não tem avaliações. Não é possível calcular o IPF.'}
-          </small>}
+          <small className="report-suggestion-note">
+            {disciplineIdsAverage !== null
+              ? 'A média ponderada e o resultado são salvos com quatro casas decimais.'
+              : 'Não há composição ou avaliações com IDS calculável para este projeto, contratada e mês.'}
+          </small>
         </label>
-        {canSave && <button className="primary-button report-save-button" disabled={!contractorId || isLoading || isHistoryLoading || isSaving || calculatedIpf === null} type="submit">
+        {canSave && <button className="primary-button report-save-button" disabled={!contractorId || !siteId || isLoading || isHistoryLoading || isSaving || calculatedIpf === null || (savedIpf !== null && !isFormulaDirty)} type="submit">
           {isSaving ? 'Salvando…' : 'Salvar IPF'}
         </button>}
       </div>
@@ -1596,8 +1627,21 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
     {error && <div className="form-error report-feedback" role="alert">{error}</div>}
     {reportDataError && <div className="form-error report-feedback" role="alert">{reportDataError}</div>}
     {saveConfirmation && <div className="report-save-confirmation report-feedback" role="status"><Check size={16} />{saveConfirmation}</div>}
-    {!contractorId
-      ? <div className="report-empty panel"><div className="empty-line-icon"><FileBarChart size={21} /></div><strong>Selecione uma contratada</strong><span>O histórico mensal e os indicadores aparecerão aqui.</span></div>
+    {canSave && contractorId && siteId && <section className="panel">
+      <h3>Registros gerais antigos</h3>
+      <p>Associe os IPFs gerais desta contratada ao projeto selecionado. Os valores antigos são preservados; conflitos impedem a associação.</p>
+      <button type="button" className="outline-button" disabled={isSaving || isHistoryLoading} onClick={() => void associateLegacy()}>Associar IPFs antigos ao projeto</button>
+      {associationMessage && <p role="status">{associationMessage}</p>}
+    </section>}
+    {legacyHistory && legacyHistory.months.length > 0 && <section className="panel">
+      <h3>IPFs antigos do formulário selecionado · {year}</h3>
+      <p>Registros históricos associados ao projeto, preservados no recorte {scope.areaName} · {scope.formName}. Novos IPFs são gerais do projeto e não substituem estes registros.</p>
+      <div className="table-scroll"><table><thead><tr><th>Mês</th><th>IPF preservado</th></tr></thead><tbody>
+        {legacyHistory.months.map(record => <tr key={record.id}><td>{String(record.month).padStart(2, '0')}/{record.year}</td><td><IndicatorResult kind="ipf" value={record.value} /></td></tr>)}
+      </tbody></table></div>
+    </section>}
+    {!contractorId || !siteId
+      ? <div className="report-empty panel"><div className="empty-line-icon"><FileBarChart size={21} /></div><strong>Selecione uma contratada e um projeto</strong><span>O histórico mensal e os indicadores aparecerão aqui.</span></div>
       : isHistoryLoading || isReportDataLoading
         ? <div className="report-empty panel" role="status"><span>Carregando histórico de {year}…</span></div>
         : history && <>
@@ -1614,7 +1658,7 @@ function Reports({ month, monthLabel, scope, canSave }: { month: string; monthLa
               <div><dt>Local do site</dt><dd>{catalog?.sites.find(site => site.id === siteId)?.name ?? reportMetadata('sites') ?? '—'}</dd></div>
               <div><dt>Cliente</dt><dd>{reportMetadata('clients') ?? '—'}</dd></div>
               <div><dt>Contratada</dt><dd>{history.contractor}</dd></div>
-              <div><dt>Disciplina</dt><dd>{scope.areaName}</dd></div>
+              <div><dt>Disciplina dos dados de apoio</dt><dd>{scope.areaName}</dd></div>
               <div><dt>Mês e ano da avaliação</dt><dd>{monthLabel}</dd></div>
               <div><dt>Avaliado por</dt><dd>{reportMetadata('evaluators') ?? '—'}</dd></div>
               <div><dt>Data de emissão</dt><dd>{reportIssuedAt ? new Intl.DateTimeFormat('pt-BR').format(reportIssuedAt) : '—'}</dd></div>

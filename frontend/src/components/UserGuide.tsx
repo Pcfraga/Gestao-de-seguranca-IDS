@@ -174,30 +174,31 @@ export function UserGuide() {
     </Chapter>
 
     <Chapter id="ipf-manual">
-      <p>O IPF por formulário é calculado a partir da média do IDS do mês, com um fator multiplicador e uma parcela adicional digitáveis. Ele não é a composição automática das disciplinas.</p>
+      <p>O IPF é calculado a partir da média IDS da contratada no projeto, ponderada pelos pesos definidos para suas disciplinas, com um fator multiplicador e uma parcela adicional digitáveis.</p>
       <ol>
         <li>Abra <strong>Relatório IPF → IPF manual por formulário → Dados Relatório Mensal</strong>.</li>
-        <li>Selecione mês de referência, área, tipo de formulário e contratada.</li>
-        <li>Opcionalmente, selecione um local. Confira a <strong>Média do IDS (%)</strong>. Quando houver média ponderada salva em <strong>IDS por disciplinas</strong>, ela terá prioridade para a contratada e o mês.</li>
-        <li>Preencha <strong>Fator multiplicador</strong> (inicialmente 0,8) e <strong>Parcela adicional</strong> (inicialmente 20). O <strong>Valor do IPF</strong> é calculado automaticamente.</li>
+        <li>Selecione mês de referência, contratada e projeto. Área e tipo de formulário filtram apenas os dados de apoio.</li>
+        <li>Confira a <strong>Média do IDS (%)</strong>, calculada com os pesos do projeto em <strong>IDS por disciplinas e pesos</strong>.</li>
+        <li>Preencha <strong>Fator multiplicador</strong> (inicialmente 0,8) e <strong>Frequência (parcela adicional)</strong> (inicialmente 20). O <strong>Valor do IPF</strong> é calculado automaticamente.</li>
         <li>Como Administrador ou GESTOR, clique em <strong>Salvar IPF</strong>.</li>
       </ol>
-      <p>Salvar o mesmo mês, contratada, área e formulário atualiza o registro desse recorte. Outros tipos de formulário mantêm históricos independentes. A média anual/período considera somente meses preenchidos; meses ausentes não viram zero.</p>
-      <p>A fórmula é <strong>((média do IDS em percentual × 60 × fator) / 100 + parcela adicional) / 10</strong>. Com IDS de 88,31%, fator 0,8 e parcela 20, o IPF é <strong>6,2389</strong>. O cálculo usa a média sem arredondamento intermediário e salva o resultado com quatro casas decimais. Sem IDS calculável, não é possível salvar um novo cálculo. Os dois campos são salvos junto com o resultado e restaurados ao reabrir o mês.</p>
+      <p>Salvar o mesmo mês, contratada e projeto atualiza o IPF desse recorte. Outros projetos mantêm históricos independentes. A média anual/período considera somente meses preenchidos; meses ausentes não viram zero.</p>
+      <p>A fórmula é <strong>((média do IDS em percentual × 60 × fator) / 100 + parcela adicional) / 10</strong>. Com IDS de 88,31%, fator 0,8 e parcela 20, o IPF é <strong>6,2389</strong>. A média ponderada e o resultado são salvos com quatro casas decimais. Sem IDS calculável, não é possível salvar um novo cálculo. Os dois campos são salvos junto com o resultado e restaurados ao reabrir o mês.</p>
       <p>Registros anteriores são preservados até você alterar os campos ou salvar novamente. Ao salvar, o servidor recalcula usando as avaliações atuais. Use <strong>Gerar PDF</strong> para emitir o histórico; os gráficos não mudam de formato.</p>
+      <p>Para associar IPFs gerais antigos a um projeto, selecione a contratada e o projeto e use <strong>Associar IPFs antigos ao projeto</strong>. A operação preserva os valores e não é realizada se houver conflitos.</p>
       <p>Na aba <strong>Relatório IPF</strong>, os 14 gráficos seguem a ordem do modelo: IPF, histórico de IDS, IDS por semana, pessoas observadas, desvios registrados, severidade em quantidade e percentual, categorias, EPI, posição das pessoas, ação quando observado, procedimentos, ferramentas e equipamentos e padrões de organização. O PDF usa os mesmos gráficos, dados e cores da tela. Os seletores de contratada e local ficam disponíveis nas duas abas.</p>
     </Chapter>
 
     <Chapter id="ipf-disciplinas">
-      <p>Esta opção junta as médias das disciplinas para obter a média IDS mensal da contratada. Depois de salva, essa média alimenta o campo <strong>Média do IDS (%)</strong> do IPF manual.</p>
+      <p>Esta opção define os pesos das disciplinas por projeto. A configuração vale para as contratadas do projeto e continua válida até ser alterada.</p>
       <ol>
-        <li>Abra <strong>Relatório IPF → IDS por disciplinas e pesos</strong> e selecione a contratada e o mês de referência.</li>
+        <li>Abra <strong>Relatório IPF → IDS por disciplinas e pesos</strong> e selecione o projeto.</li>
         <li>Sem divisão, deixe <strong>uma disciplina com 100%</strong>.</li>
         <li>Para dividir a nota, clique em <strong>Adicionar disciplina</strong>. Escolha de duas a quatro áreas diferentes e distribua os percentuais até somarem <strong>100%</strong>.</li>
-        <li>Clique em <strong>Calcular IDS por disciplinas</strong>. Cada média reúne todos os formulários e versões da área para aquela contratada no mês, respeitando as permissões de consulta.</li>
-        <li>Confira média IDS, avaliações válidas/total, peso definido, peso aplicado, contribuição e situação de cada área.</li>
-        <li>Para registrar, use <strong>Salvar IDS por disciplinas</strong> e confirme. A gravação exige Administrador ou GESTOR e recalcula as médias no servidor naquele momento.</li>
+        <li>Use <strong>Salvar composição do projeto</strong>. A gravação exige Administrador ou GESTOR.</li>
+        <li>No IPF manual, selecione a contratada, o projeto e o mês para consultar a média calculada com essa composição.</li>
       </ol>
+      <p>Alterar os pesos não muda um IPF já salvo. Para atualizar um mês anterior, selecione-o, recalcule com os pesos atuais e salve novamente.</p>
       <h3>Exemplo: Segurança com 70% e Meio Ambiente com 30%</h3>
       <p>Se Segurança tem média <strong>0,9</strong>, a parte dela na nota é <strong>0,63</strong>. Se Meio Ambiente tem média <strong>0,8</strong>, a parte ambiental é <strong>0,24</strong>. Juntando as duas partes, a média IDS é <strong>0,87</strong> (87%).</p>
       <p>Dentro de cada disciplina, o sistema soma os IDS válidos das avaliações enviadas e divide pela quantidade dessas avaliações. Cada avaliação válida participa igualmente dessa média: não há peso adicional por tamanho do formulário ou número de pessoas. Avaliações sem IDS calculável e rascunhos são excluídos da média.</p>
@@ -210,8 +211,7 @@ export function UserGuide() {
       </ul>
       <p>A média usa a escala original do IDS. A conta não arredonda as parcelas intermediárias e arredonda o resultado final a quatro casas decimais.</p>
       <h3>Histórico e revisão</h3>
-      <p>A prévia não salva dados. Ao salvar, ficam registrados a nota, as médias, os pesos e as exclusões usados naquele mês. Novas avaliações não mudam esse retrato automaticamente. Para atualizar o mês, recalcule e salve novamente, confirmando a substituição. Os pesos do último mês anterior podem ser copiados como ponto de partida.</p>
-      <p>Em <strong>Ver composição</strong>, consulte os detalhes salvos; em <strong>PDF da composição</strong>, emita o documento. O PDF de uma prévia é identificado como ainda não salvo.</p>
+      <p>A prévia não salva dados. Ao salvar o IPF, a média IDS usada e o resultado ficam registrados para aquele mês. Novas avaliações ou alterações de pesos não mudam o registro automaticamente. Para atualizar o mês, recalcule e salve novamente.</p>
     </Chapter>
 
     <Chapter id="relatorios-conta">

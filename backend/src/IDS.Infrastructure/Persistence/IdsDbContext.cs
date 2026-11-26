@@ -230,15 +230,25 @@ public sealed class IdsDbContext(DbContextOptions<IdsDbContext> options, ICurren
             entity.ToTable("monthly_ipf_records", table =>
                 table.HasCheckConstraint("ck_monthly_ipf_records_month", "\"Month\" BETWEEN 1 AND 12"));
             entity.Property(value => value.Value).HasPrecision(12, 4);
+            entity.Property(value => value.IdsAverage).HasPrecision(28, 16);
+            entity.Property(value => value.SiteId).IsConcurrencyToken();
             entity.Property(value => value.Source).HasMaxLength(40).IsRequired();
             entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month })
-                .IsUnique().HasFilter("\"AreaId\" IS NULL AND \"FormId\" IS NULL");
+                .IsUnique().HasFilter("\"SiteId\" IS NULL AND \"AreaId\" IS NULL AND \"FormId\" IS NULL");
             entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month, value.AreaId })
-                .IsUnique().HasFilter("\"AreaId\" IS NOT NULL AND \"FormId\" IS NULL");
+                .IsUnique().HasFilter("\"SiteId\" IS NULL AND \"AreaId\" IS NOT NULL AND \"FormId\" IS NULL");
             entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month, value.FormId })
-                .IsUnique().HasFilter("\"AreaId\" IS NULL AND \"FormId\" IS NOT NULL");
+                .IsUnique().HasFilter("\"SiteId\" IS NULL AND \"AreaId\" IS NULL AND \"FormId\" IS NOT NULL");
             entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month, value.AreaId, value.FormId })
-                .IsUnique().HasFilter("\"AreaId\" IS NOT NULL AND \"FormId\" IS NOT NULL");
+                .IsUnique().HasFilter("\"SiteId\" IS NULL AND \"AreaId\" IS NOT NULL AND \"FormId\" IS NOT NULL");
+            entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month, value.SiteId }, "IX_ipf_project")
+                .IsUnique().HasFilter("\"SiteId\" IS NOT NULL AND \"AreaId\" IS NULL AND \"FormId\" IS NULL");
+            entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month, value.SiteId, value.AreaId }, "IX_ipf_project_area")
+                .IsUnique().HasFilter("\"SiteId\" IS NOT NULL AND \"AreaId\" IS NOT NULL AND \"FormId\" IS NULL");
+            entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month, value.SiteId, value.FormId }, "IX_ipf_project_form")
+                .IsUnique().HasFilter("\"SiteId\" IS NOT NULL AND \"AreaId\" IS NULL AND \"FormId\" IS NOT NULL");
+            entity.HasIndex(value => new { value.TenantId, value.ContractorOrganizationId, value.Year, value.Month, value.SiteId, value.AreaId, value.FormId }, "IX_ipf_project_area_form")
+                .IsUnique().HasFilter("\"SiteId\" IS NOT NULL AND \"AreaId\" IS NOT NULL AND \"FormId\" IS NOT NULL");
             entity.HasOne<InspectionArea>().WithMany().HasForeignKey(value => value.AreaId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<InspectionForm>().WithMany().HasForeignKey(value => value.FormId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(value => value.ContractorOrganization).WithMany().HasForeignKey(value => value.ContractorOrganizationId).OnDelete(DeleteBehavior.Restrict);

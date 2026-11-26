@@ -10,7 +10,8 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
         Guid contractorId,
         CancellationToken cancellationToken,
         Guid? areaId = null,
-        Guid? formId = null)
+        Guid? formId = null,
+        Guid? siteId = null)
     {
         ValidatePeriod(year, 1);
         (areaId, formId) = CanonicalizeScope(areaId, formId);
@@ -22,7 +23,8 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
             throw new IpfReportValidationException(["A organização selecionada não é uma contratada."]);
         }
 
-        var records = await repository.GetYearAsync(year, contractorId, cancellationToken, areaId, formId);
+        siteId = await ResolveSiteAsync(siteId, cancellationToken);
+        var records = await repository.GetYearAsync(year, contractorId, cancellationToken, areaId, formId, siteId);
         var months = records.OrderBy(record => record.Month).Select(ToDto).ToArray();
         return new IpfAnnualHistoryDto(
             year,
@@ -33,7 +35,8 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
             areaId,
             formId,
             areaName,
-            formName);
+            formName,
+            siteId);
     }
 
     public async Task<MonthlyIpfSuggestionDto> GetMonthlySuggestionAsync(
@@ -42,7 +45,8 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
         Guid contractorId,
         CancellationToken cancellationToken,
         Guid? areaId = null,
-        Guid? formId = null)
+        Guid? formId = null,
+        Guid? siteId = null)
     {
         ValidatePeriod(year, month);
         (areaId, formId) = CanonicalizeScope(areaId, formId);
@@ -54,6 +58,17 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
             throw new IpfReportValidationException(["A organização selecionada não é uma contratada."]);
         }
 
+        siteId = await ResolveSiteAsync(siteId, cancellationToken);
+        if (siteId.HasValue)
+        {
+            if (areaId.HasValue || formId.HasValue)
+                throw new IpfReportValidationException(["O IPF por projeto usa todas as disciplinas da composição, sem recorte de área ou formulário."]);
+            var preview = await repository.GetProjectAverageAsync(year, month, contractorId, siteId.Value, cancellationToken)
+                ?? throw new IpfReportValidationException(["Configure a composição do projeto primeiro."]);
+            return new(year, month, contractorId, preview.Value,
+                preview.Areas.Sum(area => area.EvaluationCount),
+                preview.Areas.Sum(area => area.ScoredEvaluationCount), areaId, formId, siteId);
+        }
         var scores = await repository.GetMonthlyEvaluationScoresAsync(
             year, month, contractorId, cancellationToken, areaId, formId);
         var validScores = scores.Where(score => score.HasValue).Select(score => score!.Value).ToArray();
@@ -84,20 +99,30 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
             throw new IpfReportValidationException(["A organização selecionada não é uma contratada."]);
         }
 
-        if (request.SiteId.HasValue)
-        {
-            throw new IpfReportValidationException(["O IPF é geral da contratada e não pode ser salvo por projeto."]);
-        }
+        var siteId = await ResolveSiteAsync(request.SiteId, cancellationToken);
+        if (siteId.HasValue && (areaId.HasValue || formId.HasValue))
+            throw new IpfReportValidationException(["O IPF por projeto usa todas as disciplinas da composição, sem recorte de área ou formulário."]);
+        if (siteId.HasValue && (!request.MultiplicationFactor.HasValue || !request.AdditionalScore.HasValue))
+            throw new IpfReportValidationException(["Informe o fator multiplicador e a parcela adicional para calcular o IPF do projeto."]);
 
         if (request.MultiplicationFactor.HasValue != request.AdditionalScore.HasValue)
         {
             throw new IpfReportValidationException(["Informe o fator multiplicador e a parcela adicional para calcular o IPF."]);
         }
 
+        decimal? idsSnapshot = null;
         if (request.MultiplicationFactor is decimal factor && request.AdditionalScore is decimal additionalScore)
         {
             decimal idsAverage;
-            if (request.UseDisciplineAverage)
+            if (siteId.HasValue)
+            {
+                var preview = await repository.GetProjectAverageAsync(year, month, request.ContractorOrganizationId, siteId.Value, cancellationToken)
+                    ?? throw new IpfReportValidationException(["Configure a composição do projeto primeiro."]);
+                idsAverage = preview.Value
+                    ?? throw new IpfReportValidationException(["Não há avaliações com IDS calculável para a composição do projeto neste mês."]);
+                idsSnapshot = idsAverage;
+            }
+            else if (request.UseDisciplineAverage)
             {
                 idsAverage = await repository.GetDisciplineAverageAsync(
                     year, month, request.ContractorOrganizationId, cancellationToken)
@@ -140,8 +165,9 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
         var record = await repository.UpsertAsync(
             year,
             month,
-            request with { AreaId = areaId, FormId = formId },
-            cancellationToken);
+            request with { AreaId = areaId, FormId = formId, SiteId = siteId },
+            cancellationToken,
+            idsSnapshot);
         record.ContractorOrganization = contractor;
         return ToDto(record);
     }
@@ -160,7 +186,34 @@ public sealed class MonthlyIpfApplicationService(IMonthlyIpfRepository repositor
         record.AreaId,
         record.FormId,
         record.MultiplicationFactor,
-        record.AdditionalScore);
+        record.AdditionalScore,
+        record.IdsAverage);
+
+    public async Task<ProjectIdsAverageDto?> GetProjectAverageAsync(int year, int month, Guid contractorId, Guid siteId, CancellationToken cancellationToken)
+    {
+        ValidatePeriod(year, month);
+        var contractor = await repository.GetContractorAsync(contractorId, cancellationToken);
+        if (contractor is null || contractor.Kind != OrganizationKind.Contractor)
+            throw new IpfReportValidationException(["Contratada não encontrada para esta empresa."]);
+        var canonical = await ResolveSiteAsync(siteId, cancellationToken);
+        return await repository.GetProjectAverageAsync(year, month, contractorId, canonical!.Value, cancellationToken);
+    }
+
+    public async Task<AssociateLegacyIpfResult> AssociateLegacyAsync(Guid contractorId, Guid siteId, CancellationToken cancellationToken)
+    {
+        var contractor = await repository.GetContractorAsync(contractorId, cancellationToken);
+        if (contractor is null || contractor.Kind != OrganizationKind.Contractor)
+            throw new IpfReportValidationException(["Contratada não encontrada para esta empresa."]);
+        var canonical = await ResolveSiteAsync(siteId, cancellationToken);
+        return await repository.AssociateLegacyAsync(contractorId, canonical!.Value, cancellationToken);
+    }
+
+    private async Task<Guid?> ResolveSiteAsync(Guid? siteId, CancellationToken cancellationToken)
+    {
+        if (!siteId.HasValue) return null;
+        return await repository.ResolveSiteIdAsync(siteId.Value, cancellationToken)
+            ?? throw new IpfReportValidationException(["Projeto não encontrado para esta empresa."]);
+    }
 
     private static (Guid? AreaId, Guid? FormId) CanonicalizeScope(Guid? areaId, Guid? formId) =>
         (areaId is Guid area && area != Guid.Empty ? area : null,

@@ -398,6 +398,7 @@ export interface IpfAnnualHistory {
     siteId: string | null
     site: string | null
     value: number
+    idsAverage: number | null
     source: string
     multiplicationFactor: number | null
     additionalScore: number | null

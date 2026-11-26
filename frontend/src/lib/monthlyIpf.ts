@@ -8,3 +8,11 @@ export function calculateMonthlyIpf(idsAverage: number | null, factor: string, a
   if (!Number.isFinite(result) || Math.abs(result) > 99999999.9999) return null
   return Math.sign(result) * Math.round((Math.abs(result) + Number.EPSILON) * 10000) / 10000
 }
+
+export function monthlyIdsForReport(
+  saved: { idsAverage: number | null } | null | undefined,
+  preview: number | null,
+  recalculate: boolean,
+): number | null {
+  return saved && !recalculate ? saved.idsAverage ?? null : preview
+}

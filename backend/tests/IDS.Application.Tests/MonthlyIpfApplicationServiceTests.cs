@@ -225,6 +225,12 @@ public sealed class MonthlyIpfApplicationServiceTests
 
         public Task<bool> SiteExistsAsync(Guid siteId, CancellationToken cancellationToken) => Task.FromResult(true);
 
+        public Task<Guid?> ResolveSiteIdAsync(Guid siteId, CancellationToken cancellationToken) => Task.FromResult<Guid?>(siteId);
+        public Task<ProjectIdsAverageDto?> GetProjectAverageAsync(int year, int month, Guid contractorId, Guid siteId, CancellationToken cancellationToken) =>
+            Task.FromResult<ProjectIdsAverageDto?>(null);
+        public Task<AssociateLegacyIpfResult> AssociateLegacyAsync(Guid contractorId, Guid siteId, CancellationToken cancellationToken) =>
+            throw new NotImplementedException();
+
         public Task<(string AreaName, string FormName)> ValidateScopeAsync(
             Guid? areaId,
             Guid? formId,
@@ -236,12 +242,14 @@ public sealed class MonthlyIpfApplicationServiceTests
             Guid contractorId,
             CancellationToken cancellationToken,
             Guid? areaId = null,
-            Guid? formId = null) =>
+            Guid? formId = null,
+            Guid? siteId = null) =>
             Task.FromResult<IReadOnlyCollection<MonthlyIpfRecord>>(Records
                 .Where(record => record.Year == year
                     && record.ContractorOrganizationId == contractorId
                     && record.AreaId == (areaId == Guid.Empty ? null : areaId)
-                    && record.FormId == (formId == Guid.Empty ? null : formId))
+                    && record.FormId == (formId == Guid.Empty ? null : formId)
+                    && record.SiteId == siteId)
                 .ToArray());
 
         public Task<IReadOnlyCollection<decimal?>> GetMonthlyEvaluationScoresAsync(
@@ -268,13 +276,15 @@ public sealed class MonthlyIpfApplicationServiceTests
             int year,
             int month,
             UpsertMonthlyIpfRequest request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            decimal? idsAverage = null)
         {
             var record = Records.SingleOrDefault(value => value.Year == year
                 && value.Month == month
                 && value.ContractorOrganizationId == request.ContractorOrganizationId
                 && value.AreaId == request.AreaId
-                && value.FormId == request.FormId);
+                && value.FormId == request.FormId
+                && value.SiteId == request.SiteId);
             if (record is null)
             {
                 record = new MonthlyIpfRecord
@@ -292,6 +302,7 @@ public sealed class MonthlyIpfApplicationServiceTests
 
             record.SiteId = request.SiteId;
             record.Value = request.Value;
+            record.IdsAverage = idsAverage;
             record.MultiplicationFactor = request.MultiplicationFactor;
             record.AdditionalScore = request.AdditionalScore;
             record.Source = request.MultiplicationFactor.HasValue ? "Formula" : "Manual";

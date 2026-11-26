@@ -19,6 +19,170 @@ public sealed class IpfCompositionTests
     private static readonly Guid Item = Guid.Parse("20000000-0000-0000-0000-000000000001");
 
     [Fact]
+    public async Task ProjectIpfUsesCanonicalProjectWeightsAndPersistsIdsSnapshotUntilResaved()
+    {
+        using var factory = new CompanyApiFactory();
+        using var admin = await Administrator(factory, "project-ipf");
+        using var foreign = await Administrator(factory, "project-ipf-foreign");
+        var contractor = await Organization(admin);
+        var otherContractor = await Organization(admin, "Outra");
+        var foreignContractor = await Organization(foreign);
+        var area = await Area(admin, "Ambiental");
+        var tenant = await Tenant(factory, "project-ipf");
+        using var scope = factory.Services.CreateScope();
+        var options = scope.ServiceProvider.GetRequiredService<DbContextOptions<IdsDbContext>>();
+        var site = Guid.NewGuid();
+        var alias = Guid.NewGuid();
+        var otherSite = Guid.NewGuid();
+        await using (var db = new IdsDbContext(options, new TestScope(tenant)))
+        {
+            db.Sites.AddRange(new Site { Id = site, Name = "Projeto" },
+                new Site { Id = alias, Name = "Alias", CanonicalSiteId = site },
+                new Site { Id = otherSite, Name = "Outro" });
+            var version = new InspectionFormVersion { Form = new InspectionForm(), Version = 1, AreaId = area, Name = "Ambiental" };
+            var first = Evaluation(contractor, null, 2m); first.SiteId = alias;
+            var second = Evaluation(contractor, version, 6m); second.SiteId = site;
+            var draft = Evaluation(contractor, null, 10m, submitted: false); draft.SiteId = site;
+            var wrongContractor = Evaluation(otherContractor, null, 10m); wrongContractor.SiteId = site;
+            var wrongSite = Evaluation(contractor, null, 10m); wrongSite.SiteId = otherSite;
+            db.Evaluations.AddRange(first, second, draft, wrongContractor, wrongSite);
+            await db.SaveChangesAsync();
+        }
+        var compositionPath = $"/api/monthly-close-compositions/{alias}";
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync(compositionPath,
+            new { areas = new[] { new { areaId = Guid.Empty, weight = 70.001m }, new { areaId = area, weight = 29.999m } } })).StatusCode);
+        var weights = new { areas = new[] { new { areaId = Guid.Empty, weight = 70m }, new { areaId = area, weight = 30m } } };
+        Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync(compositionPath, weights)).StatusCode);
+        var config = await admin.GetFromJsonAsync<MonthlyCloseCompositionDto>($"/api/monthly-close-compositions/{site}");
+        Assert.Equal(site, config!.SiteId);
+        var previewPath = $"/api/monthly-close-compositions/{site}/average/2026/10?contractorId={contractor}";
+        var preview = await admin.GetFromJsonAsync<ProjectIdsAverageDto>(previewPath);
+        Assert.Equal(0.68m, preview!.Value);
+        Assert.Equal(2, preview.Areas.Sum(value => value.EvaluationCount));
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.GetAsync(
+            $"/api/monthly-close-compositions/{site}/average/2026/10?contractorId={foreignContractor}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync(
+            $"/api/monthly-close-compositions/{otherSite}/average/2026/10?contractorId={contractor}")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync("/api/reports/ipf/2026/10",
+            new UpsertMonthlyIpfRequest(contractor, otherSite, 0m, MultiplicationFactor: 0.8m, AdditionalScore: 20m))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await foreign.GetAsync(
+            $"/api/monthly-close-compositions/{site}/average/2026/10?contractorId={foreignContractor}")).StatusCode);
+        Assert.Null((await admin.GetFromJsonAsync<ProjectIdsAverageDto>(
+            $"/api/monthly-close-compositions/{site}/average/2026/11?contractorId={contractor}"))!.Value);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync("/api/reports/ipf/2026/11",
+            new UpsertMonthlyIpfRequest(contractor, site, 0m, MultiplicationFactor: 0.8m, AdditionalScore: 20m))).StatusCode);
+
+        var manual = new UpsertMonthlyIpfRequest(contractor, null, 9m);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync("/api/reports/ipf/2026/10", manual)).StatusCode);
+        var formula = new UpsertMonthlyIpfRequest(contractor, alias, 999m, MultiplicationFactor: 0.8m, AdditionalScore: 20m);
+        var response = await admin.PutAsJsonAsync("/api/reports/ipf/2026/10", formula);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var saved = (await response.Content.ReadFromJsonAsync<MonthlyIpfValueDto>())!;
+        Assert.Equal(site, saved.SiteId);
+        Assert.Equal(0.68m, saved.IdsAverage);
+        Assert.Equal(5.264m, saved.Value);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync("/api/reports/ipf/2026/10",
+            formula with { MultiplicationFactor = null, AdditionalScore = null })).StatusCode);
+        var changed = new { areas = new[] { new { areaId = Guid.Empty, weight = 30m }, new { areaId = area, weight = 70m } } };
+        Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync(compositionPath, changed)).StatusCode);
+        Assert.Equal(0.52m, (await admin.GetFromJsonAsync<ProjectIdsAverageDto>(previewPath))!.Value);
+        var historyPath = $"/api/reports/ipf/2026?contractorId={contractor}&siteId={alias}";
+        var history = await admin.GetFromJsonAsync<IpfAnnualHistoryDto>(historyPath);
+        Assert.Equal(saved.Value, Assert.Single(history!.Months).Value);
+        Assert.Equal(0.68m, Assert.Single(history.Months).IdsAverage);
+        var general = await admin.GetFromJsonAsync<IpfAnnualHistoryDto>($"/api/reports/ipf/2026?contractorId={contractor}");
+        Assert.Equal(9m, Assert.Single(general!.Months).Value);
+        Assert.Null(Assert.Single(general.Months).IdsAverage);
+        var suggestion = await admin.GetFromJsonAsync<MonthlyIpfSuggestionDto>(
+            $"/api/reports/ipf/2026/10/suggestion?contractorId={contractor}&siteId={alias}");
+        Assert.Equal(0.52m, suggestion!.Average);
+        var resaved = (await (await admin.PutAsJsonAsync("/api/reports/ipf/2026/10", formula))
+            .Content.ReadFromJsonAsync<MonthlyIpfValueDto>())!;
+        Assert.Equal(saved.Id, resaved.Id);
+        Assert.Equal(0.52m, resaved.IdsAverage);
+        Assert.Equal(4.496m, resaved.Value);
+    }
+
+    [Fact]
+    public async Task LegacyAssociationIsAllOrNothingAndPreservesValuesAndRequiresManager()
+    {
+        using var factory = new CompanyApiFactory();
+        using var admin = await Administrator(factory, "associate-ipf");
+        using var reader = await User(factory, admin, "CONSULTA");
+        var contractor = await Organization(admin);
+        var tenant = await Tenant(factory, "associate-ipf");
+        using var scope = factory.Services.CreateScope();
+        var options = scope.ServiceProvider.GetRequiredService<DbContextOptions<IdsDbContext>>();
+        var site = Guid.NewGuid();
+        var alias = Guid.NewGuid();
+        await using (var db = new IdsDbContext(options, new TestScope(tenant)))
+        {
+            db.Sites.AddRange(new Site { Id = site, Name = "Projeto" },
+                new Site { Id = alias, Name = "Alias", CanonicalSiteId = site });
+            db.MonthlyIpfRecords.AddRange(
+                new MonthlyIpfRecord { ContractorOrganizationId = contractor, Year = 2026, Month = 1, Value = 7m },
+                new MonthlyIpfRecord { ContractorOrganizationId = contractor, Year = 2026, Month = 2, Value = 8m },
+                new MonthlyIpfRecord { ContractorOrganizationId = contractor, Year = 2026, Month = 2, Value = 9m, SiteId = site });
+            await db.SaveChangesAsync();
+        }
+        var payload = new { contractorId = contractor, siteId = alias };
+        const string path = "/api/reports/ipf/associate-legacy";
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.PostAsJsonAsync(path, payload)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync(path,
+            new { contractorId = contractor, siteId = Guid.NewGuid() })).StatusCode);
+        var conflict = await admin.PostAsJsonAsync(path, payload);
+        Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
+        var conflictBody = (await conflict.Content.ReadFromJsonAsync<AssociateLegacyIpfResult>())!;
+        Assert.Equal(0, conflictBody.Count);
+        Assert.Equal(2, Assert.Single(conflictBody.Conflicts).Month);
+        await using (var db = new IdsDbContext(options, new TestScope(tenant)))
+        {
+            Assert.Equal(2, await db.MonthlyIpfRecords.CountAsync(value => value.SiteId == null));
+            db.MonthlyIpfRecords.Remove(await db.MonthlyIpfRecords.SingleAsync(value => value.SiteId == site));
+            await db.SaveChangesAsync();
+        }
+        var response = await admin.PostAsJsonAsync(path, payload);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = (await response.Content.ReadFromJsonAsync<AssociateLegacyIpfResult>())!;
+        Assert.Equal(site, result.SiteId);
+        Assert.Equal(2, result.Count);
+        var history = await admin.GetFromJsonAsync<IpfAnnualHistoryDto>($"/api/reports/ipf/2026?contractorId={contractor}&siteId={site}");
+        Assert.Equal(new[] { 7m, 8m }, history!.Months.Select(value => value.Value));
+        Assert.All(history.Months, value => Assert.Null(value.IdsAverage));
+    }
+
+    [Fact]
+    public async Task ProjectAndGeneralIndexesRejectDuplicatesEvenWithNullScope()
+    {
+        using var factory = new CompanyApiFactory();
+        using var admin = await Administrator(factory, "ipf-index");
+        var contractor = await Organization(admin);
+        var tenant = await Tenant(factory, "ipf-index");
+        using var scope = factory.Services.CreateScope();
+        var options = scope.ServiceProvider.GetRequiredService<DbContextOptions<IdsDbContext>>();
+        var site = Guid.NewGuid();
+        var otherSite = Guid.NewGuid();
+        await using (var db = new IdsDbContext(options, new TestScope(tenant)))
+        {
+            db.Sites.AddRange(new Site { Id = site, Name = "A" }, new Site { Id = otherSite, Name = "B" });
+            db.MonthlyIpfRecords.AddRange(
+                new MonthlyIpfRecord { ContractorOrganizationId = contractor, Year = 2026, Month = 1, Value = 1m },
+                new MonthlyIpfRecord { ContractorOrganizationId = contractor, Year = 2026, Month = 1, SiteId = site, Value = 2m },
+                new MonthlyIpfRecord { ContractorOrganizationId = contractor, Year = 2026, Month = 1, SiteId = otherSite, Value = 3m });
+            await db.SaveChangesAsync();
+        }
+        foreach (var duplicateSite in new Guid?[] { null, site, otherSite })
+        {
+            await using var db = new IdsDbContext(options, new TestScope(tenant));
+            db.MonthlyIpfRecords.Add(new MonthlyIpfRecord
+            {
+                ContractorOrganizationId = contractor, Year = 2026, Month = 1, SiteId = duplicateSite, Value = 4m
+            });
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+    }
+
+    [Fact]
     public async Task FourAreaSnapshotsRetainMissingAndZeroWeightsAndAnnualMeanAndTenantGuards()
     {
         using var factory = new CompanyApiFactory();
